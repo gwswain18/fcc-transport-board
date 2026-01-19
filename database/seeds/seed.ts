@@ -3,11 +3,11 @@ import { Pool } from 'pg';
 import dotenv from 'dotenv';
 
 // Load env from server directory
-dotenv.config({ path: '../server/.env' });
+dotenv.config({ path: './server/.env' });
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: false,
+  ssl: { rejectUnauthorized: false },
 });
 
 const SALT_ROUNDS = 12;
