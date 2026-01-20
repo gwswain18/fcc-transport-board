@@ -30,7 +30,7 @@ export default function Login() {
         const primary = dispatchers.find((d: { is_primary: boolean }) => d.is_primary);
         setHasPrimaryDispatcher(!!primary);
         if (primary) {
-          setPrimaryDispatcherName(`${primary.first_name} ${primary.last_name}`);
+          setPrimaryDispatcherName(`${primary.user?.first_name} ${primary.user?.last_name}`);
         }
       }
       setShowDispatcherModal(true);

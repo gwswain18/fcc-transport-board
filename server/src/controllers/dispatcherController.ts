@@ -3,6 +3,29 @@ import { query } from '../config/database.js';
 import { getIO } from '../socket/index.js';
 import { AuthenticatedRequest } from '../types/index.js';
 
+// Helper to transform flat dispatcher rows to nested structure
+const transformDispatcherRows = (rows: any[]) => {
+  return rows.map((row) => ({
+    id: row.id,
+    user_id: row.user_id,
+    is_primary: row.is_primary,
+    on_break: row.on_break,
+    break_start: row.break_start,
+    replaced_by: row.replaced_by,
+    relief_info: row.relief_info,
+    contact_info: row.contact_info,
+    started_at: row.started_at,
+    ended_at: row.ended_at,
+    user: {
+      id: row.user_id,
+      first_name: row.first_name,
+      last_name: row.last_name,
+      email: row.email,
+      phone_number: row.phone_number,
+    },
+  }));
+};
+
 // Get active dispatchers
 export const getActiveDispatchers = async (_req: Request, res: Response) => {
   try {
@@ -14,7 +37,8 @@ export const getActiveDispatchers = async (_req: Request, res: Response) => {
        ORDER BY ad.is_primary DESC, ad.started_at ASC`
     );
 
-    res.json({ dispatchers: result.rows });
+    const dispatchers = transformDispatcherRows(result.rows);
+    res.json({ dispatchers });
   } catch (error) {
     console.error('Get active dispatchers error:', error);
     res.status(500).json({ error: 'Failed to get active dispatchers' });
@@ -256,7 +280,8 @@ const emitDispatcherChange = async () => {
      ORDER BY ad.is_primary DESC, ad.started_at ASC`
   );
 
-  io.emit('dispatcher_changed', { dispatchers: result.rows });
+  const dispatchers = transformDispatcherRows(result.rows);
+  io.emit('dispatcher_changed', { dispatchers });
 };
 
 // Get available dispatchers (for replacement selection)

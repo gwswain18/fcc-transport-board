@@ -46,6 +46,41 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
       // Record initial heartbeat with socket ID
       await recordHeartbeat(userId, socket.id);
 
+      // Send initial dispatcher list to newly connected client
+      try {
+        const dispatcherResult = await query(
+          `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
+           FROM active_dispatchers ad
+           JOIN users u ON ad.user_id = u.id
+           WHERE ad.ended_at IS NULL
+           ORDER BY ad.is_primary DESC, ad.started_at ASC`
+        );
+
+        const dispatchers = dispatcherResult.rows.map((row) => ({
+          id: row.id,
+          user_id: row.user_id,
+          is_primary: row.is_primary,
+          on_break: row.on_break,
+          break_start: row.break_start,
+          replaced_by: row.replaced_by,
+          relief_info: row.relief_info,
+          contact_info: row.contact_info,
+          started_at: row.started_at,
+          ended_at: row.ended_at,
+          user: {
+            id: row.user_id,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            email: row.email,
+            phone_number: row.phone_number,
+          },
+        }));
+
+        socket.emit('dispatcher_changed', { dispatchers });
+      } catch (error) {
+        console.error('Error sending initial dispatcher data:', error);
+      }
+
       // Update user status to available if they're a transporter with an active shift
       const shiftResult = await query(
         `SELECT sl.id FROM shift_logs sl

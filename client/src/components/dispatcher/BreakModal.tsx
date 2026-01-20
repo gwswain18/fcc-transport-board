@@ -40,8 +40,8 @@ export default function BreakModal({
     setLoadingDispatchers(true);
     const response = await api.getAvailableDispatchers();
     if (response.data?.dispatchers) {
-      // Filter out current user and only show active dispatchers/supervisors
-      setDispatchers(response.data.dispatchers.filter((d: DispatcherOption) => d.dispatcher_id));
+      // Show all dispatcher/supervisor users as potential relief options
+      setDispatchers(response.data.dispatchers);
     }
     setLoadingDispatchers(false);
   };
