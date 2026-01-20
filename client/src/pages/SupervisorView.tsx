@@ -3,7 +3,6 @@ import { useSocket } from '../context/SocketContext';
 import { api } from '../utils/api';
 import {
   Floor,
-  SpecialNeed,
   TransportRequest,
   TransporterStatusRecord,
   CreateTransportRequestData,
@@ -13,7 +12,6 @@ import Header from '../components/common/Header';
 import { TransporterStatusBadge } from '../components/common/StatusBadge';
 import PriorityBadge from '../components/common/PriorityBadge';
 import ElapsedTimer from '../components/common/ElapsedTimer';
-import SpecialNeedsIcons from '../components/common/SpecialNeedsIcons';
 import Modal from '../components/common/Modal';
 import { formatMinutes } from '../utils/formatters';
 
@@ -31,11 +29,8 @@ export default function SupervisorView() {
   const [formData, setFormData] = useState<CreateTransportRequestData>({
     origin_floor: 'FCC4',
     room_number: '',
-    patient_initials: '',
     destination: 'Atrium',
     priority: 'routine',
-    special_needs: [],
-    special_needs_notes: '',
     notes: '',
   });
 
@@ -82,11 +77,8 @@ export default function SupervisorView() {
     setFormData({
       origin_floor: 'FCC4',
       room_number: '',
-      patient_initials: '',
       destination: 'Atrium',
       priority: 'routine',
-      special_needs: [],
-      special_needs_notes: '',
       notes: '',
     });
     setShowOtherDestination(false);
@@ -110,15 +102,6 @@ export default function SupervisorView() {
     await api.cancelRequest(requestId);
     await refreshData();
     setLoading(false);
-  };
-
-  const toggleSpecialNeed = (need: SpecialNeed) => {
-    setFormData((prev) => ({
-      ...prev,
-      special_needs: prev.special_needs.includes(need)
-        ? prev.special_needs.filter((n) => n !== need)
-        : [...prev.special_needs, need],
-    }));
   };
 
   const openAssignModal = (request: TransportRequest) => {
@@ -319,23 +302,6 @@ export default function SupervisorView() {
                 </div>
 
                 <div>
-                  <label className="label">Patient Initials (optional)</label>
-                  <input
-                    type="text"
-                    value={formData.patient_initials}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        patient_initials: e.target.value.slice(0, 3).toUpperCase(),
-                      }))
-                    }
-                    className="input"
-                    placeholder="e.g., JD"
-                    maxLength={3}
-                  />
-                </div>
-
-                <div>
                   <label className="label">Destination</label>
                   <select
                     value={showOtherDestination ? 'Other' : formData.destination}
@@ -396,30 +362,6 @@ export default function SupervisorView() {
                     >
                       STAT
                     </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="label">Special Needs</label>
-                  <div className="flex flex-wrap gap-2">
-                    {(['wheelchair', 'o2', 'iv_pump', 'other'] as SpecialNeed[]).map(
-                      (need) => (
-                        <button
-                          key={need}
-                          onClick={() => toggleSpecialNeed(need)}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                            formData.special_needs.includes(need)
-                              ? 'bg-indigo-500 text-white'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}
-                        >
-                          {need === 'wheelchair' && 'Wheelchair'}
-                          {need === 'o2' && 'O2'}
-                          {need === 'iv_pump' && 'IV Pump'}
-                          {need === 'other' && 'Other'}
-                        </button>
-                      )
-                    )}
                   </div>
                 </div>
 
@@ -576,8 +518,6 @@ function RequestCard({
           Assigned to: {request.assignee.first_name} {request.assignee.last_name}
         </p>
       )}
-
-      <SpecialNeedsIcons needs={request.special_needs} size="sm" />
 
       <div className="flex gap-2 mt-3">
         {onAssign && (

@@ -1,5 +1,5 @@
 import { formatDistanceToNow, differenceInMinutes, format } from 'date-fns';
-import { TransporterStatus, RequestStatus, SpecialNeed, Priority } from '../types';
+import { TransporterStatus, RequestStatus, Priority } from '../types';
 
 export const formatElapsedTime = (dateString: string): string => {
   return formatDistanceToNow(new Date(dateString), { addSuffix: false });
@@ -29,7 +29,7 @@ export const getStatusColor = (status: TransporterStatus): string => {
     en_route: 'bg-purple-500',
     with_patient: 'bg-orange-500',
     on_break: 'bg-yellow-500',
-    off_unit: 'bg-gray-500',
+    other: 'bg-gray-500',
     offline: 'bg-gray-400',
   };
   return colors[status] || 'bg-gray-400';
@@ -43,7 +43,7 @@ export const getStatusLabel = (status: TransporterStatus): string => {
     en_route: 'En Route',
     with_patient: 'With Patient',
     on_break: 'On Break',
-    off_unit: 'Off Unit',
+    other: 'Other',
     offline: 'Offline',
   };
   return labels[status] || status;
@@ -77,26 +77,6 @@ export const getRequestStatusLabel = (status: RequestStatus): string => {
 
 export const getPriorityColor = (priority: Priority): string => {
   return priority === 'stat' ? 'bg-red-500' : 'bg-blue-500';
-};
-
-export const getSpecialNeedIcon = (need: SpecialNeed): string => {
-  const icons: Record<SpecialNeed, string> = {
-    wheelchair: '♿',
-    o2: 'O₂',
-    iv_pump: '💉',
-    other: '⚠️',
-  };
-  return icons[need] || '?';
-};
-
-export const getSpecialNeedLabel = (need: SpecialNeed): string => {
-  const labels: Record<SpecialNeed, string> = {
-    wheelchair: 'Wheelchair',
-    o2: 'Oxygen',
-    iv_pump: 'IV Pump',
-    other: 'Other',
-  };
-  return labels[need] || need;
 };
 
 export const getElapsedTimeColor = (minutes: number): string => {

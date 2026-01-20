@@ -1,0 +1,257 @@
+import { Request, Response } from 'express';
+import { query } from '../config/database.js';
+import { getIO } from '../socket/index.js';
+import { AuthenticatedRequest } from '../types/index.js';
+
+// Get active dispatchers
+export const getActiveDispatchers = async (_req: Request, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
+       FROM active_dispatchers ad
+       JOIN users u ON ad.user_id = u.id
+       WHERE ad.ended_at IS NULL
+       ORDER BY ad.is_primary DESC, ad.started_at ASC`
+    );
+
+    res.json({ dispatchers: result.rows });
+  } catch (error) {
+    console.error('Get active dispatchers error:', error);
+    res.status(500).json({ error: 'Failed to get active dispatchers' });
+  }
+};
+
+// Set self as primary dispatcher
+export const setPrimaryDispatcher = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { contact_info } = req.body;
+
+    // End any existing primary dispatcher role
+    await query(
+      `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
+       WHERE is_primary = true AND ended_at IS NULL`
+    );
+
+    // Check if this user already has an active non-primary role
+    const existingResult = await query(
+      `SELECT id FROM active_dispatchers
+       WHERE user_id = $1 AND ended_at IS NULL`,
+      [userId]
+    );
+
+    if (existingResult.rows.length > 0) {
+      // Update to primary
+      await query(
+        `UPDATE active_dispatchers
+         SET is_primary = true, contact_info = COALESCE($2, contact_info)
+         WHERE id = $1`,
+        [existingResult.rows[0].id, contact_info]
+      );
+    } else {
+      // Create new primary role
+      await query(
+        `INSERT INTO active_dispatchers (user_id, is_primary, contact_info)
+         VALUES ($1, true, $2)`,
+        [userId, contact_info || null]
+      );
+    }
+
+    // Emit dispatcher change event
+    await emitDispatcherChange();
+
+    res.json({ message: 'Set as primary dispatcher' });
+  } catch (error) {
+    console.error('Set primary dispatcher error:', error);
+    res.status(500).json({ error: 'Failed to set primary dispatcher' });
+  }
+};
+
+// Register as assistant dispatcher
+export const registerAsDispatcher = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { contact_info } = req.body;
+
+    // Check if already registered
+    const existingResult = await query(
+      `SELECT id FROM active_dispatchers
+       WHERE user_id = $1 AND ended_at IS NULL`,
+      [userId]
+    );
+
+    if (existingResult.rows.length > 0) {
+      return res.status(400).json({ error: 'Already registered as dispatcher' });
+    }
+
+    // Create assistant dispatcher role
+    await query(
+      `INSERT INTO active_dispatchers (user_id, is_primary, contact_info)
+       VALUES ($1, false, $2)`,
+      [userId, contact_info || null]
+    );
+
+    await emitDispatcherChange();
+
+    res.json({ message: 'Registered as assistant dispatcher' });
+  } catch (error) {
+    console.error('Register as dispatcher error:', error);
+    res.status(500).json({ error: 'Failed to register as dispatcher' });
+  }
+};
+
+// Go on break (with replacement selection)
+export const takeBreak = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { replacement_user_id } = req.body;
+
+    // Find current dispatcher role
+    const currentResult = await query(
+      `SELECT * FROM active_dispatchers
+       WHERE user_id = $1 AND ended_at IS NULL`,
+      [userId]
+    );
+
+    if (currentResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Not currently an active dispatcher' });
+    }
+
+    const wasPrimary = currentResult.rows[0].is_primary;
+
+    // End current role
+    await query(
+      `UPDATE active_dispatchers
+       SET ended_at = CURRENT_TIMESTAMP, replaced_by = $2
+       WHERE id = $1`,
+      [currentResult.rows[0].id, replacement_user_id || null]
+    );
+
+    // If was primary and replacement specified, make replacement primary
+    if (wasPrimary && replacement_user_id) {
+      // Check if replacement is already a dispatcher
+      const replacementResult = await query(
+        `SELECT id FROM active_dispatchers
+         WHERE user_id = $1 AND ended_at IS NULL`,
+        [replacement_user_id]
+      );
+
+      if (replacementResult.rows.length > 0) {
+        await query(
+          `UPDATE active_dispatchers SET is_primary = true WHERE id = $1`,
+          [replacementResult.rows[0].id]
+        );
+      } else {
+        await query(
+          `INSERT INTO active_dispatchers (user_id, is_primary)
+           VALUES ($1, true)`,
+          [replacement_user_id]
+        );
+      }
+    }
+
+    await emitDispatcherChange();
+
+    res.json({ message: 'On break' });
+  } catch (error) {
+    console.error('Take break error:', error);
+    res.status(500).json({ error: 'Failed to take break' });
+  }
+};
+
+// Return from break
+export const returnFromBreak = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { as_primary } = req.body;
+
+    // Check if already active
+    const existingResult = await query(
+      `SELECT id FROM active_dispatchers
+       WHERE user_id = $1 AND ended_at IS NULL`,
+      [userId]
+    );
+
+    if (existingResult.rows.length > 0) {
+      return res.status(400).json({ error: 'Already an active dispatcher' });
+    }
+
+    if (as_primary) {
+      // End current primary
+      await query(
+        `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
+         WHERE is_primary = true AND ended_at IS NULL`
+      );
+    }
+
+    // Create new dispatcher role
+    await query(
+      `INSERT INTO active_dispatchers (user_id, is_primary)
+       VALUES ($1, $2)`,
+      [userId, as_primary || false]
+    );
+
+    await emitDispatcherChange();
+
+    res.json({ message: 'Returned from break' });
+  } catch (error) {
+    console.error('Return from break error:', error);
+    res.status(500).json({ error: 'Failed to return from break' });
+  }
+};
+
+// End dispatcher session
+export const endDispatcherSession = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+
+    await query(
+      `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND ended_at IS NULL`,
+      [userId]
+    );
+
+    await emitDispatcherChange();
+
+    res.json({ message: 'Dispatcher session ended' });
+  } catch (error) {
+    console.error('End dispatcher session error:', error);
+    res.status(500).json({ error: 'Failed to end dispatcher session' });
+  }
+};
+
+// Helper to emit dispatcher change event
+const emitDispatcherChange = async () => {
+  const io = getIO();
+  if (!io) return;
+
+  const result = await query(
+    `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
+     FROM active_dispatchers ad
+     JOIN users u ON ad.user_id = u.id
+     WHERE ad.ended_at IS NULL
+     ORDER BY ad.is_primary DESC, ad.started_at ASC`
+  );
+
+  io.emit('dispatcher_changed', { dispatchers: result.rows });
+};
+
+// Get available dispatchers (for replacement selection)
+export const getAvailableDispatchers = async (_req: Request, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT u.id, u.first_name, u.last_name, u.email, u.phone_number,
+              ad.id as dispatcher_id, ad.is_primary
+       FROM users u
+       LEFT JOIN active_dispatchers ad ON u.id = ad.user_id AND ad.ended_at IS NULL
+       WHERE u.role IN ('dispatcher', 'supervisor', 'manager')
+       AND u.is_active = true
+       ORDER BY u.first_name, u.last_name`
+    );
+
+    res.json({ dispatchers: result.rows });
+  } catch (error) {
+    console.error('Get available dispatchers error:', error);
+    res.status(500).json({ error: 'Failed to get available dispatchers' });
+  }
+};

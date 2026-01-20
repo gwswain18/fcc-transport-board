@@ -1,7 +1,15 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
-import { TransporterStatusRecord, TransportRequest, AlertData } from '../types';
+import {
+  TransporterStatusRecord,
+  TransportRequest,
+  AlertData,
+  CycleTimeAlert,
+  BreakAlert,
+  TransporterOffline,
+  ActiveDispatcher,
+} from '../types';
 
 interface SocketContextType {
   socket: Socket | null;
@@ -9,11 +17,21 @@ interface SocketContextType {
   transporterStatuses: TransporterStatusRecord[];
   requests: TransportRequest[];
   alerts: AlertData[];
+  cycleTimeAlerts: CycleTimeAlert[];
+  breakAlerts: BreakAlert[];
+  offlineAlerts: TransporterOffline[];
+  activeDispatchers: ActiveDispatcher[];
   dismissAlert: (requestId: number) => void;
+  dismissCycleAlert: (requestId: number, explanation?: string) => void;
+  dismissBreakAlert: (userId: number) => void;
+  dismissOfflineAlert: (userId: number) => void;
   refreshData: () => void;
+  requestHelp: (requestId?: number, message?: string) => void;
 }
 
 const SocketContext = createContext<SocketContextType | null>(null);
+
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 
 export function SocketProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -22,13 +40,22 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [transporterStatuses, setTransporterStatuses] = useState<TransporterStatusRecord[]>([]);
   const [requests, setRequests] = useState<TransportRequest[]>([]);
   const [alerts, setAlerts] = useState<AlertData[]>([]);
+  const [cycleTimeAlerts, setCycleTimeAlerts] = useState<CycleTimeAlert[]>([]);
+  const [breakAlerts, setBreakAlerts] = useState<BreakAlert[]>([]);
+  const [offlineAlerts, setOfflineAlerts] = useState<TransporterOffline[]>([]);
+  const [activeDispatchers, setActiveDispatchers] = useState<ActiveDispatcher[]>([]);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
+  const heartbeatInterval = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!user) {
       if (socket) {
         socket.disconnect();
         setSocket(null);
+      }
+      if (heartbeatInterval.current) {
+        clearInterval(heartbeatInterval.current);
+        heartbeatInterval.current = null;
       }
       return;
     }
@@ -47,6 +74,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setConnected(false);
     });
 
+    // Transporter status events
     newSocket.on('transporter_status_changed', (status: TransporterStatusRecord) => {
       setTransporterStatuses((prev) => {
         const index = prev.findIndex((s) => s.user_id === status.user_id);
@@ -59,6 +87,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       });
     });
 
+    // Request events
     newSocket.on('request_created', (request: TransportRequest) => {
       setRequests((prev) => [...prev, request]);
     });
@@ -99,6 +128,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       });
     });
 
+    // Alert events
     newSocket.on('alert_triggered', (alert: AlertData) => {
       if (!dismissedAlerts.has(alert.request_id)) {
         setAlerts((prev) => {
@@ -109,10 +139,60 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // Cycle time alerts
+    newSocket.on('cycle_time_alert', (alert: CycleTimeAlert) => {
+      setCycleTimeAlerts((prev) => {
+        const exists = prev.some((a) => a.request_id === alert.request_id);
+        if (exists) {
+          return prev.map((a) => (a.request_id === alert.request_id ? alert : a));
+        }
+        return [...prev, alert];
+      });
+    });
+
+    // Break alerts
+    newSocket.on('break_alert', (alert: BreakAlert) => {
+      setBreakAlerts((prev) => {
+        const exists = prev.some((a) => a.user_id === alert.user_id);
+        if (exists) {
+          return prev.map((a) => (a.user_id === alert.user_id ? alert : a));
+        }
+        return [...prev, alert];
+      });
+    });
+
+    // Transporter offline alerts
+    newSocket.on('transporter_offline', (alert: TransporterOffline) => {
+      setOfflineAlerts((prev) => {
+        const exists = prev.some((a) => a.user_id === alert.user_id);
+        if (exists) return prev;
+        return [...prev, alert];
+      });
+    });
+
+    // Dispatcher changes
+    newSocket.on('dispatcher_changed', (data: { dispatchers: ActiveDispatcher[] }) => {
+      setActiveDispatchers(data.dispatchers);
+    });
+
+    // Auto-assign timeout
+    newSocket.on('auto_assign_timeout', (data: { request_id: number; old_assignee: number; new_assignee?: number }) => {
+      console.log('Auto-assign timeout:', data);
+      // Could show a notification here
+    });
+
     setSocket(newSocket);
+
+    // Start heartbeat
+    heartbeatInterval.current = setInterval(() => {
+      newSocket.emit('heartbeat');
+    }, HEARTBEAT_INTERVAL);
 
     return () => {
       newSocket.disconnect();
+      if (heartbeatInterval.current) {
+        clearInterval(heartbeatInterval.current);
+      }
     };
   }, [user]);
 
@@ -121,10 +201,32 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     setAlerts((prev) => prev.filter((a) => a.request_id !== requestId));
   };
 
+  const dismissCycleAlert = useCallback((requestId: number, explanation?: string) => {
+    setCycleTimeAlerts((prev) => prev.filter((a) => a.request_id !== requestId));
+    if (socket) {
+      socket.emit('cycle_alert_dismissed', { request_id: requestId, explanation });
+    }
+  }, [socket]);
+
+  const dismissBreakAlert = (userId: number) => {
+    setBreakAlerts((prev) => prev.filter((a) => a.user_id !== userId));
+  };
+
+  const dismissOfflineAlert = (userId: number) => {
+    setOfflineAlerts((prev) => prev.filter((a) => a.user_id !== userId));
+  };
+
+  const requestHelp = useCallback((requestId?: number, message?: string) => {
+    if (socket) {
+      socket.emit('help_requested', { request_id: requestId, message });
+    }
+  }, [socket]);
+
   const refreshData = async () => {
-    const [statusRes, requestRes] = await Promise.all([
+    const [statusRes, requestRes, dispatcherRes] = await Promise.all([
       fetch('/api/status', { credentials: 'include' }).then((r) => r.json()),
       fetch('/api/requests', { credentials: 'include' }).then((r) => r.json()),
+      fetch('/api/dispatchers/active', { credentials: 'include' }).then((r) => r.json()).catch(() => ({ dispatchers: [] })),
     ]);
 
     if (statusRes.statuses) {
@@ -132,6 +234,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
     if (requestRes.requests) {
       setRequests(requestRes.requests);
+    }
+    if (dispatcherRes.dispatchers) {
+      setActiveDispatchers(dispatcherRes.dispatchers);
     }
   };
 
@@ -149,8 +254,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         transporterStatuses,
         requests,
         alerts,
+        cycleTimeAlerts,
+        breakAlerts,
+        offlineAlerts,
+        activeDispatchers,
         dismissAlert,
+        dismissCycleAlert,
+        dismissBreakAlert,
+        dismissOfflineAlert,
         refreshData,
+        requestHelp,
       }}
     >
       {children}

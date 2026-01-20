@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { api } from '../utils/api';
@@ -6,15 +7,24 @@ import { TransporterStatus, RequestStatus } from '../types';
 import { TransporterStatusBadge } from '../components/common/StatusBadge';
 import PriorityBadge from '../components/common/PriorityBadge';
 import ElapsedTimer from '../components/common/ElapsedTimer';
-import SpecialNeedsIcons from '../components/common/SpecialNeedsIcons';
 import Modal from '../components/common/Modal';
 import Header from '../components/common/Header';
+import OtherStatusModal from '../components/common/OtherStatusModal';
+import ShiftStartModal from '../components/transporter/ShiftStartModal';
+import ShiftEndModal from '../components/transporter/ShiftEndModal';
+import CycleTimeAlert from '../components/common/CycleTimeAlert';
+import { Floor } from '../types';
 
 export default function TransporterView() {
-  const { user } = useAuth();
-  const { transporterStatuses, requests, refreshData } = useSocket();
+  const { user, activeShift, setActiveShift, logout } = useAuth();
+  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, refreshData, requestHelp } = useSocket();
+  const navigate = useNavigate();
   const [queueOpen, setQueueOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showOtherModal, setShowOtherModal] = useState(false);
+  const [showShiftStartModal, setShowShiftStartModal] = useState(false);
+  const [showShiftEndModal, setShowShiftEndModal] = useState(false);
+  const [shiftLoading, setShiftLoading] = useState(false);
 
   const myStatus = transporterStatuses.find((s) => s.user_id === user?.id);
   const currentJob = requests.find(
@@ -30,11 +40,25 @@ export default function TransporterView() {
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
 
-  const handleStatusChange = async (status: TransporterStatus) => {
+  // Get cycle time alerts for current job
+  const myAlerts = cycleTimeAlerts.filter(
+    (a) => currentJob && a.request_id === currentJob.id
+  );
+
+  const handleStatusChange = async (status: TransporterStatus, explanation?: string) => {
     setLoading(true);
-    await api.updateStatus(status);
+    await api.updateStatus(status, explanation);
     await refreshData();
     setLoading(false);
+  };
+
+  const handleOtherStatus = () => {
+    setShowOtherModal(true);
+  };
+
+  const handleOtherConfirm = async (explanation: string) => {
+    setShowOtherModal(false);
+    await handleStatusChange('other', explanation);
   };
 
   const handleJobAction = async () => {
@@ -62,6 +86,29 @@ export default function TransporterView() {
     await refreshData();
     setQueueOpen(false);
     setLoading(false);
+  };
+
+  const handleStartShift = async (data: { extension?: string; floor_assignment?: Floor }) => {
+    setShiftLoading(true);
+    const response = await api.startShift(data);
+    setShiftLoading(false);
+
+    if (response.data?.shift) {
+      setActiveShift(response.data.shift);
+      setShowShiftStartModal(false);
+    }
+  };
+
+  const handleEndShift = async () => {
+    setShiftLoading(true);
+    await api.endShift();
+    await logout();
+    setShiftLoading(false);
+    navigate('/login');
+  };
+
+  const handleRequestHelp = () => {
+    requestHelp(currentJob?.id, 'Transporter needs assistance');
   };
 
   const getActionButtonText = (): string => {
@@ -102,12 +149,71 @@ export default function TransporterView() {
       <Header />
 
       <main className="max-w-lg mx-auto p-4 space-y-6">
+        {/* Shift Info */}
+        {activeShift && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-blue-700">
+                <span className="font-medium">Shift started:</span>{' '}
+                {new Date(activeShift.shift_start).toLocaleTimeString()}
+              </p>
+              {activeShift.extension && (
+                <p className="text-sm text-blue-600">
+                  Extension: <span className="font-medium">{activeShift.extension}</span>
+                </p>
+              )}
+              {activeShift.floor_assignment && (
+                <p className="text-sm text-blue-600">
+                  Floor: <span className="font-medium">{activeShift.floor_assignment}</span>
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => setShowShiftEndModal(true)}
+              className="text-sm text-blue-700 hover:text-blue-900 underline"
+            >
+              End Shift
+            </button>
+          </div>
+        )}
+
+        {/* No active shift prompt */}
+        {!activeShift && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p className="text-sm text-yellow-700 mb-2">
+              You haven't started your shift yet.
+            </p>
+            <button
+              onClick={() => setShowShiftStartModal(true)}
+              className="btn-primary text-sm"
+            >
+              Start Shift
+            </button>
+          </div>
+        )}
+
+        {/* Cycle Time Alerts */}
+        {myAlerts.map((alert) => (
+          <CycleTimeAlert
+            key={alert.request_id}
+            alert={alert}
+            onDismiss={dismissCycleAlert}
+          />
+        ))}
+
         {/* Current Status */}
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <span className="text-gray-600">Current Status</span>
             {myStatus && <TransporterStatusBadge status={myStatus.status} size="lg" />}
           </div>
+
+          {/* Show explanation if status is 'other' */}
+          {myStatus?.status === 'other' && myStatus.status_explanation && (
+            <p className="text-sm text-gray-500 mb-4 italic">
+              Reason: {myStatus.status_explanation}
+            </p>
+          )}
 
           {!currentJob && (
             <div className="flex gap-3">
@@ -126,11 +232,11 @@ export default function TransporterView() {
                 On Break
               </button>
               <button
-                onClick={() => handleStatusChange('off_unit')}
+                onClick={handleOtherStatus}
                 disabled={loading}
-                className={getStatusButtonClass('off_unit')}
+                className={getStatusButtonClass('other')}
               >
-                Off Unit
+                Other
               </button>
             </div>
           )}
@@ -152,14 +258,6 @@ export default function TransporterView() {
                 <p className="text-xl text-gray-600 mt-2">{currentJob.destination}</p>
               </div>
 
-              {currentJob.patient_initials && (
-                <p className="text-center text-gray-500">
-                  Patient: {currentJob.patient_initials}
-                </p>
-              )}
-
-              <SpecialNeedsIcons needs={currentJob.special_needs} showLabels size="lg" />
-
               {currentJob.notes && (
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <p className="text-sm text-gray-600">{currentJob.notes}</p>
@@ -177,6 +275,14 @@ export default function TransporterView() {
                 className="w-full py-4 bg-blue-600 text-white text-xl font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
                 {loading ? 'Processing...' : getActionButtonText()}
+              </button>
+
+              {/* Help Button */}
+              <button
+                onClick={handleRequestHelp}
+                className="w-full py-2 text-gray-600 hover:text-gray-800 text-sm"
+              >
+                Request Help
               </button>
             </div>
           </div>
@@ -224,7 +330,6 @@ export default function TransporterView() {
                     </span>
                   </div>
                   <p className="text-sm text-gray-600">{job.destination}</p>
-                  <SpecialNeedsIcons needs={job.special_needs} size="sm" />
                 </div>
                 <button
                   onClick={() => handleClaimJob(job.id)}
@@ -238,6 +343,28 @@ export default function TransporterView() {
           </div>
         )}
       </Modal>
+
+      {/* Other Status Modal */}
+      <OtherStatusModal
+        isOpen={showOtherModal}
+        onClose={() => setShowOtherModal(false)}
+        onConfirm={handleOtherConfirm}
+      />
+
+      {/* Shift Modals */}
+      <ShiftStartModal
+        isOpen={showShiftStartModal}
+        onClose={() => setShowShiftStartModal(false)}
+        onStart={handleStartShift}
+        loading={shiftLoading}
+      />
+
+      <ShiftEndModal
+        isOpen={showShiftEndModal}
+        onClose={() => setShowShiftEndModal(false)}
+        onConfirm={handleEndShift}
+        loading={shiftLoading}
+      />
     </div>
   );
 }

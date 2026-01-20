@@ -3,7 +3,6 @@ import { useSocket } from '../context/SocketContext';
 import { api } from '../utils/api';
 import {
   Floor,
-  SpecialNeed,
   TransportRequest,
   TransporterStatusRecord,
   CreateTransportRequestData,
@@ -12,27 +11,48 @@ import Header from '../components/common/Header';
 import { TransporterStatusBadge } from '../components/common/StatusBadge';
 import PriorityBadge from '../components/common/PriorityBadge';
 import ElapsedTimer from '../components/common/ElapsedTimer';
-import SpecialNeedsIcons from '../components/common/SpecialNeedsIcons';
 import Modal from '../components/common/Modal';
+import AutoAssignButton from '../components/dispatcher/AutoAssignButton';
+import ActiveDispatcherCard from '../components/dispatcher/ActiveDispatcherCard';
+import CycleTimeAlert from '../components/common/CycleTimeAlert';
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 const DESTINATIONS = ['Atrium', 'Radiology', 'Lab', 'OR', 'NICU', 'Other'];
 
+// Floor/room validation ranges
+const FLOOR_ROOM_RANGES: Record<Floor, { min: number; max: number }> = {
+  FCC1: { min: 100, max: 199 },
+  FCC4: { min: 400, max: 499 },
+  FCC5: { min: 500, max: 599 },
+  FCC6: { min: 600, max: 699 },
+};
+
 export default function DispatcherView() {
-  const { transporterStatuses, requests, alerts, dismissAlert, refreshData } = useSocket();
+  const {
+    transporterStatuses,
+    requests,
+    alerts,
+    cycleTimeAlerts,
+    breakAlerts,
+    offlineAlerts,
+    activeDispatchers,
+    dismissAlert,
+    dismissCycleAlert,
+    dismissBreakAlert,
+    dismissOfflineAlert,
+    refreshData,
+  } = useSocket();
   const [loading, setLoading] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<TransportRequest | null>(null);
   const [showOtherDestination, setShowOtherDestination] = useState(false);
+  const [roomError, setRoomError] = useState('');
 
   const [formData, setFormData] = useState<CreateTransportRequestData>({
     origin_floor: 'FCC4',
     room_number: '',
-    patient_initials: '',
     destination: 'Atrium',
     priority: 'routine',
-    special_needs: [],
-    special_needs_notes: '',
     notes: '',
   });
 
@@ -50,26 +70,52 @@ export default function DispatcherView() {
     ['accepted', 'en_route', 'with_patient'].includes(r.status)
   );
 
-  const handleCreateRequest = async (assignTo?: number) => {
+  const validateRoomNumber = (floor: Floor, room: string): boolean => {
+    const roomNum = parseInt(room, 10);
+    if (isNaN(roomNum)) return true; // Allow non-numeric rooms
+    const range = FLOOR_ROOM_RANGES[floor];
+    return roomNum >= range.min && roomNum <= range.max;
+  };
+
+  const handleRoomChange = (room: string) => {
+    setFormData((prev) => ({ ...prev, room_number: room }));
+    if (room && !validateRoomNumber(formData.origin_floor, room)) {
+      const range = FLOOR_ROOM_RANGES[formData.origin_floor];
+      setRoomError(`Room should be between ${range.min}-${range.max} for ${formData.origin_floor}`);
+    } else {
+      setRoomError('');
+    }
+  };
+
+  const handleFloorChange = (floor: Floor) => {
+    setFormData((prev) => ({ ...prev, origin_floor: floor }));
+    if (formData.room_number && !validateRoomNumber(floor, formData.room_number)) {
+      const range = FLOOR_ROOM_RANGES[floor];
+      setRoomError(`Room should be between ${range.min}-${range.max} for ${floor}`);
+    } else {
+      setRoomError('');
+    }
+  };
+
+  const handleCreateRequest = async (assignTo?: number, autoAssign?: boolean) => {
     if (!formData.room_number) return;
     setLoading(true);
 
     await api.createRequest({
       ...formData,
       assigned_to: assignTo,
+      auto_assign: autoAssign,
     });
 
     setFormData({
       origin_floor: 'FCC4',
       room_number: '',
-      patient_initials: '',
       destination: 'Atrium',
       priority: 'routine',
-      special_needs: [],
-      special_needs_notes: '',
       notes: '',
     });
     setShowOtherDestination(false);
+    setRoomError('');
     await refreshData();
     setLoading(false);
   };
@@ -89,15 +135,6 @@ export default function DispatcherView() {
     await api.cancelRequest(requestId);
     await refreshData();
     setLoading(false);
-  };
-
-  const toggleSpecialNeed = (need: SpecialNeed) => {
-    setFormData((prev) => ({
-      ...prev,
-      special_needs: prev.special_needs.includes(need)
-        ? prev.special_needs.filter((n) => n !== need)
-        : [...prev.special_needs, need],
-    }));
   };
 
   const openAssignModal = (request: TransportRequest) => {
@@ -134,10 +171,76 @@ export default function DispatcherView() {
         </div>
       )}
 
+      {/* Break Alerts */}
+      {breakAlerts.length > 0 && (
+        <div className="bg-yellow-500 text-white px-4 py-2">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="font-bold">BREAK ALERT:</span>
+              <span>
+                {breakAlerts.map((a) => `${a.first_name} ${a.last_name} (${a.minutes_on_break} min)`).join(', ')}
+              </span>
+            </div>
+            <div className="flex gap-2">
+              {breakAlerts.map((alert) => (
+                <button
+                  key={alert.user_id}
+                  onClick={() => dismissBreakAlert(alert.user_id)}
+                  className="bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded text-sm"
+                >
+                  Dismiss
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Offline Alerts */}
+      {offlineAlerts.length > 0 && (
+        <div className="bg-gray-700 text-white px-4 py-2">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <span className="font-bold">OFFLINE:</span>
+              <span>
+                {offlineAlerts.map((a) => `${a.first_name} ${a.last_name}`).join(', ')}
+              </span>
+            </div>
+            <div className="flex gap-2">
+              {offlineAlerts.map((alert) => (
+                <button
+                  key={alert.user_id}
+                  onClick={() => dismissOfflineAlert(alert.user_id)}
+                  className="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm"
+                >
+                  Dismiss
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto p-4">
+        {/* Cycle Time Alerts */}
+        {cycleTimeAlerts.length > 0 && (
+          <div className="mb-4 space-y-2">
+            {cycleTimeAlerts.map((alert) => (
+              <CycleTimeAlert
+                key={alert.request_id}
+                alert={alert}
+                onDismiss={dismissCycleAlert}
+              />
+            ))}
+          </div>
+        )}
+
         <div className="grid grid-cols-12 gap-4">
           {/* Left Panel - Transporters */}
           <div className="col-span-3 space-y-4">
+            {/* Active Dispatchers Card */}
+            <ActiveDispatcherCard dispatchers={activeDispatchers} />
+
             <div className="card">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Transporters</h2>
               <div className="space-y-2">
@@ -177,6 +280,7 @@ export default function DispatcherView() {
                         request={request}
                         onAssign={() => openAssignModal(request)}
                         onCancel={() => handleCancelRequest(request.id)}
+                        showAutoAssign
                       />
                     ))}
                   </div>
@@ -236,12 +340,7 @@ export default function DispatcherView() {
                   <label className="label">Floor</label>
                   <select
                     value={formData.origin_floor}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        origin_floor: e.target.value as Floor,
-                      }))
-                    }
+                    onChange={(e) => handleFloorChange(e.target.value as Floor)}
                     className="input"
                   >
                     {FLOORS.map((floor) => (
@@ -257,29 +356,13 @@ export default function DispatcherView() {
                   <input
                     type="text"
                     value={formData.room_number}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, room_number: e.target.value }))
-                    }
-                    className="input"
+                    onChange={(e) => handleRoomChange(e.target.value)}
+                    className={`input ${roomError ? 'border-yellow-500' : ''}`}
                     placeholder="e.g., 412"
                   />
-                </div>
-
-                <div>
-                  <label className="label">Patient Initials (optional)</label>
-                  <input
-                    type="text"
-                    value={formData.patient_initials}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        patient_initials: e.target.value.slice(0, 3).toUpperCase(),
-                      }))
-                    }
-                    className="input"
-                    placeholder="e.g., JD"
-                    maxLength={3}
-                  />
+                  {roomError && (
+                    <p className="text-yellow-600 text-sm mt-1">{roomError}</p>
+                  )}
                 </div>
 
                 <div>
@@ -347,30 +430,6 @@ export default function DispatcherView() {
                 </div>
 
                 <div>
-                  <label className="label">Special Needs</label>
-                  <div className="flex flex-wrap gap-2">
-                    {(['wheelchair', 'o2', 'iv_pump', 'other'] as SpecialNeed[]).map(
-                      (need) => (
-                        <button
-                          key={need}
-                          onClick={() => toggleSpecialNeed(need)}
-                          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                            formData.special_needs.includes(need)
-                              ? 'bg-indigo-500 text-white'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}
-                        >
-                          {need === 'wheelchair' && 'Wheelchair'}
-                          {need === 'o2' && 'O2'}
-                          {need === 'iv_pump' && 'IV Pump'}
-                          {need === 'other' && 'Other'}
-                        </button>
-                      )
-                    )}
-                  </div>
-                </div>
-
-                <div>
                   <label className="label">Notes (optional)</label>
                   <textarea
                     value={formData.notes}
@@ -391,26 +450,33 @@ export default function DispatcherView() {
                   >
                     Post to Queue
                   </button>
-                  {availableTransporters.length > 0 && (
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          handleCreateRequest(parseInt(e.target.value));
-                        }
-                      }}
-                      disabled={!formData.room_number || loading}
-                      className="flex-1 input"
-                      defaultValue=""
-                    >
-                      <option value="">Assign to...</option>
-                      {availableTransporters.map((t) => (
-                        <option key={t.user_id} value={t.user_id}>
-                          {t.user?.first_name} {t.user?.last_name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  <button
+                    onClick={() => handleCreateRequest(undefined, true)}
+                    disabled={!formData.room_number || loading || availableTransporters.length === 0}
+                    className="flex-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 py-2 px-4"
+                  >
+                    Auto-Assign
+                  </button>
                 </div>
+                {availableTransporters.length > 0 && (
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleCreateRequest(parseInt(e.target.value));
+                      }
+                    }}
+                    disabled={!formData.room_number || loading}
+                    className="w-full input"
+                    defaultValue=""
+                  >
+                    <option value="">Manual Assign to...</option>
+                    {availableTransporters.map((t) => (
+                      <option key={t.user_id} value={t.user_id}>
+                        {t.user?.first_name} {t.user?.last_name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
           </div>
@@ -439,7 +505,17 @@ export default function DispatcherView() {
             </div>
 
             <div>
-              <h4 className="font-medium mb-2">Available Transporters</h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium">Available Transporters</h4>
+                <AutoAssignButton
+                  requestId={selectedRequest.id}
+                  onAssigned={() => {
+                    setAssignModalOpen(false);
+                    setSelectedRequest(null);
+                    refreshData();
+                  }}
+                />
+              </div>
               {availableTransporters.length === 0 ? (
                 <p className="text-gray-500">No transporters available</p>
               ) : (
@@ -451,7 +527,15 @@ export default function DispatcherView() {
                       disabled={loading}
                       className="w-full text-left p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
                     >
-                      {t.user?.first_name} {t.user?.last_name}
+                      <div className="flex items-center justify-between">
+                        <span>{t.user?.first_name} {t.user?.last_name}</span>
+                        {t.shift?.extension && (
+                          <span className="text-xs text-gray-500">Ext: {t.shift.extension}</span>
+                        )}
+                      </div>
+                      {t.user?.primary_floor && (
+                        <span className="text-xs text-gray-400">Primary: {t.user.primary_floor}</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -486,6 +570,12 @@ function TransporterCard({
         </span>
         <TransporterStatusBadge status={transporter.status} size="sm" />
       </div>
+      {transporter.shift?.extension && (
+        <p className="text-xs text-gray-500 mt-1">Ext: {transporter.shift.extension}</p>
+      )}
+      {transporter.status === 'other' && transporter.status_explanation && (
+        <p className="text-xs text-gray-500 mt-1 italic">{transporter.status_explanation}</p>
+      )}
       {transporter.current_job && (
         <p className="text-sm text-gray-600 mt-1">
           {transporter.current_job.origin_floor}-{transporter.current_job.room_number}
@@ -499,10 +589,12 @@ function RequestCard({
   request,
   onAssign,
   onCancel,
+  showAutoAssign,
 }: {
   request: TransportRequest;
   onAssign?: () => void;
   onCancel?: () => void;
+  showAutoAssign?: boolean;
 }) {
   return (
     <div className="bg-gray-50 rounded-lg p-3">
@@ -524,13 +616,20 @@ function RequestCard({
         </p>
       )}
 
-      <SpecialNeedsIcons needs={request.special_needs} size="sm" />
+      {request.assignment_method === 'auto' && (
+        <span className="inline-block text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded mb-2">
+          Auto-assigned
+        </span>
+      )}
 
       <div className="flex gap-2 mt-3">
         {onAssign && (
           <button onClick={onAssign} className="btn-primary text-sm py-1">
             {request.assignee ? 'Reassign' : 'Assign'}
           </button>
+        )}
+        {showAutoAssign && !request.assignee && (
+          <AutoAssignButton requestId={request.id} />
         )}
         {onCancel && (
           <button onClick={onCancel} className="btn-danger text-sm py-1">

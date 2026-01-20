@@ -8,6 +8,11 @@ import dotenv from 'dotenv';
 import routes from './routes/index.js';
 import { initializeSocket } from './socket/index.js';
 import { startAlertService } from './services/alertService.js';
+import { startHeartbeatService } from './services/heartbeatService.js';
+import { startCycleTimeService } from './services/cycleTimeService.js';
+import { startAutoAssignService } from './services/autoAssignService.js';
+import { initializeTwilio } from './services/twilioService.js';
+import { initializeEmail } from './services/emailService.js';
 
 dotenv.config();
 
@@ -38,12 +43,21 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 // Start server
 const PORT = process.env.PORT || 3001;
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
-  // Start alert service
+  // Start services
   startAlertService();
+  startHeartbeatService();
+  startCycleTimeService();
+  startAutoAssignService();
+
+  // Initialize notification services (optional)
+  await initializeTwilio();
+  await initializeEmail();
+
+  console.log('All services started');
 });
 
 export default app;

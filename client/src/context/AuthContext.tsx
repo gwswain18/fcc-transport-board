@@ -1,18 +1,22 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User } from '../types';
+import { User, ShiftLog } from '../types';
 import { api } from '../utils/api';
 
 interface AuthContextType {
   user: User | null;
+  activeShift: ShiftLog | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsShiftStart?: boolean }>;
   logout: () => Promise<void>;
+  setActiveShift: (shift: ShiftLog | null) => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [activeShift, setActiveShift] = useState<ShiftLog | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -23,6 +27,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await api.me();
     if (response.data?.user) {
       setUser(response.data.user);
+      if (response.data.activeShift) {
+        setActiveShift(response.data.activeShift);
+      }
     }
     setLoading(false);
   };
@@ -31,6 +38,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await api.login(email, password);
     if (response.data?.user) {
       setUser(response.data.user);
+
+      // Check if transporter needs to start shift
+      if (response.data.user.role === 'transporter') {
+        if (response.data.activeShift) {
+          setActiveShift(response.data.activeShift);
+          return { success: true };
+        } else {
+          // No active shift - prompt to start one
+          return { success: true, needsShiftStart: true };
+        }
+      }
+
       return { success: true };
     }
     return { success: false, error: response.error };
@@ -39,10 +58,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     await api.logout();
     setUser(null);
+    setActiveShift(null);
+  };
+
+  const refreshUser = async () => {
+    const response = await api.me();
+    if (response.data?.user) {
+      setUser(response.data.user);
+      if (response.data.activeShift) {
+        setActiveShift(response.data.activeShift);
+      }
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, activeShift, loading, login, logout, setActiveShift, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

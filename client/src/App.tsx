@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import TransporterView from './pages/TransporterView';
 import DispatcherView from './pages/DispatcherView';
 import SupervisorView from './pages/SupervisorView';
@@ -32,9 +34,9 @@ function ProtectedRoute({
     // Redirect to appropriate view based on role
     const roleRoutes: Record<string, string> = {
       transporter: '/transporter',
-      dispatcher: '/dispatcher',
+      dispatcher: '/dashboard',
       supervisor: '/supervisor',
-      manager: '/manager',
+      manager: '/analytics',
     };
     return <Navigate to={roleRoutes[user.role] || '/login'} replace />;
   }
@@ -59,9 +61,9 @@ function RoleBasedRedirect() {
 
   const roleRoutes: Record<string, string> = {
     transporter: '/transporter',
-    dispatcher: '/dispatcher',
+    dispatcher: '/dashboard',
     supervisor: '/supervisor',
-    manager: '/manager',
+    manager: '/analytics',
   };
 
   return <Navigate to={roleRoutes[user.role] || '/login'} replace />;
@@ -71,6 +73,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/" element={<RoleBasedRedirect />} />
 
       <Route
@@ -82,13 +86,20 @@ export default function App() {
         }
       />
 
+      {/* Renamed: Board → Dashboard (DispatcherView) */}
       <Route
-        path="/dispatcher"
+        path="/dashboard"
         element={
           <ProtectedRoute allowedRoles={['dispatcher', 'supervisor', 'manager']}>
             <DispatcherView />
           </ProtectedRoute>
         }
+      />
+
+      {/* Keep old route for backward compatibility */}
+      <Route
+        path="/dispatcher"
+        element={<Navigate to="/dashboard" replace />}
       />
 
       <Route
@@ -100,13 +111,20 @@ export default function App() {
         }
       />
 
+      {/* Renamed: Dashboard → Analytics (ManagerDashboard) */}
       <Route
-        path="/manager"
+        path="/analytics"
         element={
           <ProtectedRoute allowedRoles={['manager']}>
             <ManagerDashboard />
           </ProtectedRoute>
         }
+      />
+
+      {/* Keep old route for backward compatibility */}
+      <Route
+        path="/manager"
+        element={<Navigate to="/analytics" replace />}
       />
 
       <Route

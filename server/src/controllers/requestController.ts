@@ -5,13 +5,17 @@ import {
   RequestStatus,
   Floor,
   Priority,
-  SpecialNeed,
+  AssignmentMethod,
 } from '../types/index.js';
 import { getIO } from '../socket/index.js';
+import { validateFloorRoom } from '../utils/validation.js';
+import { autoAssignRequest } from '../services/autoAssignService.js';
+import { sendJobAssignmentSMS } from '../services/twilioService.js';
+import { logCreate, logStatusChange } from '../services/auditService.js';
+import { getAuditContext } from '../middleware/auditMiddleware.js';
 
 const validFloors: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 const validPriorities: Priority[] = ['routine', 'stat'];
-const validSpecialNeeds: SpecialNeed[] = ['wheelchair', 'o2', 'iv_pump', 'other'];
 
 const getRequestWithRelations = async (requestId: number) => {
   const result = await query(
@@ -137,13 +141,11 @@ export const createRequest = async (
     const {
       origin_floor,
       room_number,
-      patient_initials,
       destination = 'Atrium',
       priority = 'routine',
-      special_needs = [],
-      special_needs_notes,
       notes,
       assigned_to,
+      auto_assign = false,
     } = req.body;
 
     if (!origin_floor || !room_number) {
@@ -161,67 +163,102 @@ export const createRequest = async (
       return;
     }
 
-    if (patient_initials && patient_initials.length > 3) {
-      res.status(400).json({ error: 'Patient initials must be 3 characters or less' });
+    // Floor/room validation
+    const validation = validateFloorRoom(origin_floor, room_number);
+    if (!validation.is_valid) {
+      res.status(400).json({ error: validation.error });
       return;
     }
 
-    // Validate special needs
-    for (const need of special_needs) {
-      if (!validSpecialNeeds.includes(need)) {
-        res.status(400).json({ error: `Invalid special need: ${need}` });
-        return;
-      }
-    }
+    let initialStatus: RequestStatus = 'pending';
+    let assignmentMethod: AssignmentMethod = 'manual';
+    let finalAssignedTo = assigned_to;
 
-    const initialStatus: RequestStatus = assigned_to ? 'assigned' : 'pending';
+    if (assigned_to) {
+      initialStatus = 'assigned';
+      assignmentMethod = 'manual';
+    }
 
     const result = await query(
       `INSERT INTO transport_requests
-       (origin_floor, room_number, patient_initials, destination, priority,
-        special_needs, special_needs_notes, notes, status, created_by,
-        assigned_to, assigned_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       (origin_floor, room_number, destination, priority, notes, status,
+        created_by, assigned_to, assigned_at, assignment_method)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         origin_floor,
         room_number,
-        patient_initials || null,
         destination,
         priority,
-        JSON.stringify(special_needs),
-        special_needs_notes || null,
         notes || null,
         initialStatus,
         req.user.id,
-        assigned_to || null,
-        assigned_to ? new Date().toISOString() : null,
+        finalAssignedTo || null,
+        finalAssignedTo ? new Date().toISOString() : null,
+        assignmentMethod,
       ]
     );
+
+    const requestId = result.rows[0].id;
 
     // Record status history
     await query(
       `INSERT INTO status_history (request_id, user_id, from_status, to_status)
        VALUES ($1, $2, NULL, $3)`,
-      [result.rows[0].id, req.user.id, initialStatus]
+      [requestId, req.user.id, initialStatus]
     );
 
     // Update transporter status if assigned
-    if (assigned_to) {
+    if (finalAssignedTo) {
       await query(
         `UPDATE transporter_status SET status = 'assigned', updated_at = CURRENT_TIMESTAMP
          WHERE user_id = $1`,
-        [assigned_to]
+        [finalAssignedTo]
+      );
+
+      // Send SMS notification
+      await sendJobAssignmentSMS(
+        finalAssignedTo,
+        requestId,
+        origin_floor,
+        room_number,
+        priority
       );
     }
 
-    const request = await getRequestWithRelations(result.rows[0].id);
+    // Log the creation
+    const { ipAddress } = getAuditContext(req);
+    await logCreate(req.user.id, 'transport_request', requestId, {
+      origin_floor,
+      room_number,
+      priority,
+      assigned_to: finalAssignedTo,
+    }, ipAddress);
+
+    let request = await getRequestWithRelations(requestId);
+
+    // Handle auto-assign after creation if requested
+    if (auto_assign && !finalAssignedTo) {
+      const autoAssignResult = await autoAssignRequest(requestId);
+      if (autoAssignResult.success) {
+        request = await getRequestWithRelations(requestId);
+
+        // Send SMS to auto-assigned transporter
+        await sendJobAssignmentSMS(
+          autoAssignResult.assignedTo!,
+          requestId,
+          origin_floor,
+          room_number,
+          priority
+        );
+      }
+    }
 
     // Emit socket events
     const io = getIO();
     if (io) {
       io.emit('request_created', request);
-      if (assigned_to) {
+      if (request?.assigned_to) {
         io.emit('request_assigned', request);
       }
     }
@@ -303,6 +340,17 @@ export const updateRequest = async (
         [id, req.user.id, currentRequest.status, status]
       );
 
+      // Log the status change
+      const { ipAddress } = getAuditContext(req);
+      await logStatusChange(
+        req.user.id,
+        'transport_request',
+        parseInt(id),
+        currentRequest.status,
+        status,
+        ipAddress
+      );
+
       // Update transporter status based on request status
       const transporterId = assigned_to || currentRequest.assigned_to;
       if (transporterId) {
@@ -321,7 +369,7 @@ export const updateRequest = async (
         const io = getIO();
         if (io) {
           const statusResult = await query(
-            `SELECT ts.*, u.first_name, u.last_name
+            `SELECT ts.*, u.first_name, u.last_name, u.primary_floor
              FROM transporter_status ts
              JOIN users u ON ts.user_id = u.id
              WHERE ts.user_id = $1`,
@@ -334,6 +382,7 @@ export const updateRequest = async (
                 id: transporterId,
                 first_name: statusResult.rows[0].first_name,
                 last_name: statusResult.rows[0].last_name,
+                primary_floor: statusResult.rows[0].primary_floor,
               },
             });
           }
@@ -345,6 +394,8 @@ export const updateRequest = async (
     if (assigned_to !== undefined && assigned_to !== currentRequest.assigned_to) {
       updates.push(`assigned_to = $${paramIndex++}`);
       params.push(assigned_to || null);
+      updates.push(`assignment_method = $${paramIndex++}`);
+      params.push('manual');
 
       if (assigned_to && !currentRequest.assigned_to) {
         updates.push(`status = $${paramIndex++}`);
@@ -363,6 +414,15 @@ export const updateRequest = async (
           `UPDATE transporter_status SET status = 'assigned', updated_at = CURRENT_TIMESTAMP
            WHERE user_id = $1`,
           [assigned_to]
+        );
+
+        // Send SMS notification
+        await sendJobAssignmentSMS(
+          assigned_to,
+          parseInt(id),
+          currentRequest.origin_floor,
+          currentRequest.room_number,
+          currentRequest.priority
         );
       }
 
@@ -509,7 +569,8 @@ export const claimRequest = async (
 
     await query(
       `UPDATE transport_requests
-       SET status = 'assigned', assigned_to = $1, assigned_at = CURRENT_TIMESTAMP
+       SET status = 'assigned', assigned_to = $1, assigned_at = CURRENT_TIMESTAMP,
+           assignment_method = 'claim'
        WHERE id = $2`,
       [req.user.id, id]
     );
@@ -536,6 +597,51 @@ export const claimRequest = async (
     res.json({ request: claimedRequest, message: 'Request claimed' });
   } catch (error) {
     console.error('Claim request error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Auto-assign a pending request
+export const autoAssign = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const { id } = req.params;
+
+    const result = await autoAssignRequest(parseInt(id));
+
+    if (!result.success) {
+      res.status(400).json({ error: result.reason });
+      return;
+    }
+
+    const request = await getRequestWithRelations(parseInt(id));
+
+    // Send SMS notification
+    if (result.assignedTo && request) {
+      await sendJobAssignmentSMS(
+        result.assignedTo,
+        parseInt(id),
+        request.origin_floor,
+        request.room_number,
+        request.priority
+      );
+    }
+
+    res.json({
+      request,
+      assigned_to: result.assignedTo,
+      reason: result.reason,
+      message: 'Request auto-assigned',
+    });
+  } catch (error) {
+    console.error('Auto-assign error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

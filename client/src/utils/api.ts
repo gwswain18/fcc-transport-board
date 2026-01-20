@@ -34,17 +34,45 @@ async function request<T>(
 export const api = {
   // Auth
   login: (email: string, password: string) =>
-    request<{ user: import('../types').User; message: string }>('/auth/login', {
+    request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; message: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
 
   logout: () => request('/auth/logout', { method: 'POST' }),
 
-  me: () => request<{ user: import('../types').User }>('/auth/me'),
+  me: () => request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog }>('/auth/me'),
+
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ message: string }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
+  forgotPassword: (email: string) =>
+    request<{ message: string }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token: string, new_password: string) =>
+    request<{ message: string }>(`/auth/reset-password/${token}`, {
+      method: 'POST',
+      body: JSON.stringify({ new_password }),
+    }),
+
+  recoverUsername: (email: string) =>
+    request<{ message: string }>('/auth/recover-username', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  heartbeat: () => request<{ message: string; timestamp: string }>('/auth/heartbeat', { method: 'POST' }),
 
   // Users
   getUsers: () => request<{ users: import('../types').User[] }>('/users'),
+
+  getTransporters: () => request<{ transporters: import('../types').User[] }>('/users/transporters'),
 
   createUser: (data: {
     email: string;
@@ -52,6 +80,9 @@ export const api = {
     first_name: string;
     last_name: string;
     role: string;
+    primary_floor?: string;
+    phone_number?: string;
+    include_in_analytics?: boolean;
   }) =>
     request<{ user: import('../types').User; message: string }>('/users', {
       method: 'POST',
@@ -66,6 +97,9 @@ export const api = {
       last_name: string;
       role: string;
       is_active: boolean;
+      primary_floor: string;
+      phone_number: string;
+      include_in_analytics: boolean;
     }>
   ) =>
     request<{ user: import('../types').User; message: string }>(`/users/${id}`, {
@@ -73,7 +107,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  resetPassword: (id: number, password: string) =>
+  resetUserPassword: (id: number, password: string) =>
     request<{ message: string }>(`/users/${id}/reset-password`, {
       method: 'PUT',
       body: JSON.stringify({ password }),
@@ -83,12 +117,21 @@ export const api = {
   getStatuses: () =>
     request<{ statuses: import('../types').TransporterStatusRecord[] }>('/status'),
 
-  updateStatus: (status: import('../types').TransporterStatus) =>
+  updateStatus: (status: import('../types').TransporterStatus, explanation?: string) =>
     request<{ status: import('../types').TransporterStatusRecord; message: string }>(
       '/status',
       {
         method: 'PUT',
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, explanation }),
+      }
+    ),
+
+  overrideStatus: (userId: number, new_status: string, reason: string) =>
+    request<{ status: import('../types').TransporterStatusRecord; message: string }>(
+      `/status/${userId}/override`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ new_status, reason }),
       }
     ),
 
@@ -142,6 +185,65 @@ export const api = {
       `/requests/${id}/claim`,
       { method: 'PUT' }
     ),
+
+  autoAssignRequest: (id: number) =>
+    request<{ request: import('../types').TransportRequest; assigned_to: number; reason: string; message: string }>(
+      `/requests/${id}/auto-assign`,
+      { method: 'POST' }
+    ),
+
+  // Shifts
+  startShift: (data?: { extension?: string; floor_assignment?: string }) =>
+    request<{ shift: import('../types').ShiftLog; message: string }>('/shifts/start', {
+      method: 'POST',
+      body: JSON.stringify(data || {}),
+    }),
+
+  endShift: () =>
+    request<{ shift: import('../types').ShiftLog; message: string }>('/shifts/end', {
+      method: 'PUT',
+    }),
+
+  updateExtension: (extension: string) =>
+    request<{ shift: import('../types').ShiftLog; message: string }>('/shifts/extension', {
+      method: 'PUT',
+      body: JSON.stringify({ extension }),
+    }),
+
+  getCurrentShift: () =>
+    request<{ shift: import('../types').ShiftLog | null }>('/shifts/current'),
+
+  // Dispatchers
+  getActiveDispatchers: () =>
+    request<{ dispatchers: import('../types').ActiveDispatcher[] }>('/dispatchers/active'),
+
+  setPrimaryDispatcher: (contact_info?: string) =>
+    request<{ message: string }>('/dispatchers/set-primary', {
+      method: 'POST',
+      body: JSON.stringify({ contact_info }),
+    }),
+
+  registerAsDispatcher: (contact_info?: string) =>
+    request<{ message: string }>('/dispatchers/register', {
+      method: 'POST',
+      body: JSON.stringify({ contact_info }),
+    }),
+
+  dispatcherTakeBreak: (replacement_user_id?: number) =>
+    request<{ message: string }>('/dispatchers/take-break', {
+      method: 'POST',
+      body: JSON.stringify({ replacement_user_id }),
+    }),
+
+  dispatcherReturn: (as_primary?: boolean) =>
+    request<{ message: string }>('/dispatchers/return', {
+      method: 'POST',
+      body: JSON.stringify({ as_primary }),
+    }),
+
+  // Config
+  getConfig: () =>
+    request<{ config: Record<string, unknown> }>('/config'),
 
   // Reports
   getReportSummary: (params?: {
@@ -232,4 +334,11 @@ export const api = {
     const query = searchParams.toString();
     window.location.href = `${API_BASE}/reports/export${query ? `?${query}` : ''}`;
   },
+
+  // Offline sync
+  syncOfflineActions: (actions: Array<{ action_type: string; payload: unknown; created_offline_at: string }>) =>
+    request<{ processed: number; failed: number; errors: Array<{ index: number; error: string }> }>('/offline/sync', {
+      method: 'POST',
+      body: JSON.stringify({ actions }),
+    }),
 };

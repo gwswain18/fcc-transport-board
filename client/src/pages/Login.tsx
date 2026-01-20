@@ -1,25 +1,32 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../utils/api';
+import ShiftStartModal from '../components/transporter/ShiftStartModal';
+import { Floor } from '../types';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, user } = useAuth();
+  const [showShiftModal, setShowShiftModal] = useState(false);
+  const [shiftLoading, setShiftLoading] = useState(false);
+  const { login, user, setActiveShift } = useAuth();
   const navigate = useNavigate();
 
   // Redirect if already logged in
-  if (user) {
-    const roleRoutes: Record<string, string> = {
-      transporter: '/transporter',
-      dispatcher: '/dispatcher',
-      supervisor: '/supervisor',
-      manager: '/manager',
-    };
-    navigate(roleRoutes[user.role] || '/');
-  }
+  useEffect(() => {
+    if (user) {
+      const roleRoutes: Record<string, string> = {
+        transporter: '/transporter',
+        dispatcher: '/dashboard',
+        supervisor: '/supervisor',
+        manager: '/analytics',
+      };
+      navigate(roleRoutes[user.role] || '/');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +38,32 @@ export default function Login() {
     if (!result.success) {
       setError(result.error || 'Login failed');
       setLoading(false);
+    } else if (result.needsShiftStart) {
+      // Transporter needs to start shift
+      setLoading(false);
+      setShowShiftModal(true);
     }
+    // Otherwise, the useEffect will handle navigation
+  };
+
+  const handleStartShift = async (data: { extension?: string; floor_assignment?: Floor }) => {
+    setShiftLoading(true);
+    const response = await api.startShift(data);
+    setShiftLoading(false);
+
+    if (response.data?.shift) {
+      setActiveShift(response.data.shift);
+      setShowShiftModal(false);
+      navigate('/transporter');
+    } else {
+      setError(response.error || 'Failed to start shift');
+    }
+  };
+
+  const handleSkipShift = () => {
+    // Allow login without starting shift (they can start it later)
+    setShowShiftModal(false);
+    navigate('/transporter');
   };
 
   return (
@@ -116,12 +148,28 @@ export default function Login() {
           </button>
         </form>
 
+        <div className="mt-4 text-center">
+          <Link
+            to="/forgot-password"
+            className="text-blue-600 hover:text-blue-800 text-sm"
+          >
+            Forgot your password?
+          </Link>
+        </div>
+
         <div className="mt-8 pt-6 border-t border-gray-200">
           <p className="text-sm text-gray-500 text-center">
             Mother-Baby Unit Patient Transport System
           </p>
         </div>
       </div>
+
+      <ShiftStartModal
+        isOpen={showShiftModal}
+        onClose={handleSkipShift}
+        onStart={handleStartShift}
+        loading={shiftLoading}
+      />
     </div>
   );
 }
