@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 import ShiftStartModal from '../components/transporter/ShiftStartModal';
-import PrimaryDispatcherModal from '../components/dispatcher/PrimaryDispatcherModal';
+import DispatcherLoginModal from '../components/dispatcher/DispatcherLoginModal';
 import { Floor } from '../types';
 
 export default function Login() {
@@ -15,15 +15,31 @@ export default function Login() {
   const [showDispatcherModal, setShowDispatcherModal] = useState(false);
   const [shiftLoading, setShiftLoading] = useState(false);
   const [dispatcherLoading, setDispatcherLoading] = useState(false);
+  const [hasPrimaryDispatcher, setHasPrimaryDispatcher] = useState(false);
+  const [primaryDispatcherName, setPrimaryDispatcherName] = useState<string | undefined>();
   const { login, user, setActiveShift } = useAuth();
   const navigate = useNavigate();
 
   // Redirect if already logged in or handle post-login flow
   useEffect(() => {
+    const handleDispatcherLogin = async () => {
+      // Fetch active dispatchers to check if primary exists
+      const response = await api.getActiveDispatchers();
+      if (response.data?.dispatchers) {
+        const dispatchers = response.data.dispatchers;
+        const primary = dispatchers.find((d: { is_primary: boolean }) => d.is_primary);
+        setHasPrimaryDispatcher(!!primary);
+        if (primary) {
+          setPrimaryDispatcherName(`${primary.first_name} ${primary.last_name}`);
+        }
+      }
+      setShowDispatcherModal(true);
+    };
+
     if (user && !showShiftModal && !showDispatcherModal) {
-      // Check if dispatcher/supervisor needs to set up
+      // Check if dispatcher/supervisor needs to set up (NOT manager)
       if ((user.role === 'dispatcher' || user.role === 'supervisor') && !loading) {
-        setShowDispatcherModal(true);
+        handleDispatcherLogin();
         return;
       }
       const roleRoutes: Record<string, string> = {
@@ -74,23 +90,29 @@ export default function Login() {
     navigate('/transporter');
   };
 
-  const handleDispatcherSetup = async (isPrimary: boolean, contactInfo?: string) => {
+  const handleBecomePrimary = async (contactInfo?: string) => {
     setDispatcherLoading(true);
 
-    if (isPrimary) {
-      const response = await api.setPrimaryDispatcher(contactInfo);
-      if (response.error) {
-        setError(response.error);
-        setDispatcherLoading(false);
-        return;
-      }
-    } else {
-      const response = await api.registerAsDispatcher(contactInfo);
-      if (response.error) {
-        setError(response.error);
-        setDispatcherLoading(false);
-        return;
-      }
+    const response = await api.setPrimaryDispatcher(contactInfo);
+    if (response.error) {
+      setError(response.error);
+      setDispatcherLoading(false);
+      return;
+    }
+
+    setDispatcherLoading(false);
+    setShowDispatcherModal(false);
+    navigate('/dashboard');
+  };
+
+  const handleJoinAsSecondary = async (contactInfo?: string) => {
+    setDispatcherLoading(true);
+
+    const response = await api.registerAsDispatcher(contactInfo);
+    if (response.error) {
+      setError(response.error);
+      setDispatcherLoading(false);
+      return;
     }
 
     setDispatcherLoading(false);
@@ -208,10 +230,13 @@ export default function Login() {
         loading={shiftLoading}
       />
 
-      <PrimaryDispatcherModal
+      <DispatcherLoginModal
         isOpen={showDispatcherModal}
+        hasPrimaryDispatcher={hasPrimaryDispatcher}
+        primaryDispatcherName={primaryDispatcherName}
+        onBecomePrimary={handleBecomePrimary}
+        onJoinAsSecondary={handleJoinAsSecondary}
         onClose={handleSkipDispatcherSetup}
-        onConfirm={handleDispatcherSetup}
         loading={dispatcherLoading}
       />
     </div>

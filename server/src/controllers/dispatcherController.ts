@@ -267,7 +267,7 @@ export const getAvailableDispatchers = async (_req: Request, res: Response) => {
               ad.id as dispatcher_id, ad.is_primary
        FROM users u
        LEFT JOIN active_dispatchers ad ON u.id = ad.user_id AND ad.ended_at IS NULL
-       WHERE u.role IN ('dispatcher', 'supervisor', 'manager')
+       WHERE u.role IN ('dispatcher', 'supervisor')
        AND u.is_active = true
        ORDER BY u.first_name, u.last_name`
     );
