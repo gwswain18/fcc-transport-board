@@ -488,52 +488,120 @@ export const getTimeMetrics = async (
     );
 
     // Get break time from audit_logs (status changes to/from on_break)
-    let breakWhereClause = `WHERE al.action = 'status_change'
-       AND al.entity_type = 'transporter_status'
-       AND al.new_values->>'status' = 'on_break'`;
+    // Uses correlated subquery to find next status change and caps unclosed breaks at 1 hour
     const breakParams: unknown[] = [];
     let breakParamIndex = 1;
 
+    let breakDateFilter = '';
     if (start_date) {
-      breakWhereClause += ` AND al.timestamp >= $${breakParamIndex++}`;
+      breakDateFilter += ` AND al.timestamp >= $${breakParamIndex++}`;
       breakParams.push(start_date);
     }
-
     if (end_date) {
-      breakWhereClause += ` AND al.timestamp <= $${breakParamIndex++}`;
+      breakDateFilter += ` AND al.timestamp <= $${breakParamIndex++}`;
       breakParams.push(end_date);
     }
 
+    let breakUserFilter = '';
     if (transporter_id) {
-      breakWhereClause += ` AND al.user_id = $${breakParamIndex++}`;
+      breakUserFilter = ` AND al.user_id = $${breakParamIndex++}`;
       breakParams.push(transporter_id);
     }
 
-    // Calculate break time by finding pairs of on_break start/end
+    // Calculate break time by finding pairs of on_break start/end with 1-hour cap
     const breakTimeResult = await query(
-      `WITH break_starts AS (
+      `WITH break_periods AS (
         SELECT
           al.user_id,
           al.timestamp as break_start,
-          LEAD(al2.timestamp) OVER (PARTITION BY al.user_id ORDER BY al.timestamp) as break_end
+          (
+            SELECT MIN(al2.timestamp)
+            FROM audit_logs al2
+            WHERE al2.user_id = al.user_id
+              AND al2.timestamp > al.timestamp
+              AND al2.action = 'status_change'
+              AND al2.entity_type = 'transporter_status'
+              AND al2.new_values->>'status' != 'on_break'
+          ) as break_end
         FROM audit_logs al
-        LEFT JOIN audit_logs al2 ON al.user_id = al2.user_id
-          AND al2.timestamp > al.timestamp
-          AND al2.action = 'status_change'
-          AND al2.entity_type = 'transporter_status'
-          AND al2.new_values->>'status' != 'on_break'
-        ${breakWhereClause}
+        WHERE al.action = 'status_change'
+          AND al.entity_type = 'transporter_status'
+          AND al.new_values->>'status' = 'on_break'
+          ${breakDateFilter}
+          ${breakUserFilter}
       )
       SELECT
-        bs.user_id,
+        bp.user_id,
         u.first_name,
         u.last_name,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (COALESCE(bs.break_end, NOW()) - bs.break_start))), 0) as break_time_seconds
-      FROM break_starts bs
-      JOIN users u ON bs.user_id = u.id
-      WHERE bs.break_end IS NOT NULL OR bs.break_start > NOW() - INTERVAL '24 hours'
-      GROUP BY bs.user_id, u.first_name, u.last_name`,
+        COALESCE(SUM(
+          CASE
+            WHEN bp.break_end IS NULL THEN LEAST(3600, EXTRACT(EPOCH FROM (NOW() - bp.break_start)))
+            ELSE LEAST(3600, EXTRACT(EPOCH FROM (bp.break_end - bp.break_start)))
+          END
+        ), 0) as break_time_seconds
+      FROM break_periods bp
+      JOIN users u ON bp.user_id = u.id
+      GROUP BY bp.user_id, u.first_name, u.last_name`,
       breakParams
+    );
+
+    // Get "other" time from audit_logs (status changes to/from other)
+    // Uses same logic as break time with 1-hour cap
+    const otherParams: unknown[] = [];
+    let otherParamIndex = 1;
+
+    let otherDateFilter = '';
+    if (start_date) {
+      otherDateFilter += ` AND al.timestamp >= $${otherParamIndex++}`;
+      otherParams.push(start_date);
+    }
+    if (end_date) {
+      otherDateFilter += ` AND al.timestamp <= $${otherParamIndex++}`;
+      otherParams.push(end_date);
+    }
+
+    let otherUserFilter = '';
+    if (transporter_id) {
+      otherUserFilter = ` AND al.user_id = $${otherParamIndex++}`;
+      otherParams.push(transporter_id);
+    }
+
+    const otherTimeResult = await query(
+      `WITH other_periods AS (
+        SELECT
+          al.user_id,
+          al.timestamp as other_start,
+          (
+            SELECT MIN(al2.timestamp)
+            FROM audit_logs al2
+            WHERE al2.user_id = al.user_id
+              AND al2.timestamp > al.timestamp
+              AND al2.action = 'status_change'
+              AND al2.entity_type = 'transporter_status'
+              AND al2.new_values->>'status' != 'other'
+          ) as other_end
+        FROM audit_logs al
+        WHERE al.action = 'status_change'
+          AND al.entity_type = 'transporter_status'
+          AND al.new_values->>'status' = 'other'
+          ${otherDateFilter}
+          ${otherUserFilter}
+      )
+      SELECT
+        op.user_id,
+        u.first_name,
+        u.last_name,
+        COALESCE(SUM(
+          CASE
+            WHEN op.other_end IS NULL THEN LEAST(3600, EXTRACT(EPOCH FROM (NOW() - op.other_start)))
+            ELSE LEAST(3600, EXTRACT(EPOCH FROM (op.other_end - op.other_start)))
+          END
+        ), 0) as other_time_seconds
+      FROM other_periods op
+      JOIN users u ON op.user_id = u.id
+      GROUP BY op.user_id, u.first_name, u.last_name`,
+      otherParams
     );
 
     // Combine all data
@@ -543,8 +611,9 @@ export const getTimeMetrics = async (
       last_name: string;
       job_time_seconds: number;
       break_time_seconds: number;
+      other_time_seconds: number;
       shift_duration_seconds: number;
-      available_time_seconds: number;
+      down_time_seconds: number;
     }>();
 
     // Initialize with job time data
@@ -555,8 +624,9 @@ export const getTimeMetrics = async (
         last_name: row.last_name,
         job_time_seconds: parseFloat(row.job_time_seconds) || 0,
         break_time_seconds: 0,
+        other_time_seconds: 0,
         shift_duration_seconds: 0,
-        available_time_seconds: 0,
+        down_time_seconds: 0,
       });
     }
 
@@ -572,8 +642,9 @@ export const getTimeMetrics = async (
           last_name: row.last_name,
           job_time_seconds: 0,
           break_time_seconds: 0,
+          other_time_seconds: 0,
           shift_duration_seconds: parseFloat(row.shift_duration_seconds) || 0,
-          available_time_seconds: 0,
+          down_time_seconds: 0,
         });
       }
     }
@@ -590,16 +661,36 @@ export const getTimeMetrics = async (
           last_name: row.last_name,
           job_time_seconds: 0,
           break_time_seconds: parseFloat(row.break_time_seconds) || 0,
+          other_time_seconds: 0,
           shift_duration_seconds: 0,
-          available_time_seconds: 0,
+          down_time_seconds: 0,
         });
       }
     }
 
-    // Calculate available time
+    // Add other time data
+    for (const row of otherTimeResult.rows) {
+      const existing = userMap.get(row.user_id);
+      if (existing) {
+        existing.other_time_seconds = parseFloat(row.other_time_seconds) || 0;
+      } else {
+        userMap.set(row.user_id, {
+          user_id: row.user_id,
+          first_name: row.first_name,
+          last_name: row.last_name,
+          job_time_seconds: 0,
+          break_time_seconds: 0,
+          other_time_seconds: parseFloat(row.other_time_seconds) || 0,
+          shift_duration_seconds: 0,
+          down_time_seconds: 0,
+        });
+      }
+    }
+
+    // Calculate down time: shift_duration - job_time - break_time - other_time
     const transporters = Array.from(userMap.values()).map(t => ({
       ...t,
-      available_time_seconds: Math.max(0, t.shift_duration_seconds - t.job_time_seconds - t.break_time_seconds),
+      down_time_seconds: Math.max(0, t.shift_duration_seconds - t.job_time_seconds - t.break_time_seconds - t.other_time_seconds),
     }));
 
     // Calculate totals
@@ -607,9 +698,10 @@ export const getTimeMetrics = async (
       (acc, t) => ({
         total_job_time_seconds: acc.total_job_time_seconds + t.job_time_seconds,
         total_break_time_seconds: acc.total_break_time_seconds + t.break_time_seconds,
-        total_available_time_seconds: acc.total_available_time_seconds + t.available_time_seconds,
+        total_other_time_seconds: acc.total_other_time_seconds + t.other_time_seconds,
+        total_down_time_seconds: acc.total_down_time_seconds + t.down_time_seconds,
       }),
-      { total_job_time_seconds: 0, total_break_time_seconds: 0, total_available_time_seconds: 0 }
+      { total_job_time_seconds: 0, total_break_time_seconds: 0, total_other_time_seconds: 0, total_down_time_seconds: 0 }
     );
 
     res.json({

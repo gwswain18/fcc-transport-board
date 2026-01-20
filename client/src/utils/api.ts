@@ -402,13 +402,15 @@ export const api = {
         last_name: string;
         job_time_seconds: number;
         break_time_seconds: number;
+        other_time_seconds: number;
         shift_duration_seconds: number;
-        available_time_seconds: number;
+        down_time_seconds: number;
       }>;
       totals: {
         total_job_time_seconds: number;
         total_break_time_seconds: number;
-        total_available_time_seconds: number;
+        total_other_time_seconds: number;
+        total_down_time_seconds: number;
       };
     }>(`/reports/time-metrics${query ? `?${query}` : ''}`);
   },

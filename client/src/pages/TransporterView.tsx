@@ -13,6 +13,7 @@ import OtherStatusModal from '../components/common/OtherStatusModal';
 import ShiftStartModal from '../components/transporter/ShiftStartModal';
 import ShiftEndModal from '../components/transporter/ShiftEndModal';
 import CycleTimeAlert from '../components/common/CycleTimeAlert';
+import MuteToggle from '../components/common/MuteToggle';
 import { Floor } from '../types';
 
 export default function TransporterView() {
@@ -200,6 +201,14 @@ export default function TransporterView() {
             </button>
           </div>
         )}
+
+        {/* Sound Settings */}
+        <div className="card">
+          <div className="flex items-center justify-between">
+            <span className="text-gray-600 text-sm">Notification Sounds</span>
+            <MuteToggle showLabel />
+          </div>
+        </div>
 
         {/* Cycle Time Alerts */}
         {myAlerts.map((alert) => (

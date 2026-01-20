@@ -11,6 +11,11 @@ import {
   ActiveDispatcher,
   AlertSettings,
 } from '../types';
+import {
+  playJobAssignmentBeep,
+  playCycleTimeAlertBeep,
+  initAudioContext,
+} from '../utils/audioNotifications';
 
 interface SocketContextType {
   socket: Socket | null;
@@ -108,6 +113,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         }
         return prev;
       });
+      // Play sound if assigned to current user
+      if (request.assigned_to === user?.id) {
+        playJobAssignmentBeep();
+      }
     });
 
     newSocket.on('request_status_changed', (request: TransportRequest) => {
@@ -153,6 +162,15 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           return prev.map((a) => (a.request_id === alert.request_id ? alert : a));
         }
         return [...prev, alert];
+      });
+      // Play sound if alert is for current user's job
+      // Check by looking up the request in our state
+      setRequests((currentRequests) => {
+        const alertRequest = currentRequests.find((r) => r.id === alert.request_id);
+        if (alertRequest?.assigned_to === user?.id) {
+          playCycleTimeAlertBeep();
+        }
+        return currentRequests; // Return unchanged
       });
     });
 
@@ -269,6 +287,27 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       refreshData();
     }
   }, [user]);
+
+  // Initialize audio context on first user interaction (required by browsers)
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      initAudioContext();
+      // Remove listeners after first interaction
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+    };
+
+    document.addEventListener('click', handleUserInteraction);
+    document.addEventListener('keydown', handleUserInteraction);
+    document.addEventListener('touchstart', handleUserInteraction);
+
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('touchstart', handleUserInteraction);
+    };
+  }, []);
 
   return (
     <SocketContext.Provider

@@ -4,6 +4,7 @@ import { useSocket } from '../../context/SocketContext';
 import { useNavigate, Link } from 'react-router-dom';
 import DateTimeDisplay from './DateTimeDisplay';
 import PasswordChangeModal from './PasswordChangeModal';
+import MuteToggle from './MuteToggle';
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -71,6 +72,7 @@ export default function Header() {
           </nav>
 
           <div className="flex items-center space-x-6">
+            <MuteToggle />
             <DateTimeDisplay />
             <div className="relative">
               <button

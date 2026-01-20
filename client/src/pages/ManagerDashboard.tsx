@@ -32,12 +32,14 @@ export default function ManagerDashboard() {
       last_name: string;
       job_time_seconds: number;
       break_time_seconds: number;
-      available_time_seconds: number;
+      other_time_seconds: number;
+      down_time_seconds: number;
     }>;
     totals: {
       total_job_time_seconds: number;
       total_break_time_seconds: number;
-      total_available_time_seconds: number;
+      total_other_time_seconds: number;
+      total_down_time_seconds: number;
     };
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -277,7 +279,7 @@ export default function ManagerDashboard() {
 
             {/* Time Metrics Cards */}
             {timeMetrics && (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <MetricCard
                   title="Total Time on Jobs"
                   value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_job_time_seconds)}
@@ -289,8 +291,13 @@ export default function ManagerDashboard() {
                   color="bg-yellow-500"
                 />
                 <MetricCard
-                  title="Total Available Time"
-                  value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_available_time_seconds)}
+                  title="Total Other Time"
+                  value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_other_time_seconds)}
+                  color="bg-orange-500"
+                />
+                <MetricCard
+                  title="Down Time"
+                  value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_down_time_seconds)}
                   color="bg-teal-500"
                 />
               </div>
@@ -348,7 +355,10 @@ export default function ManagerDashboard() {
                         Break Time
                       </th>
                       <th className="text-right py-3 px-4 font-medium text-gray-600">
-                        Available
+                        Other Time
+                      </th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-600">
+                        Down Time
                       </th>
                     </tr>
                   </thead>
@@ -379,7 +389,10 @@ export default function ManagerDashboard() {
                             {tm ? formatSecondsAsHoursMinutes(tm.break_time_seconds) : '-'}
                           </td>
                           <td className="py-3 px-4 text-right text-gray-600">
-                            {tm ? formatSecondsAsHoursMinutes(tm.available_time_seconds) : '-'}
+                            {tm ? formatSecondsAsHoursMinutes(tm.other_time_seconds) : '-'}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
+                            {tm ? formatSecondsAsHoursMinutes(tm.down_time_seconds) : '-'}
                           </td>
                         </tr>
                       );
@@ -387,7 +400,7 @@ export default function ManagerDashboard() {
                     {transporterStats.length === 0 && (
                       <tr>
                         <td
-                          colSpan={7}
+                          colSpan={8}
                           className="py-8 text-center text-gray-500"
                         >
                           No data available
