@@ -9,6 +9,7 @@ import {
   BreakAlert,
   TransporterOffline,
   ActiveDispatcher,
+  AlertSettings,
 } from '../types';
 
 interface SocketContextType {
@@ -21,10 +22,12 @@ interface SocketContextType {
   breakAlerts: BreakAlert[];
   offlineAlerts: TransporterOffline[];
   activeDispatchers: ActiveDispatcher[];
-  dismissAlert: (requestId: number) => void;
+  alertSettings: AlertSettings | null;
+  requireExplanation: boolean;
+  dismissAlert: (requestId: number, explanation?: string) => void;
   dismissCycleAlert: (requestId: number, explanation?: string) => void;
-  dismissBreakAlert: (userId: number) => void;
-  dismissOfflineAlert: (userId: number) => void;
+  dismissBreakAlert: (userId: number, explanation?: string) => void;
+  dismissOfflineAlert: (userId: number, explanation?: string) => void;
   refreshData: () => void;
   requestHelp: (requestId?: number, message?: string) => void;
 }
@@ -44,8 +47,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [breakAlerts, setBreakAlerts] = useState<BreakAlert[]>([]);
   const [offlineAlerts, setOfflineAlerts] = useState<TransporterOffline[]>([]);
   const [activeDispatchers, setActiveDispatchers] = useState<ActiveDispatcher[]>([]);
+  const [alertSettings, setAlertSettings] = useState<AlertSettings | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
   const heartbeatInterval = useRef<NodeJS.Timeout | null>(null);
+
+  const requireExplanation = alertSettings?.require_explanation_on_dismiss ?? false;
 
   useEffect(() => {
     if (!user) {
@@ -175,6 +181,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setActiveDispatchers(data.dispatchers);
     });
 
+    // Alert settings changes
+    newSocket.on('alert_settings_changed', (settings: AlertSettings) => {
+      setAlertSettings(settings);
+    });
+
     // Auto-assign timeout
     newSocket.on('auto_assign_timeout', (data: { request_id: number; old_assignee: number; new_assignee?: number }) => {
       console.log('Auto-assign timeout:', data);
@@ -196,10 +207,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, [user]);
 
-  const dismissAlert = (requestId: number) => {
+  const dismissAlert = useCallback((requestId: number, explanation?: string) => {
     setDismissedAlerts((prev) => new Set([...prev, requestId]));
     setAlerts((prev) => prev.filter((a) => a.request_id !== requestId));
-  };
+    if (socket) {
+      socket.emit('timeout_alert_dismissed', { request_id: requestId, explanation });
+    }
+  }, [socket]);
 
   const dismissCycleAlert = useCallback((requestId: number, explanation?: string) => {
     setCycleTimeAlerts((prev) => prev.filter((a) => a.request_id !== requestId));
@@ -208,13 +222,19 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
   }, [socket]);
 
-  const dismissBreakAlert = (userId: number) => {
+  const dismissBreakAlert = useCallback((userId: number, explanation?: string) => {
     setBreakAlerts((prev) => prev.filter((a) => a.user_id !== userId));
-  };
+    if (socket) {
+      socket.emit('break_alert_dismissed', { user_id: userId, explanation });
+    }
+  }, [socket]);
 
-  const dismissOfflineAlert = (userId: number) => {
+  const dismissOfflineAlert = useCallback((userId: number, explanation?: string) => {
     setOfflineAlerts((prev) => prev.filter((a) => a.user_id !== userId));
-  };
+    if (socket) {
+      socket.emit('offline_alert_dismissed', { user_id: userId, explanation });
+    }
+  }, [socket]);
 
   const requestHelp = useCallback((requestId?: number, message?: string) => {
     if (socket) {
@@ -223,10 +243,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   }, [socket]);
 
   const refreshData = async () => {
-    const [statusRes, requestRes, dispatcherRes] = await Promise.all([
+    const [statusRes, requestRes, dispatcherRes, alertSettingsRes] = await Promise.all([
       fetch('/api/status', { credentials: 'include' }).then((r) => r.json()),
       fetch('/api/requests', { credentials: 'include' }).then((r) => r.json()),
       fetch('/api/dispatchers/active', { credentials: 'include' }).then((r) => r.json()).catch(() => ({ dispatchers: [] })),
+      fetch('/api/config/alert_settings', { credentials: 'include' }).then((r) => r.json()).catch(() => ({ value: null })),
     ]);
 
     if (statusRes.statuses) {
@@ -237,6 +258,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
     if (dispatcherRes.dispatchers) {
       setActiveDispatchers(dispatcherRes.dispatchers);
+    }
+    if (alertSettingsRes.value) {
+      setAlertSettings(alertSettingsRes.value);
     }
   };
 
@@ -258,6 +282,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         breakAlerts,
         offlineAlerts,
         activeDispatchers,
+        alertSettings,
+        requireExplanation,
         dismissAlert,
         dismissCycleAlert,
         dismissBreakAlert,

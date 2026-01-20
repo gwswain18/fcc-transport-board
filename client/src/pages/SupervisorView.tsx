@@ -13,18 +13,27 @@ import { TransporterStatusBadge } from '../components/common/StatusBadge';
 import PriorityBadge from '../components/common/PriorityBadge';
 import ElapsedTimer from '../components/common/ElapsedTimer';
 import Modal from '../components/common/Modal';
+import AlertDismissalModal from '../components/common/AlertDismissalModal';
 import { formatMinutes } from '../utils/formatters';
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 const DESTINATIONS = ['Atrium', 'Radiology', 'Lab', 'OR', 'NICU', 'Other'];
 
+type DismissalType = 'timeout' | 'break' | 'offline' | 'cycle';
+interface PendingDismissal {
+  type: DismissalType;
+  id: number;
+  details?: string;
+}
+
 export default function SupervisorView() {
-  const { transporterStatuses, requests, alerts, dismissAlert, refreshData } = useSocket();
+  const { transporterStatuses, requests, alerts, dismissAlert, requireExplanation, refreshData } = useSocket();
   const [loading, setLoading] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<TransportRequest | null>(null);
   const [showOtherDestination, setShowOtherDestination] = useState(false);
   const [shiftSummary, setShiftSummary] = useState<ReportSummary | null>(null);
+  const [dismissalModal, setDismissalModal] = useState<PendingDismissal | null>(null);
 
   const [formData, setFormData] = useState<CreateTransportRequestData>({
     origin_floor: 'FCC4',
@@ -109,6 +118,22 @@ export default function SupervisorView() {
     setAssignModalOpen(true);
   };
 
+  const handleDismissTimeoutAlert = (requestId: number, details?: string) => {
+    if (requireExplanation) {
+      setDismissalModal({ type: 'timeout', id: requestId, details });
+    } else {
+      dismissAlert(requestId);
+    }
+  };
+
+  const handleDismissalConfirm = (explanation: string) => {
+    if (!dismissalModal) return;
+    if (dismissalModal.type === 'timeout') {
+      dismissAlert(dismissalModal.id, explanation);
+    }
+    setDismissalModal(null);
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Header />
@@ -125,7 +150,10 @@ export default function SupervisorView() {
               {alerts.slice(0, 3).map((alert) => (
                 <button
                   key={alert.request_id}
-                  onClick={() => dismissAlert(alert.request_id)}
+                  onClick={() => handleDismissTimeoutAlert(
+                    alert.request_id,
+                    `${alert.type} - ${alert.request.origin_floor}-${alert.request.room_number}`
+                  )}
                   className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm"
                 >
                   {alert.request.origin_floor}-{alert.request.room_number} (Dismiss)
@@ -455,6 +483,15 @@ export default function SupervisorView() {
           </div>
         )}
       </Modal>
+
+      {/* Alert Dismissal Modal */}
+      <AlertDismissalModal
+        isOpen={!!dismissalModal}
+        onClose={() => setDismissalModal(null)}
+        onConfirm={handleDismissalConfirm}
+        alertType={dismissalModal?.type}
+        alertDetails={dismissalModal?.details}
+      />
     </div>
   );
 }

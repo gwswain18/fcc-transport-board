@@ -128,8 +128,12 @@ export const updateOwnStatus = async (
     const updateFields = [
       'status = $1',
       'updated_at = CURRENT_TIMESTAMP',
-      `status_explanation = $${status === 'other' ? '3' : 'NULL'}`,
     ];
+    if (status === 'other') {
+      updateFields.push('status_explanation = $3');
+    } else {
+      updateFields.push('status_explanation = NULL');
+    }
 
     // Track break start time
     if (status === 'on_break') {

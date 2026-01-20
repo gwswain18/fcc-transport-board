@@ -1,6 +1,15 @@
-import { Floor, FLOOR_ROOM_RANGES, FloorRoomValidation } from '../types/index.js';
+import { Floor, FloorRoomValidation } from '../types/index.js';
+
+// Map floor to expected first digit of room number
+const FLOOR_DIGIT_MAP: Record<Floor, string> = {
+  FCC1: '1',
+  FCC4: '4',
+  FCC5: '5',
+  FCC6: '6',
+};
 
 // Validate that a room number is valid for a given floor
+// New logic: First digit of room must match floor number
 export const validateFloorRoom = (
   floor: Floor,
   roomNumber: string
@@ -17,10 +26,9 @@ export const validateFloorRoom = (
     };
   }
 
-  const roomNum = parseInt(numericMatch[1], 10);
-  const range = FLOOR_ROOM_RANGES[floor];
+  const expectedFirstDigit = FLOOR_DIGIT_MAP[floor];
 
-  if (!range) {
+  if (!expectedFirstDigit) {
     return {
       floor,
       room_number: roomNumber,
@@ -29,12 +37,14 @@ export const validateFloorRoom = (
     };
   }
 
-  if (roomNum < range.min || roomNum > range.max) {
+  const firstDigit = numericMatch[1][0];
+
+  if (firstDigit !== expectedFirstDigit) {
     return {
       floor,
       room_number: roomNumber,
       is_valid: false,
-      error: `Room ${roomNumber} is not valid for ${floor}. Valid range: ${range.min}-${range.max}`,
+      error: `Room ${roomNumber} should start with ${expectedFirstDigit} for ${floor}`,
     };
   }
 
@@ -51,15 +61,15 @@ export const isValidRoomFormat = (roomNumber: string): boolean => {
   return /^\d{3}[A-Za-z0-9\-\/]*$/.test(roomNumber);
 };
 
-// Get the expected floor for a room number
+// Get the expected floor for a room number based on first digit
 export const getExpectedFloor = (roomNumber: string): Floor | null => {
   const numericMatch = roomNumber.match(/^(\d+)/);
   if (!numericMatch) return null;
 
-  const roomNum = parseInt(numericMatch[1], 10);
+  const firstDigit = numericMatch[1][0];
 
-  for (const [floor, range] of Object.entries(FLOOR_ROOM_RANGES)) {
-    if (roomNum >= range.min && roomNum <= range.max) {
+  for (const [floor, digit] of Object.entries(FLOOR_DIGIT_MAP)) {
+    if (digit === firstDigit) {
       return floor as Floor;
     }
   }

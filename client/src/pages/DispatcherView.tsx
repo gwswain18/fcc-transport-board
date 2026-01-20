@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 import {
   Floor,
@@ -14,20 +15,30 @@ import ElapsedTimer from '../components/common/ElapsedTimer';
 import Modal from '../components/common/Modal';
 import AutoAssignButton from '../components/dispatcher/AutoAssignButton';
 import ActiveDispatcherCard from '../components/dispatcher/ActiveDispatcherCard';
+import BreakModal from '../components/dispatcher/BreakModal';
 import CycleTimeAlert from '../components/common/CycleTimeAlert';
+import AlertDismissalModal from '../components/common/AlertDismissalModal';
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 const DESTINATIONS = ['Atrium', 'Radiology', 'Lab', 'OR', 'NICU', 'Other'];
 
-// Floor/room validation ranges
-const FLOOR_ROOM_RANGES: Record<Floor, { min: number; max: number }> = {
-  FCC1: { min: 100, max: 199 },
-  FCC4: { min: 400, max: 499 },
-  FCC5: { min: 500, max: 599 },
-  FCC6: { min: 600, max: 699 },
+// Map floor to expected first digit of room number
+const FLOOR_DIGIT_MAP: Record<Floor, string> = {
+  FCC1: '1',
+  FCC4: '4',
+  FCC5: '5',
+  FCC6: '6',
 };
 
+type DismissalType = 'timeout' | 'break' | 'offline' | 'cycle';
+interface PendingDismissal {
+  type: DismissalType;
+  id: number;
+  details?: string;
+}
+
 export default function DispatcherView() {
+  const { user } = useAuth();
   const {
     transporterStatuses,
     requests,
@@ -36,6 +47,7 @@ export default function DispatcherView() {
     breakAlerts,
     offlineAlerts,
     activeDispatchers,
+    requireExplanation,
     dismissAlert,
     dismissCycleAlert,
     dismissBreakAlert,
@@ -47,6 +59,13 @@ export default function DispatcherView() {
   const [selectedRequest, setSelectedRequest] = useState<TransportRequest | null>(null);
   const [showOtherDestination, setShowOtherDestination] = useState(false);
   const [roomError, setRoomError] = useState('');
+  const [showBreakModal, setShowBreakModal] = useState(false);
+  const [breakLoading, setBreakLoading] = useState(false);
+  const [dismissalModal, setDismissalModal] = useState<PendingDismissal | null>(null);
+
+  // Find current user's dispatcher status
+  const myDispatcherStatus = activeDispatchers.find((d) => d.user_id === user?.id);
+  const isPrimaryDispatcher = myDispatcherStatus?.is_primary || false;
 
   const [formData, setFormData] = useState<CreateTransportRequestData>({
     origin_floor: 'FCC4',
@@ -71,17 +90,19 @@ export default function DispatcherView() {
   );
 
   const validateRoomNumber = (floor: Floor, room: string): boolean => {
-    const roomNum = parseInt(room, 10);
-    if (isNaN(roomNum)) return true; // Allow non-numeric rooms
-    const range = FLOOR_ROOM_RANGES[floor];
-    return roomNum >= range.min && roomNum <= range.max;
+    // Get the first digit of the room number
+    const match = room.match(/^(\d)/);
+    if (!match) return true; // Allow non-numeric rooms (letters only)
+    const firstDigit = match[1];
+    const expectedDigit = FLOOR_DIGIT_MAP[floor];
+    return firstDigit === expectedDigit;
   };
 
   const handleRoomChange = (room: string) => {
     setFormData((prev) => ({ ...prev, room_number: room }));
     if (room && !validateRoomNumber(formData.origin_floor, room)) {
-      const range = FLOOR_ROOM_RANGES[formData.origin_floor];
-      setRoomError(`Room should be between ${range.min}-${range.max} for ${formData.origin_floor}`);
+      const expectedDigit = FLOOR_DIGIT_MAP[formData.origin_floor];
+      setRoomError(`Room should start with ${expectedDigit} for ${formData.origin_floor}`);
     } else {
       setRoomError('');
     }
@@ -90,8 +111,8 @@ export default function DispatcherView() {
   const handleFloorChange = (floor: Floor) => {
     setFormData((prev) => ({ ...prev, origin_floor: floor }));
     if (formData.room_number && !validateRoomNumber(floor, formData.room_number)) {
-      const range = FLOOR_ROOM_RANGES[floor];
-      setRoomError(`Room should be between ${range.min}-${range.max} for ${floor}`);
+      const expectedDigit = FLOOR_DIGIT_MAP[floor];
+      setRoomError(`Room should start with ${expectedDigit} for ${floor}`);
     } else {
       setRoomError('');
     }
@@ -142,6 +163,81 @@ export default function DispatcherView() {
     setAssignModalOpen(true);
   };
 
+  const handleTakeBreak = async (reliefUserId?: number, reliefText?: string) => {
+    setBreakLoading(true);
+    const response = await api.dispatcherTakeBreak(reliefUserId, reliefText);
+    setBreakLoading(false);
+    if (!response.error) {
+      setShowBreakModal(false);
+      await refreshData();
+    }
+  };
+
+  const handleReturnFromBreak = async (asPrimary?: boolean) => {
+    setLoading(true);
+    await api.dispatcherReturn(asPrimary);
+    await refreshData();
+    setLoading(false);
+  };
+
+  const handleSetPrimary = async () => {
+    setLoading(true);
+    await api.setPrimaryDispatcher();
+    await refreshData();
+    setLoading(false);
+  };
+
+  const handleAssignToPCT = async (requestId: number) => {
+    if (!confirm('Transfer this request to PCT? The request will auto-close after the configured time.')) return;
+    setLoading(true);
+    await api.assignToPCT(requestId);
+    await refreshData();
+    setLoading(false);
+  };
+
+  const handleDismissTimeoutAlert = (requestId: number, details?: string) => {
+    if (requireExplanation) {
+      setDismissalModal({ type: 'timeout', id: requestId, details });
+    } else {
+      dismissAlert(requestId);
+    }
+  };
+
+  const handleDismissBreakAlert = (userId: number, details?: string) => {
+    if (requireExplanation) {
+      setDismissalModal({ type: 'break', id: userId, details });
+    } else {
+      dismissBreakAlert(userId);
+    }
+  };
+
+  const handleDismissOfflineAlert = (userId: number, details?: string) => {
+    if (requireExplanation) {
+      setDismissalModal({ type: 'offline', id: userId, details });
+    } else {
+      dismissOfflineAlert(userId);
+    }
+  };
+
+  const handleDismissalConfirm = (explanation: string) => {
+    if (!dismissalModal) return;
+    switch (dismissalModal.type) {
+      case 'timeout':
+        dismissAlert(dismissalModal.id, explanation);
+        break;
+      case 'break':
+        dismissBreakAlert(dismissalModal.id, explanation);
+        break;
+      case 'offline':
+        dismissOfflineAlert(dismissalModal.id, explanation);
+        break;
+      case 'cycle':
+        dismissCycleAlert(dismissalModal.id, explanation);
+        break;
+    }
+    setDismissalModal(null);
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Header />
@@ -160,7 +256,10 @@ export default function DispatcherView() {
               {alerts.slice(0, 3).map((alert) => (
                 <button
                   key={alert.request_id}
-                  onClick={() => dismissAlert(alert.request_id)}
+                  onClick={() => handleDismissTimeoutAlert(
+                    alert.request_id,
+                    `${alert.type} - ${alert.request.origin_floor}-${alert.request.room_number}`
+                  )}
                   className="bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm"
                 >
                   {alert.request.origin_floor}-{alert.request.room_number} (Dismiss)
@@ -185,7 +284,10 @@ export default function DispatcherView() {
               {breakAlerts.map((alert) => (
                 <button
                   key={alert.user_id}
-                  onClick={() => dismissBreakAlert(alert.user_id)}
+                  onClick={() => handleDismissBreakAlert(
+                    alert.user_id,
+                    `${alert.first_name} ${alert.last_name} on break for ${alert.minutes_on_break} min`
+                  )}
                   className="bg-yellow-600 hover:bg-yellow-700 px-3 py-1 rounded text-sm"
                 >
                   Dismiss
@@ -210,7 +312,10 @@ export default function DispatcherView() {
               {offlineAlerts.map((alert) => (
                 <button
                   key={alert.user_id}
-                  onClick={() => dismissOfflineAlert(alert.user_id)}
+                  onClick={() => handleDismissOfflineAlert(
+                    alert.user_id,
+                    `${alert.first_name} ${alert.last_name} went offline`
+                  )}
                   className="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded text-sm"
                 >
                   Dismiss
@@ -239,7 +344,13 @@ export default function DispatcherView() {
           {/* Left Panel - Transporters */}
           <div className="col-span-3 space-y-4">
             {/* Active Dispatchers Card */}
-            <ActiveDispatcherCard dispatchers={activeDispatchers} />
+            <ActiveDispatcherCard
+              dispatchers={activeDispatchers}
+              currentUserId={user?.id}
+              onTakeBreak={() => setShowBreakModal(true)}
+              onReturnFromBreak={handleReturnFromBreak}
+              onSetPrimary={handleSetPrimary}
+            />
 
             <div className="card">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Transporters</h2>
@@ -280,6 +391,7 @@ export default function DispatcherView() {
                         request={request}
                         onAssign={() => openAssignModal(request)}
                         onCancel={() => handleCancelRequest(request.id)}
+                        onAssignToPCT={() => handleAssignToPCT(request.id)}
                         showAutoAssign
                       />
                     ))}
@@ -544,6 +656,24 @@ export default function DispatcherView() {
           </div>
         )}
       </Modal>
+
+      {/* Break Modal */}
+      <BreakModal
+        isOpen={showBreakModal}
+        onClose={() => setShowBreakModal(false)}
+        onConfirm={handleTakeBreak}
+        loading={breakLoading}
+        isPrimary={isPrimaryDispatcher}
+      />
+
+      {/* Alert Dismissal Modal */}
+      <AlertDismissalModal
+        isOpen={!!dismissalModal}
+        onClose={() => setDismissalModal(null)}
+        onConfirm={handleDismissalConfirm}
+        alertType={dismissalModal?.type}
+        alertDetails={dismissalModal?.details}
+      />
     </div>
   );
 }
@@ -589,21 +719,30 @@ function RequestCard({
   request,
   onAssign,
   onCancel,
+  onAssignToPCT,
   showAutoAssign,
 }: {
   request: TransportRequest;
   onAssign?: () => void;
   onCancel?: () => void;
+  onAssignToPCT?: () => void;
   showAutoAssign?: boolean;
 }) {
+  const isPCTTransfer = request.status === 'transferred_to_pct';
+
   return (
-    <div className="bg-gray-50 rounded-lg p-3">
+    <div className={`rounded-lg p-3 ${isPCTTransfer ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
           <PriorityBadge priority={request.priority} size="sm" />
           <span className="font-bold text-gray-900">
             {request.origin_floor} - {request.room_number}
           </span>
+          {isPCTTransfer && (
+            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
+              PCT
+            </span>
+          )}
         </div>
         <ElapsedTimer startTime={request.created_at} />
       </div>
@@ -622,16 +761,24 @@ function RequestCard({
         </span>
       )}
 
-      <div className="flex gap-2 mt-3">
-        {onAssign && (
+      <div className="flex flex-wrap gap-2 mt-3">
+        {onAssign && !isPCTTransfer && (
           <button onClick={onAssign} className="btn-primary text-sm py-1">
             {request.assignee ? 'Reassign' : 'Assign'}
           </button>
         )}
-        {showAutoAssign && !request.assignee && (
+        {showAutoAssign && !request.assignee && !isPCTTransfer && (
           <AutoAssignButton requestId={request.id} />
         )}
-        {onCancel && (
+        {onAssignToPCT && !isPCTTransfer && (
+          <button
+            onClick={onAssignToPCT}
+            className="bg-orange-100 text-orange-700 hover:bg-orange-200 px-3 py-1 rounded text-sm font-medium"
+          >
+            To PCT
+          </button>
+        )}
+        {onCancel && !isPCTTransfer && (
           <button onClick={onCancel} className="btn-danger text-sm py-1">
             Cancel
           </button>

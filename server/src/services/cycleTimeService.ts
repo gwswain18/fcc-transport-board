@@ -3,6 +3,7 @@ import { getIO } from '../socket/index.js';
 import {
   getCycleTimeSampleSize,
   getCycleTimeThresholdPercentage,
+  getAlertSettings,
 } from './configService.js';
 import { Floor, CycleTimeAlert } from '../types/index.js';
 
@@ -129,6 +130,12 @@ export const calculateRollingAverages = async (): Promise<void> => {
 const checkCycleTimeAlerts = async () => {
   const io = getIO();
   if (!io) return;
+
+  // Check alert settings first
+  const alertSettings = await getAlertSettings();
+  if (!alertSettings.master_enabled || !alertSettings.alerts.cycle_time_alert) {
+    return;
+  }
 
   const thresholdPercentage = await getCycleTimeThresholdPercentage();
 

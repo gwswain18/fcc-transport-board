@@ -1,6 +1,6 @@
 import { query } from '../config/database.js';
 import { getIO } from '../socket/index.js';
-import { getHeartbeatTimeoutMs, getBreakAlertMinutes } from './configService.js';
+import { getHeartbeatTimeoutMs, getBreakAlertMinutes, getAlertSettings } from './configService.js';
 import { logStatusChange } from './auditService.js';
 
 const CHECK_INTERVAL_MS = 30000; // 30 seconds
@@ -105,13 +105,16 @@ const checkHeartbeats = async () => {
     );
     const user = userResult.rows[0];
 
-    // Emit offline event
-    io.emit('transporter_offline', {
-      user_id: row.user_id,
-      last_heartbeat: row.last_heartbeat,
-      first_name: user?.first_name,
-      last_name: user?.last_name,
-    });
+    // Emit offline event if alerts are enabled
+    const alertSettings = await getAlertSettings();
+    if (alertSettings.master_enabled && alertSettings.alerts.offline_alert) {
+      io.emit('transporter_offline', {
+        user_id: row.user_id,
+        last_heartbeat: row.last_heartbeat,
+        first_name: user?.first_name,
+        last_name: user?.last_name,
+      });
+    }
 
     // Also emit status change
     const statusResult = await query(
@@ -132,6 +135,12 @@ const checkHeartbeats = async () => {
 const checkBreakDurations = async () => {
   const io = getIO();
   if (!io) return;
+
+  // Check alert settings first
+  const alertSettings = await getAlertSettings();
+  if (!alertSettings.master_enabled || !alertSettings.alerts.break_alert) {
+    return;
+  }
 
   const breakAlertMinutes = await getBreakAlertMinutes();
   const cutoffTime = new Date(

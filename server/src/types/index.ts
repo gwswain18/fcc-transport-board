@@ -23,7 +23,8 @@ export type RequestStatus =
   | 'en_route'
   | 'with_patient'
   | 'complete'
-  | 'cancelled';
+  | 'cancelled'
+  | 'transferred_to_pct';
 
 export type AssignmentMethod = 'manual' | 'claim' | 'auto';
 

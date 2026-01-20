@@ -192,6 +192,12 @@ export const api = {
       { method: 'POST' }
     ),
 
+  assignToPCT: (id: number) =>
+    request<{ request: import('../types').TransportRequest; message: string }>(
+      `/requests/${id}/assign-pct`,
+      { method: 'PUT' }
+    ),
+
   // Shifts
   startShift: (data?: { extension?: string; floor_assignment?: string }) =>
     request<{ shift: import('../types').ShiftLog; message: string }>('/shifts/start', {
@@ -229,10 +235,10 @@ export const api = {
       body: JSON.stringify({ contact_info }),
     }),
 
-  dispatcherTakeBreak: (replacement_user_id?: number) =>
+  dispatcherTakeBreak: (replacement_user_id?: number, relief_info?: string) =>
     request<{ message: string }>('/dispatchers/take-break', {
       method: 'POST',
-      body: JSON.stringify({ replacement_user_id }),
+      body: JSON.stringify({ replacement_user_id, relief_info }),
     }),
 
   dispatcherReturn: (as_primary?: boolean) =>
@@ -241,9 +247,21 @@ export const api = {
       body: JSON.stringify({ as_primary }),
     }),
 
+  getAvailableDispatchers: () =>
+    request<{ dispatchers: Array<{ id: number; first_name: string; last_name: string; dispatcher_id?: number; is_primary?: boolean }> }>('/dispatchers/available'),
+
   // Config
   getConfig: () =>
     request<{ config: Record<string, unknown> }>('/config'),
+
+  getConfigByKey: (key: string) =>
+    request<{ key: string; value: unknown }>(`/config/${key}`),
+
+  updateConfig: (key: string, value: unknown) =>
+    request<{ message: string }>(`/config/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    }),
 
   // Reports
   getReportSummary: (params?: {
@@ -315,6 +333,51 @@ export const api = {
     return request<{ data: { floor: string; count: number }[] }>(
       `/reports/by-floor${query ? `?${query}` : ''}`
     );
+  },
+
+  getStaffingByFloor: (params?: { start_date?: string; end_date?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
+    return request<{
+      staffing: Array<{
+        floor: import('../types').Floor;
+        active_transporters: number;
+        available_transporters: number;
+        busy_transporters: number;
+        on_break_transporters: number;
+      }>;
+    }>(`/reports/staffing-by-floor${query ? `?${query}` : ''}`);
+  },
+
+  getFloorAnalysis: (params?: { start_date?: string; end_date?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
+    return request<{
+      floors: Array<{
+        floor: import('../types').Floor;
+        total_requests: number;
+        avg_response_time: number;
+        avg_pickup_time: number;
+        avg_transport_time: number;
+        avg_cycle_time: number;
+        pct_transferred: number;
+        cancelled_count: number;
+      }>;
+    }>(`/reports/floor-analysis${query ? `?${query}` : ''}`);
   },
 
   exportData: (params?: {

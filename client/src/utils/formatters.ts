@@ -58,6 +58,7 @@ export const getRequestStatusColor = (status: RequestStatus): string => {
     with_patient: 'bg-orange-500',
     complete: 'bg-green-500',
     cancelled: 'bg-red-500',
+    transferred_to_pct: 'bg-orange-400',
   };
   return colors[status] || 'bg-gray-400';
 };
@@ -71,6 +72,7 @@ export const getRequestStatusLabel = (status: RequestStatus): string => {
     with_patient: 'With Patient',
     complete: 'Complete',
     cancelled: 'Cancelled',
+    transferred_to_pct: 'Transferred to PCT',
   };
   return labels[status] || status;
 };

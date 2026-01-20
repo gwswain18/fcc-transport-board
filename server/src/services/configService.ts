@@ -1,5 +1,32 @@
 import { query } from '../config/database.js';
 
+// Alert Settings Interface
+export interface AlertSettings {
+  master_enabled: boolean;
+  alerts: {
+    pending_timeout: boolean;
+    stat_timeout: boolean;
+    acceptance_timeout: boolean;
+    break_alert: boolean;
+    offline_alert: boolean;
+    cycle_time_alert: boolean;
+  };
+  require_explanation_on_dismiss: boolean;
+}
+
+const DEFAULT_ALERT_SETTINGS: AlertSettings = {
+  master_enabled: true,
+  alerts: {
+    pending_timeout: true,
+    stat_timeout: true,
+    acceptance_timeout: true,
+    break_alert: true,
+    offline_alert: true,
+    cycle_time_alert: true,
+  },
+  require_explanation_on_dismiss: true,
+};
+
 // In-memory cache for frequently accessed config
 const configCache: Map<string, { value: unknown; cachedAt: number }> = new Map();
 const CACHE_TTL_MS = 60000; // 1 minute cache
@@ -84,4 +111,20 @@ export const getBreakAlertMinutes = async (): Promise<number> => {
 // Clear cache (useful for testing or forced refresh)
 export const clearConfigCache = (): void => {
   configCache.clear();
+};
+
+export const getAlertSettings = async (): Promise<AlertSettings> => {
+  const value = await getConfig<AlertSettings>('alert_settings');
+  if (!value) {
+    return DEFAULT_ALERT_SETTINGS;
+  }
+  // Merge with defaults to ensure all fields exist
+  return {
+    ...DEFAULT_ALERT_SETTINGS,
+    ...value,
+    alerts: {
+      ...DEFAULT_ALERT_SETTINGS.alerts,
+      ...(value.alerts || {}),
+    },
+  };
 };

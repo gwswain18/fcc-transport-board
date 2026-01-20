@@ -25,6 +25,7 @@ export default function TransporterView() {
   const [showShiftStartModal, setShowShiftStartModal] = useState(false);
   const [showShiftEndModal, setShowShiftEndModal] = useState(false);
   const [shiftLoading, setShiftLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const myStatus = transporterStatuses.find((s) => s.user_id === user?.id);
   const currentJob = requests.find(
@@ -47,7 +48,13 @@ export default function TransporterView() {
 
   const handleStatusChange = async (status: TransporterStatus, explanation?: string) => {
     setLoading(true);
-    await api.updateStatus(status, explanation);
+    setError(null);
+    const response = await api.updateStatus(status, explanation);
+    if (response.error) {
+      setError(response.error);
+      setLoading(false);
+      return;
+    }
     await refreshData();
     setLoading(false);
   };
@@ -73,6 +80,7 @@ export default function TransporterView() {
       pending: 'pending',
       complete: 'complete',
       cancelled: 'cancelled',
+      transferred_to_pct: 'transferred_to_pct',
     };
 
     await api.updateRequest(currentJob.id, { status: nextStatus[currentJob.status] });
@@ -120,6 +128,7 @@ export default function TransporterView() {
       with_patient: 'Complete',
       pending: '',
       complete: '',
+      transferred_to_pct: '',
       cancelled: '',
     };
     return texts[currentJob.status] || '';
@@ -213,6 +222,19 @@ export default function TransporterView() {
             <p className="text-sm text-gray-500 mb-4 italic">
               Reason: {myStatus.status_explanation}
             </p>
+          )}
+
+          {/* Error message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 flex items-center justify-between">
+              <span>{error}</span>
+              <button
+                onClick={() => setError(null)}
+                className="text-red-500 hover:text-red-700 font-bold"
+              >
+                ×
+              </button>
+            </div>
           )}
 
           {!currentJob && (

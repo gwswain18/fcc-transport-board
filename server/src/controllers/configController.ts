@@ -5,6 +5,7 @@ import {
   getAllConfig,
   deleteConfig,
 } from '../services/configService.js';
+import { getIO } from '../socket/index.js';
 
 // Get a config value
 export const getConfigValue = async (req: Request, res: Response) => {
@@ -35,6 +36,14 @@ export const setConfigValue = async (req: Request, res: Response) => {
     }
 
     await setConfig(key, value);
+
+    // Emit socket event when alert_settings is updated
+    if (key === 'alert_settings') {
+      const io = getIO();
+      if (io) {
+        io.emit('alert_settings_changed', value);
+      }
+    }
 
     res.json({ key, value, message: 'Config updated' });
   } catch (error) {

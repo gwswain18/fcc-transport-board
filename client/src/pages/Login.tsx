@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 import ShiftStartModal from '../components/transporter/ShiftStartModal';
+import PrimaryDispatcherModal from '../components/dispatcher/PrimaryDispatcherModal';
 import { Floor } from '../types';
 
 export default function Login() {
@@ -11,13 +12,20 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showShiftModal, setShowShiftModal] = useState(false);
+  const [showDispatcherModal, setShowDispatcherModal] = useState(false);
   const [shiftLoading, setShiftLoading] = useState(false);
+  const [dispatcherLoading, setDispatcherLoading] = useState(false);
   const { login, user, setActiveShift } = useAuth();
   const navigate = useNavigate();
 
-  // Redirect if already logged in
+  // Redirect if already logged in or handle post-login flow
   useEffect(() => {
-    if (user) {
+    if (user && !showShiftModal && !showDispatcherModal) {
+      // Check if dispatcher/supervisor needs to set up
+      if ((user.role === 'dispatcher' || user.role === 'supervisor') && !loading) {
+        setShowDispatcherModal(true);
+        return;
+      }
       const roleRoutes: Record<string, string> = {
         transporter: '/transporter',
         dispatcher: '/dashboard',
@@ -26,7 +34,7 @@ export default function Login() {
       };
       navigate(roleRoutes[user.role] || '/');
     }
-  }, [user, navigate]);
+  }, [user, navigate, showShiftModal, showDispatcherModal, loading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +51,7 @@ export default function Login() {
       setLoading(false);
       setShowShiftModal(true);
     }
-    // Otherwise, the useEffect will handle navigation
+    // Otherwise, the useEffect will handle navigation (including dispatcher modal)
   };
 
   const handleStartShift = async (data: { extension?: string; floor_assignment?: Floor }) => {
@@ -64,6 +72,35 @@ export default function Login() {
     // Allow login without starting shift (they can start it later)
     setShowShiftModal(false);
     navigate('/transporter');
+  };
+
+  const handleDispatcherSetup = async (isPrimary: boolean, contactInfo?: string) => {
+    setDispatcherLoading(true);
+
+    if (isPrimary) {
+      const response = await api.setPrimaryDispatcher(contactInfo);
+      if (response.error) {
+        setError(response.error);
+        setDispatcherLoading(false);
+        return;
+      }
+    } else {
+      const response = await api.registerAsDispatcher(contactInfo);
+      if (response.error) {
+        setError(response.error);
+        setDispatcherLoading(false);
+        return;
+      }
+    }
+
+    setDispatcherLoading(false);
+    setShowDispatcherModal(false);
+    navigate('/dashboard');
+  };
+
+  const handleSkipDispatcherSetup = () => {
+    setShowDispatcherModal(false);
+    navigate('/dashboard');
   };
 
   return (
@@ -169,6 +206,13 @@ export default function Login() {
         onClose={handleSkipShift}
         onStart={handleStartShift}
         loading={shiftLoading}
+      />
+
+      <PrimaryDispatcherModal
+        isOpen={showDispatcherModal}
+        onClose={handleSkipDispatcherSetup}
+        onConfirm={handleDispatcherSetup}
+        loading={dispatcherLoading}
       />
     </div>
   );

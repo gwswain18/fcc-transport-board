@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { CycleTimeAlert as CycleTimeAlertType } from '../../types';
 
 interface CycleTimeAlertProps {
   alert: CycleTimeAlertType;
-  onDismiss: (requestId: number, explanation?: string) => void;
+  onDismiss: (requestId: number, reason?: string) => void;
 }
 
 export default function CycleTimeAlert({ alert, onDismiss }: CycleTimeAlertProps) {
+  const [showReasonInput, setShowReasonInput] = useState(false);
+  const [reason, setReason] = useState('');
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -24,8 +28,32 @@ export default function CycleTimeAlert({ alert, onDismiss }: CycleTimeAlertProps
     ((alert.current_seconds - alert.avg_seconds) / alert.avg_seconds) * 100
   );
 
+  const handleDismissClick = () => {
+    setShowReasonInput(true);
+  };
+
+  const handleConfirmDismiss = () => {
+    if (!reason.trim()) return;
+    onDismiss(alert.request_id, reason.trim());
+    setShowReasonInput(false);
+    setReason('');
+  };
+
+  const handleCancelDismiss = () => {
+    setShowReasonInput(false);
+    setReason('');
+  };
+
+  const quickReasons = [
+    'Patient not ready',
+    'Waiting for equipment',
+    'Elevator delay',
+    'Staff break overlap',
+    'Documentation pending',
+  ];
+
   return (
-    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 animate-pulse">
+    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-3">
           <div className="flex-shrink-0">
@@ -48,13 +76,61 @@ export default function CycleTimeAlert({ alert, onDismiss }: CycleTimeAlertProps
             </div>
           </div>
         </div>
-        <button
-          onClick={() => onDismiss(alert.request_id)}
-          className="text-yellow-600 hover:text-yellow-800 text-sm font-medium"
-        >
-          Dismiss
-        </button>
+        {!showReasonInput && (
+          <button
+            onClick={handleDismissClick}
+            className="text-yellow-600 hover:text-yellow-800 text-sm font-medium"
+          >
+            Dismiss
+          </button>
+        )}
       </div>
+
+      {showReasonInput && (
+        <div className="mt-4 border-t border-yellow-200 pt-4">
+          <p className="text-sm text-yellow-700 mb-2">Please provide a reason for dismissing this alert:</p>
+
+          <div className="flex flex-wrap gap-2 mb-3">
+            {quickReasons.map((quickReason) => (
+              <button
+                key={quickReason}
+                onClick={() => setReason(quickReason)}
+                className={`text-xs px-2 py-1 rounded ${
+                  reason === quickReason
+                    ? 'bg-yellow-500 text-white'
+                    : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                }`}
+              >
+                {quickReason}
+              </button>
+            ))}
+          </div>
+
+          <input
+            type="text"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Enter reason or select from above..."
+            className="w-full px-3 py-2 border border-yellow-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          />
+
+          <div className="flex justify-end gap-2 mt-3">
+            <button
+              onClick={handleCancelDismiss}
+              className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmDismiss}
+              disabled={!reason.trim()}
+              className="px-3 py-1 bg-yellow-500 text-white rounded text-sm font-medium hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Confirm Dismiss
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

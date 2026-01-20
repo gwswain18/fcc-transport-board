@@ -327,3 +327,133 @@ export const exportData = async (
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// Get staffing by floor (current snapshot)
+export const getStaffingByFloor = async (
+  _req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const floors = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+    const staffing = [];
+
+    for (const floor of floors) {
+      // Get all active transporters for this floor
+      const result = await query(
+        `SELECT
+          ts.status,
+          COUNT(*) as count
+         FROM transporter_status ts
+         JOIN users u ON ts.user_id = u.id
+         WHERE u.role = 'transporter'
+           AND u.is_active = true
+           AND (u.primary_floor = $1 OR $1 = '')
+           AND ts.status != 'offline'
+         GROUP BY ts.status`,
+        [floor]
+      );
+
+      let available = 0;
+      let busy = 0;
+      let onBreak = 0;
+      let total = 0;
+
+      for (const row of result.rows) {
+        const count = parseInt(row.count);
+        total += count;
+
+        if (row.status === 'available') {
+          available = count;
+        } else if (row.status === 'on_break' || row.status === 'other') {
+          onBreak += count;
+        } else {
+          busy += count;
+        }
+      }
+
+      staffing.push({
+        floor,
+        active_transporters: total,
+        available_transporters: available,
+        busy_transporters: busy,
+        on_break_transporters: onBreak,
+      });
+    }
+
+    res.json({ staffing });
+  } catch (error) {
+    console.error('Get staffing by floor error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get detailed floor analysis
+export const getFloorAnalysis = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { start_date, end_date } = req.query;
+
+    let whereClause = 'WHERE 1=1';
+    const params: unknown[] = [];
+    let paramIndex = 1;
+
+    if (start_date) {
+      whereClause += ` AND created_at >= $${paramIndex++}`;
+      params.push(start_date);
+    }
+
+    if (end_date) {
+      whereClause += ` AND created_at <= $${paramIndex++}`;
+      params.push(end_date);
+    }
+
+    const floors = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+    const floorData = [];
+
+    for (const floor of floors) {
+      const floorWhere = `${whereClause} AND origin_floor = $${paramIndex}`;
+      const floorParams = [...params, floor];
+
+      // Get aggregate stats (excluding PCT transfers from timing calculations)
+      const statsResult = await query(
+        `SELECT
+          COUNT(*) as total_requests,
+          COUNT(*) FILTER (WHERE status = 'transferred_to_pct') as pct_transfers,
+          COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled,
+          AVG(EXTRACT(EPOCH FROM (accepted_at - created_at)) / 60)
+            FILTER (WHERE status = 'complete') as avg_response_time,
+          AVG(EXTRACT(EPOCH FROM (with_patient_at - created_at)) / 60)
+            FILTER (WHERE status = 'complete') as avg_pickup_time,
+          AVG(EXTRACT(EPOCH FROM (completed_at - with_patient_at)) / 60)
+            FILTER (WHERE status = 'complete') as avg_transport_time,
+          AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 60)
+            FILTER (WHERE status = 'complete') as avg_cycle_time
+         FROM transport_requests
+         ${floorWhere}`,
+        floorParams
+      );
+
+      const stats = statsResult.rows[0];
+      const totalRequests = parseInt(stats.total_requests) || 0;
+      const pctTransfers = parseInt(stats.pct_transfers) || 0;
+
+      floorData.push({
+        floor,
+        total_requests: totalRequests,
+        avg_response_time: parseFloat(stats.avg_response_time) || 0,
+        avg_pickup_time: parseFloat(stats.avg_pickup_time) || 0,
+        avg_transport_time: parseFloat(stats.avg_transport_time) || 0,
+        avg_cycle_time: parseFloat(stats.avg_cycle_time) || 0,
+        pct_transferred: totalRequests > 0 ? (pctTransfers / totalRequests) * 100 : 0,
+        cancelled_count: parseInt(stats.cancelled) || 0,
+      });
+    }
+
+    res.json({ floors: floorData });
+  } catch (error) {
+    console.error('Get floor analysis error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

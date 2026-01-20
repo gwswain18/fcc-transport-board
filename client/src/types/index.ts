@@ -22,7 +22,8 @@ export type RequestStatus =
   | 'en_route'
   | 'with_patient'
   | 'complete'
-  | 'cancelled';
+  | 'cancelled'
+  | 'transferred_to_pct';
 
 export type AssignmentMethod = 'manual' | 'claim' | 'auto';
 
@@ -160,6 +161,7 @@ export interface ActiveDispatcher {
   id: number;
   user_id: number;
   is_primary: boolean;
+  on_break?: boolean;
   contact_info?: string;
   started_at: string;
   user?: User;
@@ -179,4 +181,18 @@ export interface TransporterOffline {
   last_heartbeat: string;
   first_name?: string;
   last_name?: string;
+}
+
+// Alert settings
+export interface AlertSettings {
+  master_enabled: boolean;
+  alerts: {
+    pending_timeout: boolean;
+    stat_timeout: boolean;
+    acceptance_timeout: boolean;
+    break_alert: boolean;
+    offline_alert: boolean;
+    cycle_time_alert: boolean;
+  };
+  require_explanation_on_dismiss: boolean;
 }

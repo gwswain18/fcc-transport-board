@@ -3,6 +3,10 @@ import { api } from '../utils/api';
 import { Floor, ReportSummary, TransporterStats } from '../types';
 import Header from '../components/common/Header';
 import { formatMinutes } from '../utils/formatters';
+import StaffingMetrics from '../components/analytics/StaffingMetrics';
+import FloorAnalysis from '../components/analytics/FloorAnalysis';
+import CycleTimeThresholdSettings from '../components/settings/CycleTimeThresholdSettings';
+import AlertSettings from '../components/settings/AlertSettings';
 import {
   BarChart,
   Bar,
@@ -19,7 +23,10 @@ import {
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
+type TabType = 'overview' | 'staffing' | 'floors' | 'settings';
+
 export default function ManagerDashboard() {
+  const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [summary, setSummary] = useState<ReportSummary | null>(null);
   const [transporterStats, setTransporterStats] = useState<TransporterStats[]>([]);
   const [jobsByHour, setJobsByHour] = useState<{ hour: number; count: number }[]>([]);
@@ -84,6 +91,81 @@ export default function ManagerDashboard() {
       <Header />
 
       <main className="max-w-7xl mx-auto p-4">
+        {/* Tab Navigation */}
+        <div className="flex border-b border-gray-200 mb-6">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`px-6 py-3 font-medium text-sm ${
+              activeTab === 'overview'
+                ? 'border-b-2 border-blue-500 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('staffing')}
+            className={`px-6 py-3 font-medium text-sm ${
+              activeTab === 'staffing'
+                ? 'border-b-2 border-blue-500 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Staffing
+          </button>
+          <button
+            onClick={() => setActiveTab('floors')}
+            className={`px-6 py-3 font-medium text-sm ${
+              activeTab === 'floors'
+                ? 'border-b-2 border-blue-500 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Floor Analysis
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`px-6 py-3 font-medium text-sm ${
+              activeTab === 'settings'
+                ? 'border-b-2 border-blue-500 text-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Settings
+          </button>
+        </div>
+
+        {/* Staffing Tab */}
+        {activeTab === 'staffing' && (
+          <StaffingMetrics
+            dateRange={{
+              start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : '',
+              end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : '',
+            }}
+          />
+        )}
+
+        {/* Floor Analysis Tab */}
+        {activeTab === 'floors' && (
+          <FloorAnalysis
+            dateRange={{
+              start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : '',
+              end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : '',
+            }}
+          />
+        )}
+
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            <AlertSettings />
+            <CycleTimeThresholdSettings />
+          </div>
+        )}
+
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <>
         {/* Filters */}
         <div className="card mb-6">
           <div className="flex flex-wrap gap-4 items-end">
@@ -305,6 +387,8 @@ export default function ManagerDashboard() {
               </div>
             </div>
           </>
+        )}
+        </>
         )}
       </main>
     </div>

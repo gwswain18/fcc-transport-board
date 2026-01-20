@@ -100,11 +100,11 @@ export const registerAsDispatcher = async (req: AuthenticatedRequest, res: Respo
   }
 };
 
-// Go on break (with replacement selection)
+// Go on break (with replacement selection or free text)
 export const takeBreak = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { replacement_user_id } = req.body;
+    const { replacement_user_id, relief_info } = req.body;
 
     // Find current dispatcher role
     const currentResult = await query(
@@ -119,12 +119,12 @@ export const takeBreak = async (req: AuthenticatedRequest, res: Response) => {
 
     const wasPrimary = currentResult.rows[0].is_primary;
 
-    // End current role
+    // Mark as on break (don't end the session)
     await query(
       `UPDATE active_dispatchers
-       SET ended_at = CURRENT_TIMESTAMP, replaced_by = $2
+       SET on_break = true, break_start = CURRENT_TIMESTAMP, replaced_by = $2, relief_info = $3
        WHERE id = $1`,
-      [currentResult.rows[0].id, replacement_user_id || null]
+      [currentResult.rows[0].id, replacement_user_id || null, relief_info || null]
     );
 
     // If was primary and replacement specified, make replacement primary
@@ -165,21 +165,44 @@ export const returnFromBreak = async (req: AuthenticatedRequest, res: Response) 
     const userId = req.user!.id;
     const { as_primary } = req.body;
 
-    // Check if already active
+    // Check if user has an existing session (on break)
     const existingResult = await query(
-      `SELECT id FROM active_dispatchers
+      `SELECT id, on_break FROM active_dispatchers
        WHERE user_id = $1 AND ended_at IS NULL`,
       [userId]
     );
 
     if (existingResult.rows.length > 0) {
+      const existing = existingResult.rows[0];
+      if (existing.on_break) {
+        // Clear break status and optionally set as primary
+        if (as_primary) {
+          // End current primary's role
+          await query(
+            `UPDATE active_dispatchers SET is_primary = false
+             WHERE is_primary = true AND ended_at IS NULL AND user_id != $1`,
+            [userId]
+          );
+        }
+
+        await query(
+          `UPDATE active_dispatchers
+           SET on_break = false, break_start = NULL, relief_info = NULL, replaced_by = NULL, is_primary = $2
+           WHERE id = $1`,
+          [existing.id, as_primary || false]
+        );
+
+        await emitDispatcherChange();
+        return res.json({ message: 'Returned from break' });
+      }
       return res.status(400).json({ error: 'Already an active dispatcher' });
     }
 
+    // No existing session - create new one
     if (as_primary) {
       // End current primary
       await query(
-        `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
+        `UPDATE active_dispatchers SET is_primary = false
          WHERE is_primary = true AND ended_at IS NULL`
       );
     }

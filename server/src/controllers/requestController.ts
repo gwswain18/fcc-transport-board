@@ -298,13 +298,14 @@ export const updateRequest = async (
     // Handle status change
     if (status && status !== currentRequest.status) {
       const validTransitions: Record<RequestStatus, RequestStatus[]> = {
-        pending: ['assigned', 'cancelled'],
-        assigned: ['accepted', 'pending', 'cancelled'],
-        accepted: ['en_route', 'assigned', 'cancelled'],
-        en_route: ['with_patient', 'cancelled'],
-        with_patient: ['complete', 'cancelled'],
+        pending: ['assigned', 'cancelled', 'transferred_to_pct'],
+        assigned: ['accepted', 'pending', 'cancelled', 'transferred_to_pct'],
+        accepted: ['en_route', 'assigned', 'cancelled', 'transferred_to_pct'],
+        en_route: ['with_patient', 'cancelled', 'transferred_to_pct'],
+        with_patient: ['complete', 'cancelled', 'transferred_to_pct'],
         complete: [],
         cancelled: [],
+        transferred_to_pct: [],
       };
 
       if (!validTransitions[currentRequest.status as RequestStatus]?.includes(status)) {
@@ -642,6 +643,83 @@ export const autoAssign = async (
     });
   } catch (error) {
     console.error('Auto-assign error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Assign request to PCT (Patient Care Technician)
+export const assignToPCT = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const { id } = req.params;
+
+    const existing = await query('SELECT * FROM transport_requests WHERE id = $1', [id]);
+
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'Request not found' });
+      return;
+    }
+
+    const currentRequest = existing.rows[0];
+
+    if (['complete', 'cancelled', 'transferred_to_pct'].includes(currentRequest.status)) {
+      res.status(400).json({ error: 'Cannot transfer this request to PCT' });
+      return;
+    }
+
+    // Get PCT auto-close time from config
+    const configResult = await query(
+      `SELECT value FROM system_config WHERE key = 'pct_auto_close_minutes'`
+    );
+    const autoCloseMinutes = configResult.rows.length > 0
+      ? parseInt(configResult.rows[0].value, 10)
+      : 15;
+
+    const autoCloseAt = new Date();
+    autoCloseAt.setMinutes(autoCloseAt.getMinutes() + autoCloseMinutes);
+
+    await query(
+      `UPDATE transport_requests
+       SET status = 'transferred_to_pct',
+           pct_assigned_at = CURRENT_TIMESTAMP,
+           pct_auto_close_at = $1,
+           assigned_to = NULL
+       WHERE id = $2`,
+      [autoCloseAt.toISOString(), id]
+    );
+
+    await query(
+      `INSERT INTO status_history (request_id, user_id, from_status, to_status)
+       VALUES ($1, $2, $3, 'transferred_to_pct')`,
+      [id, req.user.id, currentRequest.status]
+    );
+
+    // Reset transporter status if was assigned
+    if (currentRequest.assigned_to) {
+      await query(
+        `UPDATE transporter_status SET status = 'available', updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1`,
+        [currentRequest.assigned_to]
+      );
+    }
+
+    const updatedRequest = await getRequestWithRelations(parseInt(id));
+
+    const io = getIO();
+    if (io) {
+      io.emit('request_status_changed', updatedRequest);
+    }
+
+    res.json({ request: updatedRequest, message: 'Request transferred to PCT' });
+  } catch (error) {
+    console.error('Assign to PCT error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

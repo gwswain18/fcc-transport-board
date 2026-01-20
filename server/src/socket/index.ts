@@ -151,8 +151,22 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
 
     // Cycle time alert dismissed
     socket.on('cycle_alert_dismissed', async (data: { request_id: number; explanation?: string }) => {
-      console.log(`Cycle alert dismissed for request ${data.request_id}: ${data.explanation}`);
-      // Could log this to the database if needed
+      console.log(`Cycle alert dismissed for request ${data.request_id}: ${data.explanation || 'no explanation'}`);
+    });
+
+    // Break alert dismissed
+    socket.on('break_alert_dismissed', async (data: { user_id: number; explanation?: string }) => {
+      console.log(`Break alert dismissed for user ${data.user_id}: ${data.explanation || 'no explanation'}`);
+    });
+
+    // Offline alert dismissed
+    socket.on('offline_alert_dismissed', async (data: { user_id: number; explanation?: string }) => {
+      console.log(`Offline alert dismissed for user ${data.user_id}: ${data.explanation || 'no explanation'}`);
+    });
+
+    // Timeout alert dismissed
+    socket.on('timeout_alert_dismissed', async (data: { request_id: number; explanation?: string }) => {
+      console.log(`Timeout alert dismissed for request ${data.request_id}: ${data.explanation || 'no explanation'}`);
     });
 
     // Transporter requests help
