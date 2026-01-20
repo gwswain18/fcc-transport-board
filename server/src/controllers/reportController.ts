@@ -155,7 +155,7 @@ export const getJobsByHour = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { start_date, end_date } = req.query;
+    const { start_date, end_date, floor, transporter_id } = req.query;
 
     let whereClause = "WHERE status = 'complete'";
     const params: unknown[] = [];
@@ -169,6 +169,16 @@ export const getJobsByHour = async (
     if (end_date) {
       whereClause += ` AND created_at <= $${paramIndex++}`;
       params.push(end_date);
+    }
+
+    if (floor) {
+      whereClause += ` AND origin_floor = $${paramIndex++}`;
+      params.push(floor);
+    }
+
+    if (transporter_id) {
+      whereClause += ` AND assigned_to = $${paramIndex++}`;
+      params.push(transporter_id);
     }
 
     const result = await query(
@@ -194,7 +204,7 @@ export const getJobsByFloor = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { start_date, end_date } = req.query;
+    const { start_date, end_date, floor, transporter_id } = req.query;
 
     let whereClause = "WHERE status = 'complete'";
     const params: unknown[] = [];
@@ -208,6 +218,16 @@ export const getJobsByFloor = async (
     if (end_date) {
       whereClause += ` AND created_at <= $${paramIndex++}`;
       params.push(end_date);
+    }
+
+    if (floor) {
+      whereClause += ` AND origin_floor = $${paramIndex++}`;
+      params.push(floor);
+    }
+
+    if (transporter_id) {
+      whereClause += ` AND assigned_to = $${paramIndex++}`;
+      params.push(transporter_id);
     }
 
     const result = await query(
