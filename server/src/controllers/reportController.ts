@@ -407,6 +407,221 @@ export const getStaffingByFloor = async (
   }
 };
 
+// Get time metrics (job time, break time, available time) per transporter
+export const getTimeMetrics = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { start_date, end_date, floor, transporter_id } = req.query;
+
+    let whereClause = "WHERE tr.status = 'complete' AND tr.assigned_to IS NOT NULL";
+    const params: unknown[] = [];
+    let paramIndex = 1;
+
+    if (start_date) {
+      whereClause += ` AND tr.completed_at >= $${paramIndex++}`;
+      params.push(start_date);
+    }
+
+    if (end_date) {
+      whereClause += ` AND tr.completed_at <= $${paramIndex++}`;
+      params.push(end_date);
+    }
+
+    if (floor) {
+      whereClause += ` AND tr.origin_floor = $${paramIndex++}`;
+      params.push(floor);
+    }
+
+    if (transporter_id) {
+      whereClause += ` AND tr.assigned_to = $${paramIndex++}`;
+      params.push(transporter_id);
+    }
+
+    // Get job time per transporter
+    const jobTimeResult = await query(
+      `SELECT
+        tr.assigned_to as user_id,
+        u.first_name,
+        u.last_name,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (tr.completed_at - tr.accepted_at))), 0) as job_time_seconds
+       FROM transport_requests tr
+       JOIN users u ON tr.assigned_to = u.id
+       ${whereClause}
+       GROUP BY tr.assigned_to, u.first_name, u.last_name`,
+      params
+    );
+
+    // Build date filter for shift_logs and audit_logs
+    let shiftWhereClause = 'WHERE sl.shift_end IS NOT NULL';
+    const shiftParams: unknown[] = [];
+    let shiftParamIndex = 1;
+
+    if (start_date) {
+      shiftWhereClause += ` AND sl.shift_start >= $${shiftParamIndex++}`;
+      shiftParams.push(start_date);
+    }
+
+    if (end_date) {
+      shiftWhereClause += ` AND sl.shift_end <= $${shiftParamIndex++}`;
+      shiftParams.push(end_date);
+    }
+
+    if (transporter_id) {
+      shiftWhereClause += ` AND sl.user_id = $${shiftParamIndex++}`;
+      shiftParams.push(transporter_id);
+    }
+
+    // Get total shift duration per transporter
+    const shiftTimeResult = await query(
+      `SELECT
+        sl.user_id,
+        u.first_name,
+        u.last_name,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (sl.shift_end - sl.shift_start))), 0) as shift_duration_seconds
+       FROM shift_logs sl
+       JOIN users u ON sl.user_id = u.id
+       ${shiftWhereClause}
+       GROUP BY sl.user_id, u.first_name, u.last_name`,
+      shiftParams
+    );
+
+    // Get break time from audit_logs (status changes to/from on_break)
+    let breakWhereClause = `WHERE al.action = 'status_change'
+       AND al.entity_type = 'transporter_status'
+       AND al.new_values->>'status' = 'on_break'`;
+    const breakParams: unknown[] = [];
+    let breakParamIndex = 1;
+
+    if (start_date) {
+      breakWhereClause += ` AND al.timestamp >= $${breakParamIndex++}`;
+      breakParams.push(start_date);
+    }
+
+    if (end_date) {
+      breakWhereClause += ` AND al.timestamp <= $${breakParamIndex++}`;
+      breakParams.push(end_date);
+    }
+
+    if (transporter_id) {
+      breakWhereClause += ` AND al.user_id = $${breakParamIndex++}`;
+      breakParams.push(transporter_id);
+    }
+
+    // Calculate break time by finding pairs of on_break start/end
+    const breakTimeResult = await query(
+      `WITH break_starts AS (
+        SELECT
+          al.user_id,
+          al.timestamp as break_start,
+          LEAD(al2.timestamp) OVER (PARTITION BY al.user_id ORDER BY al.timestamp) as break_end
+        FROM audit_logs al
+        LEFT JOIN audit_logs al2 ON al.user_id = al2.user_id
+          AND al2.timestamp > al.timestamp
+          AND al2.action = 'status_change'
+          AND al2.entity_type = 'transporter_status'
+          AND al2.new_values->>'status' != 'on_break'
+        ${breakWhereClause}
+      )
+      SELECT
+        bs.user_id,
+        u.first_name,
+        u.last_name,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (COALESCE(bs.break_end, NOW()) - bs.break_start))), 0) as break_time_seconds
+      FROM break_starts bs
+      JOIN users u ON bs.user_id = u.id
+      WHERE bs.break_end IS NOT NULL OR bs.break_start > NOW() - INTERVAL '24 hours'
+      GROUP BY bs.user_id, u.first_name, u.last_name`,
+      breakParams
+    );
+
+    // Combine all data
+    const userMap = new Map<number, {
+      user_id: number;
+      first_name: string;
+      last_name: string;
+      job_time_seconds: number;
+      break_time_seconds: number;
+      shift_duration_seconds: number;
+      available_time_seconds: number;
+    }>();
+
+    // Initialize with job time data
+    for (const row of jobTimeResult.rows) {
+      userMap.set(row.user_id, {
+        user_id: row.user_id,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        job_time_seconds: parseFloat(row.job_time_seconds) || 0,
+        break_time_seconds: 0,
+        shift_duration_seconds: 0,
+        available_time_seconds: 0,
+      });
+    }
+
+    // Add shift data
+    for (const row of shiftTimeResult.rows) {
+      const existing = userMap.get(row.user_id);
+      if (existing) {
+        existing.shift_duration_seconds = parseFloat(row.shift_duration_seconds) || 0;
+      } else {
+        userMap.set(row.user_id, {
+          user_id: row.user_id,
+          first_name: row.first_name,
+          last_name: row.last_name,
+          job_time_seconds: 0,
+          break_time_seconds: 0,
+          shift_duration_seconds: parseFloat(row.shift_duration_seconds) || 0,
+          available_time_seconds: 0,
+        });
+      }
+    }
+
+    // Add break data
+    for (const row of breakTimeResult.rows) {
+      const existing = userMap.get(row.user_id);
+      if (existing) {
+        existing.break_time_seconds = parseFloat(row.break_time_seconds) || 0;
+      } else {
+        userMap.set(row.user_id, {
+          user_id: row.user_id,
+          first_name: row.first_name,
+          last_name: row.last_name,
+          job_time_seconds: 0,
+          break_time_seconds: parseFloat(row.break_time_seconds) || 0,
+          shift_duration_seconds: 0,
+          available_time_seconds: 0,
+        });
+      }
+    }
+
+    // Calculate available time
+    const transporters = Array.from(userMap.values()).map(t => ({
+      ...t,
+      available_time_seconds: Math.max(0, t.shift_duration_seconds - t.job_time_seconds - t.break_time_seconds),
+    }));
+
+    // Calculate totals
+    const totals = transporters.reduce(
+      (acc, t) => ({
+        total_job_time_seconds: acc.total_job_time_seconds + t.job_time_seconds,
+        total_break_time_seconds: acc.total_break_time_seconds + t.break_time_seconds,
+        total_available_time_seconds: acc.total_available_time_seconds + t.available_time_seconds,
+      }),
+      { total_job_time_seconds: 0, total_break_time_seconds: 0, total_available_time_seconds: 0 }
+    );
+
+    res.json({
+      transporters,
+      totals,
+    });
+  } catch (error) {
+    console.error('Get time metrics error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Get detailed floor analysis
 export const getFloorAnalysis = async (
   req: AuthenticatedRequest,

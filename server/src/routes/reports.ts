@@ -7,6 +7,7 @@ import {
   exportData,
   getStaffingByFloor,
   getFloorAnalysis,
+  getTimeMetrics,
 } from '../controllers/reportController.js';
 import { authenticate } from '../middleware/auth.js';
 import { canViewReports } from '../middleware/roleAuth.js';
@@ -22,6 +23,7 @@ router.get('/by-hour', getJobsByHour);
 router.get('/by-floor', getJobsByFloor);
 router.get('/staffing-by-floor', getStaffingByFloor);
 router.get('/floor-analysis', getFloorAnalysis);
+router.get('/time-metrics', getTimeMetrics);
 router.get('/export', exportData);
 
 export default router;

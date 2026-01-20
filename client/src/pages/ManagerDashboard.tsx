@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { Floor, ReportSummary, TransporterStats } from '../types';
 import Header from '../components/common/Header';
-import { formatMinutes } from '../utils/formatters';
+import { formatMinutes, formatSecondsAsHoursMinutes } from '../utils/formatters';
 import FloorAnalysis from '../components/analytics/FloorAnalysis';
 import CycleTimeThresholdSettings from '../components/settings/CycleTimeThresholdSettings';
 import AlertSettings from '../components/settings/AlertSettings';
@@ -14,13 +14,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from 'recharts';
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 type TabType = 'overview' | 'floors' | 'settings';
 
@@ -29,7 +25,21 @@ export default function ManagerDashboard() {
   const [summary, setSummary] = useState<ReportSummary | null>(null);
   const [transporterStats, setTransporterStats] = useState<TransporterStats[]>([]);
   const [jobsByHour, setJobsByHour] = useState<{ hour: number; count: number }[]>([]);
-  const [jobsByFloor, setJobsByFloor] = useState<{ floor: string; count: number }[]>([]);
+  const [timeMetrics, setTimeMetrics] = useState<{
+    transporters: Array<{
+      user_id: number;
+      first_name: string;
+      last_name: string;
+      job_time_seconds: number;
+      break_time_seconds: number;
+      available_time_seconds: number;
+    }>;
+    totals: {
+      total_job_time_seconds: number;
+      total_break_time_seconds: number;
+      total_available_time_seconds: number;
+    };
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [filters, setFilters] = useState({
@@ -43,6 +53,19 @@ export default function ManagerDashboard() {
     loadData();
   }, [filters]);
 
+  const fillMissingEvenHours = (data: { hour: number; count: number }[]): { hour: number; count: number }[] => {
+    const hourMap = new Map<number, number>();
+    data.forEach(item => hourMap.set(Number(item.hour), Number(item.count)));
+
+    const evenHours: { hour: number; count: number }[] = [];
+    for (let h = 0; h <= 22; h += 2) {
+      const evenCount = hourMap.get(h) || 0;
+      const oddCount = hourMap.get(h + 1) || 0;
+      evenHours.push({ hour: h, count: evenCount + oddCount });
+    }
+    return evenHours;
+  };
+
   const loadData = async () => {
     setLoading(true);
 
@@ -53,11 +76,11 @@ export default function ManagerDashboard() {
       transporter_id: filters.transporter_id ? parseInt(filters.transporter_id) : undefined,
     };
 
-    const [summaryRes, statsRes, hourRes, floorRes] = await Promise.all([
+    const [summaryRes, statsRes, hourRes, timeMetricsRes] = await Promise.all([
       api.getReportSummary(params),
       api.getReportByTransporter(params),
       api.getJobsByHour(params),
-      api.getJobsByFloor(params),
+      api.getTimeMetrics(params),
     ]);
 
     if (summaryRes.data?.summary) {
@@ -67,10 +90,10 @@ export default function ManagerDashboard() {
       setTransporterStats(statsRes.data.transporters);
     }
     if (hourRes.data?.data) {
-      setJobsByHour(hourRes.data.data);
+      setJobsByHour(fillMissingEvenHours(hourRes.data.data));
     }
-    if (floorRes.data?.data) {
-      setJobsByFloor(floorRes.data.data);
+    if (timeMetricsRes.data) {
+      setTimeMetrics(timeMetricsRes.data);
     }
 
     setLoading(false);
@@ -252,8 +275,29 @@ export default function ManagerDashboard() {
               </div>
             )}
 
+            {/* Time Metrics Cards */}
+            {timeMetrics && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                <MetricCard
+                  title="Total Time on Jobs"
+                  value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_job_time_seconds)}
+                  color="bg-cyan-500"
+                />
+                <MetricCard
+                  title="Total Break Time"
+                  value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_break_time_seconds)}
+                  color="bg-yellow-500"
+                />
+                <MetricCard
+                  title="Total Available Time"
+                  value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_available_time_seconds)}
+                  color="bg-teal-500"
+                />
+              </div>
+            )}
+
             {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div className="grid grid-cols-1 gap-6 mb-6">
               {/* Jobs by Hour */}
               <div className="card">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Jobs by Hour</h3>
@@ -267,42 +311,10 @@ export default function ManagerDashboard() {
                       />
                       <YAxis />
                       <Tooltip
-                        labelFormatter={(h) => `${h}:00 - ${h}:59`}
+                        labelFormatter={(h) => `${h}:00 - ${Number(h) + 1}:59`}
                       />
                       <Bar dataKey="count" fill="#3B82F6" name="Jobs" />
                     </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Jobs by Floor */}
-              <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Jobs by Floor</h3>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={jobsByFloor}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) =>
-                          `${name} (${(percent * 100).toFixed(0)}%)`
-                        }
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="count"
-                        nameKey="floor"
-                      >
-                        {jobsByFloor.map((_, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={COLORS[index % COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
                   </ResponsiveContainer>
                 </div>
               </div>
@@ -329,32 +341,53 @@ export default function ManagerDashboard() {
                       <th className="text-right py-3 px-4 font-medium text-gray-600">
                         Avg Transport
                       </th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-600">
+                        Job Time
+                      </th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-600">
+                        Break Time
+                      </th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-600">
+                        Available
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {transporterStats.map((t) => (
-                      <tr
-                        key={t.user_id}
-                        className="border-b border-gray-100 hover:bg-gray-50"
-                      >
-                        <td className="py-3 px-4 font-medium text-gray-900">
-                          {t.first_name} {t.last_name}
-                        </td>
-                        <td className="py-3 px-4 text-right text-gray-600">
-                          {t.jobs_completed}
-                        </td>
-                        <td className="py-3 px-4 text-right text-gray-600">
-                          {formatMinutes(t.avg_pickup_time_minutes)}
-                        </td>
-                        <td className="py-3 px-4 text-right text-gray-600">
-                          {formatMinutes(t.avg_transport_time_minutes)}
-                        </td>
-                      </tr>
-                    ))}
+                    {transporterStats.map((t) => {
+                      const tm = timeMetrics?.transporters.find(tm => tm.user_id === t.user_id);
+                      return (
+                        <tr
+                          key={t.user_id}
+                          className="border-b border-gray-100 hover:bg-gray-50"
+                        >
+                          <td className="py-3 px-4 font-medium text-gray-900">
+                            {t.first_name} {t.last_name}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
+                            {t.jobs_completed}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
+                            {formatMinutes(t.avg_pickup_time_minutes)}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
+                            {formatMinutes(t.avg_transport_time_minutes)}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
+                            {tm ? formatSecondsAsHoursMinutes(tm.job_time_seconds) : '-'}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
+                            {tm ? formatSecondsAsHoursMinutes(tm.break_time_seconds) : '-'}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
+                            {tm ? formatSecondsAsHoursMinutes(tm.available_time_seconds) : '-'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {transporterStats.length === 0 && (
                       <tr>
                         <td
-                          colSpan={4}
+                          colSpan={7}
                           className="py-8 text-center text-gray-500"
                         >
                           No data available

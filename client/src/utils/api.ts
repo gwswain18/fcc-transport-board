@@ -380,6 +380,39 @@ export const api = {
     }>(`/reports/floor-analysis${query ? `?${query}` : ''}`);
   },
 
+  getTimeMetrics: (params?: {
+    start_date?: string;
+    end_date?: string;
+    floor?: string;
+    transporter_id?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
+    return request<{
+      transporters: Array<{
+        user_id: number;
+        first_name: string;
+        last_name: string;
+        job_time_seconds: number;
+        break_time_seconds: number;
+        shift_duration_seconds: number;
+        available_time_seconds: number;
+      }>;
+      totals: {
+        total_job_time_seconds: number;
+        total_break_time_seconds: number;
+        total_available_time_seconds: number;
+      };
+    }>(`/reports/time-metrics${query ? `?${query}` : ''}`);
+  },
+
   exportData: (params?: {
     start_date?: string;
     end_date?: string;
