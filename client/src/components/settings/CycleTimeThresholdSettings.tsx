@@ -138,7 +138,7 @@ export default function CycleTimeThresholdSettings() {
                   type="checkbox"
                   checked={thresholds[key].enabled}
                   onChange={(e) => handleThresholdChange(key, 'enabled', e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
                 />
                 <span className="text-sm font-medium text-gray-700">
                   {PHASE_LABELS[key]}

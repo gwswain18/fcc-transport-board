@@ -183,7 +183,7 @@ export default function UserManagement() {
 
           {loading && users.length === 0 ? (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -229,7 +229,7 @@ export default function UserManagement() {
                       </td>
                       <td className="py-3 px-4 text-gray-600">{user.email}</td>
                       <td className="py-3 px-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 capitalize">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary capitalize">
                           {user.role}
                         </span>
                       </td>
@@ -253,7 +253,7 @@ export default function UserManagement() {
                       <td className="py-3 px-4 text-right space-x-2">
                         <button
                           onClick={() => openEditModal(user)}
-                          className="text-blue-600 hover:text-blue-800"
+                          className="text-primary hover:text-primary-700"
                         >
                           Edit
                         </button>

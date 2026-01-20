@@ -56,7 +56,7 @@ export default function ShiftStartModal({
                   value={extension}
                   onChange={(e) => setExtension(e.target.value)}
                   placeholder="e.g., 1234"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
                   autoFocus
                 />
               </div>
@@ -71,7 +71,7 @@ export default function ShiftStartModal({
                   id="floor"
                   value={floorAssignment}
                   onChange={(e) => setFloorAssignment(e.target.value as Floor | '')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
                 >
                   <option value="">No specific floor</option>
                   {FLOORS.map((floor) => (
@@ -94,7 +94,7 @@ export default function ShiftStartModal({
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
               >
                 {loading ? 'Starting...' : 'Start Shift'}
               </button>

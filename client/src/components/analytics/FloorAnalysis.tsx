@@ -60,7 +60,7 @@ export default function FloorAnalysis({ dateRange }: FloorAnalysisProps) {
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Detailed Floor Analysis</h3>
         <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       </div>
     );

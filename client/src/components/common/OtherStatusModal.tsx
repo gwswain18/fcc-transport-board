@@ -56,7 +56,7 @@ export default function OtherStatusModal({
                 setError('');
               }}
               placeholder="e.g., Equipment maintenance, Training session, etc."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
               rows={3}
               autoFocus
             />
@@ -71,7 +71,7 @@ export default function OtherStatusModal({
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-700"
               >
                 Confirm
               </button>

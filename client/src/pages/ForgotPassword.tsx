@@ -41,7 +41,7 @@ export default function ForgotPassword() {
             </div>
             <Link
               to="/login"
-              className="text-blue-600 hover:text-blue-800 text-sm"
+              className="text-primary hover:text-primary-700 text-sm"
             >
               Return to Login
             </Link>
@@ -71,7 +71,7 @@ export default function ForgotPassword() {
                 id="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
                 placeholder="you@example.com"
                 required
               />
@@ -80,7 +80,7 @@ export default function ForgotPassword() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-primary text-white py-2 px-4 rounded-lg hover:bg-primary-700 focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Sending...' : 'Send Reset Link'}
             </button>
@@ -88,7 +88,7 @@ export default function ForgotPassword() {
             <div className="mt-4 text-center space-y-2">
               <Link
                 to="/login"
-                className="text-blue-600 hover:text-blue-800 text-sm block"
+                className="text-primary hover:text-primary-700 text-sm block"
               >
                 Back to Login
               </Link>

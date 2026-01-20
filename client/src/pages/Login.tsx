@@ -126,10 +126,17 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">FCC Transport Board</h1>
+          <div className="flex justify-center mb-4">
+            <img
+              src="/logo.png"
+              alt="Northside Hospital Logo"
+              className="h-20 w-auto"
+            />
+          </div>
+          <h1 className="text-3xl font-bold text-primary">FCC Transport Board</h1>
           <p className="text-gray-600 mt-2">Sign in to continue</p>
         </div>
 
@@ -210,7 +217,7 @@ export default function Login() {
         <div className="mt-4 text-center">
           <Link
             to="/forgot-password"
-            className="text-blue-600 hover:text-blue-800 text-sm"
+            className="text-primary hover:text-primary-600 text-sm"
           >
             Forgot your password?
           </Link>

@@ -17,7 +17,7 @@ export default function PriorityBadge({ priority, size = 'md' }: PriorityBadgePr
   return (
     <span
       className={`inline-flex items-center rounded-full font-bold text-white ${
-        isStat ? 'bg-red-500 animate-pulse' : 'bg-blue-500'
+        isStat ? 'bg-red-500 animate-pulse' : 'bg-primary'
       } ${sizeClasses[size]}`}
     >
       {isStat ? 'STAT' : 'Routine'}

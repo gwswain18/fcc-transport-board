@@ -161,26 +161,26 @@ export default function TransporterView() {
       <main className="max-w-lg mx-auto p-4 space-y-6">
         {/* Shift Info */}
         {activeShift && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+          <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 flex items-center justify-between">
             <div>
-              <p className="text-sm text-blue-700">
+              <p className="text-sm text-primary-700">
                 <span className="font-medium">Shift started:</span>{' '}
                 {new Date(activeShift.shift_start).toLocaleTimeString()}
               </p>
               {activeShift.extension && (
-                <p className="text-sm text-blue-600">
+                <p className="text-sm text-primary">
                   Extension: <span className="font-medium">{activeShift.extension}</span>
                 </p>
               )}
               {activeShift.floor_assignment && (
-                <p className="text-sm text-blue-600">
+                <p className="text-sm text-primary">
                   Floor: <span className="font-medium">{activeShift.floor_assignment}</span>
                 </p>
               )}
             </div>
             <button
               onClick={() => setShowShiftEndModal(true)}
-              className="text-sm text-blue-700 hover:text-blue-900 underline"
+              className="text-sm text-primary-700 hover:text-primary-700 underline"
             >
               End Shift
             </button>
@@ -275,7 +275,7 @@ export default function TransporterView() {
 
         {/* Current Job Card */}
         {currentJob ? (
-          <div className="card border-2 border-blue-200">
+          <div className="card border-2 border-primary-200">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Current Job</h2>
               <PriorityBadge priority={currentJob.priority} size="lg" />
@@ -303,7 +303,7 @@ export default function TransporterView() {
               <button
                 onClick={handleJobAction}
                 disabled={loading}
-                className="w-full py-4 bg-blue-600 text-white text-xl font-bold rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="w-full py-4 bg-primary text-white text-xl font-bold rounded-xl hover:bg-primary-600 transition-colors disabled:opacity-50"
               >
                 {loading ? 'Processing...' : getActionButtonText()}
               </button>

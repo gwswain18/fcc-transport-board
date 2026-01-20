@@ -22,13 +22,20 @@ export default function Header() {
 
   return (
     <>
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-primary shadow-lg border-b border-primary-700">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-bold text-gray-900">FCC Transport</h1>
+            <div className="flex items-center space-x-3">
+              <img
+                src="/logo.png"
+                alt="Northside Hospital Logo"
+                className="h-10 w-auto bg-white rounded p-1"
+              />
+              <h1 className="text-xl font-bold text-white">FCC Transport</h1>
+            </div>
             <div
               className={`w-2 h-2 rounded-full ${
-                connected ? 'bg-green-500' : 'bg-red-500'
+                connected ? 'bg-green-400' : 'bg-red-400'
               }`}
               title={connected ? 'Connected' : 'Disconnected'}
             />
@@ -40,7 +47,7 @@ export default function Header() {
               user.role === 'manager') && (
               <Link
                 to="/dashboard"
-                className="text-gray-600 hover:text-gray-900 px-3 py-2"
+                className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
               >
                 Dashboard
               </Link>
@@ -48,7 +55,7 @@ export default function Header() {
             {(user.role === 'supervisor' || user.role === 'manager') && (
               <Link
                 to="/supervisor"
-                className="text-gray-600 hover:text-gray-900 px-3 py-2"
+                className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
               >
                 Reports
               </Link>
@@ -57,13 +64,13 @@ export default function Header() {
               <>
                 <Link
                   to="/analytics"
-                  className="text-gray-600 hover:text-gray-900 px-3 py-2"
+                  className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
                 >
                   Analytics
                 </Link>
                 <Link
                   to="/manager/users"
-                  className="text-gray-600 hover:text-gray-900 px-3 py-2"
+                  className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
                 >
                   Users
                 </Link>
@@ -72,21 +79,21 @@ export default function Header() {
           </nav>
 
           <div className="flex items-center space-x-6">
-            <MuteToggle />
-            <DateTimeDisplay />
+            <MuteToggle className="text-secondary-200 hover:text-white" />
+            <DateTimeDisplay className="text-secondary-200" />
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center space-x-3 focus:outline-none"
               >
                 <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">
+                  <p className="text-sm font-medium text-white">
                     {user.first_name} {user.last_name}
                   </p>
-                  <p className="text-xs text-gray-500 capitalize">{user.role}</p>
+                  <p className="text-xs text-secondary-200 capitalize">{user.role}</p>
                 </div>
                 <svg
-                  className={`w-4 h-4 text-gray-400 transition-transform ${
+                  className={`w-4 h-4 text-secondary-200 transition-transform ${
                     showUserMenu ? 'rotate-180' : ''
                   }`}
                   fill="none"
@@ -107,20 +114,20 @@ export default function Header() {
                     className="fixed inset-0 z-10"
                     onClick={() => setShowUserMenu(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-alabaster py-1 z-20">
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
                         setShowPasswordModal(true);
                       }}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-smoke"
                     >
                       Change Password
                     </button>
-                    <hr className="my-1" />
+                    <hr className="my-1 border-alabaster" />
                     <button
                       onClick={handleLogout}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-smoke"
                     >
                       Logout
                     </button>

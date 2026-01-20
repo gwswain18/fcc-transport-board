@@ -121,7 +121,7 @@ export default function ManagerDashboard() {
             onClick={() => setActiveTab('overview')}
             className={`px-6 py-3 font-medium text-sm ${
               activeTab === 'overview'
-                ? 'border-b-2 border-blue-500 text-blue-600'
+                ? 'border-b-2 border-primary text-primary'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -131,7 +131,7 @@ export default function ManagerDashboard() {
             onClick={() => setActiveTab('floors')}
             className={`px-6 py-3 font-medium text-sm ${
               activeTab === 'floors'
-                ? 'border-b-2 border-blue-500 text-blue-600'
+                ? 'border-b-2 border-primary text-primary'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -141,7 +141,7 @@ export default function ManagerDashboard() {
             onClick={() => setActiveTab('settings')}
             className={`px-6 py-3 font-medium text-sm ${
               activeTab === 'settings'
-                ? 'border-b-2 border-blue-500 text-blue-600'
+                ? 'border-b-2 border-primary text-primary'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -237,7 +237,7 @@ export default function ManagerDashboard() {
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
           </div>
         ) : (
           <>
@@ -252,7 +252,7 @@ export default function ManagerDashboard() {
                 <MetricCard
                   title="Avg Response"
                   value={formatMinutes(summary.avg_response_time_minutes)}
-                  color="bg-blue-500"
+                  color="bg-secondary"
                 />
                 <MetricCard
                   title="Avg Pickup"

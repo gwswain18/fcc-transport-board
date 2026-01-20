@@ -34,7 +34,7 @@ export default function PrimaryDispatcherModal({
               onClick={() => setIsPrimary(true)}
               className={`px-6 py-3 rounded-lg font-medium transition-colors ${
                 isPrimary
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-primary text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >

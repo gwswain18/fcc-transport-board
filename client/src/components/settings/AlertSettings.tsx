@@ -158,7 +158,7 @@ export default function AlertSettings() {
       </div>
 
       {/* Explanation Requirement */}
-      <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+      <div className="mb-6 p-4 bg-primary-50 rounded-lg">
         <div className="flex items-center justify-between">
           <div>
             <h4 className="font-medium text-gray-900">Require Dismissal Explanation</h4>
@@ -204,8 +204,8 @@ function Toggle({
     <button
       type="button"
       onClick={() => onChange(!enabled)}
-      className={`${sizeClasses} relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-        enabled ? 'bg-blue-600' : 'bg-gray-200'
+      className={`${sizeClasses} relative inline-flex flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+        enabled ? 'bg-primary' : 'bg-gray-200'
       }`}
     >
       <span

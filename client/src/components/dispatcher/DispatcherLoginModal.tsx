@@ -28,11 +28,11 @@ export default function DispatcherLoginModal({
         {hasPrimaryDispatcher ? (
           <>
             <div className="text-center">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                <p className="text-blue-800 font-medium">
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 mb-4">
+                <p className="text-primary-700 font-medium">
                   Current Primary Dispatcher
                 </p>
-                <p className="text-blue-600 text-lg mt-1">
+                <p className="text-primary text-lg mt-1">
                   {primaryDispatcherName}
                 </p>
               </div>

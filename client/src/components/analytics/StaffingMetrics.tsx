@@ -56,7 +56,7 @@ export default function StaffingMetrics({ dateRange }: StaffingMetricsProps) {
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Staffing by Floor</h3>
         <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
       </div>
     );
@@ -89,8 +89,8 @@ export default function StaffingMetrics({ dateRange }: StaffingMetricsProps) {
           <p className="text-2xl font-bold text-green-600">{totalAvailable}</p>
           <p className="text-xs text-gray-500">Available</p>
         </div>
-        <div className="text-center p-3 bg-blue-50 rounded-lg">
-          <p className="text-2xl font-bold text-blue-600">{totalBusy}</p>
+        <div className="text-center p-3 bg-primary-50 rounded-lg">
+          <p className="text-2xl font-bold text-primary">{totalBusy}</p>
           <p className="text-xs text-gray-500">Busy</p>
         </div>
         <div className="text-center p-3 bg-yellow-50 rounded-lg">
@@ -134,7 +134,7 @@ export default function StaffingMetrics({ dateRange }: StaffingMetricsProps) {
                 <span className="font-medium">{data.available_transporters}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-blue-600">Busy:</span>
+                <span className="text-primary">Busy:</span>
                 <span className="font-medium">{data.busy_transporters}</span>
               </div>
               <div className="flex justify-between">

@@ -27,13 +27,13 @@ export default function MuteToggle({ className = '', showLabel = false }: MuteTo
   return (
     <button
       onClick={handleToggle}
-      className={`flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors ${className}`}
+      className={`flex items-center gap-2 p-2 rounded-lg hover:bg-white/10 transition-colors ${className}`}
       title={muted ? 'Unmute notifications' : 'Mute notifications'}
     >
       {muted ? (
         // Speaker with X icon (muted)
         <svg
-          className="w-5 h-5 text-gray-500"
+          className="w-5 h-5 opacity-60"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -54,7 +54,7 @@ export default function MuteToggle({ className = '', showLabel = false }: MuteTo
       ) : (
         // Speaker icon (unmuted)
         <svg
-          className="w-5 h-5 text-gray-700"
+          className="w-5 h-5"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -68,7 +68,7 @@ export default function MuteToggle({ className = '', showLabel = false }: MuteTo
         </svg>
       )}
       {showLabel && (
-        <span className="text-sm text-gray-600">
+        <span className="text-sm">
           {muted ? 'Sounds Off' : 'Sounds On'}
         </span>
       )}

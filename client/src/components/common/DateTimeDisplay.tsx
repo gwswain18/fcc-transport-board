@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 
-export default function DateTimeDisplay() {
+interface DateTimeDisplayProps {
+  className?: string;
+}
+
+export default function DateTimeDisplay({ className = '' }: DateTimeDisplayProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -29,9 +33,9 @@ export default function DateTimeDisplay() {
   };
 
   return (
-    <div className="text-right text-sm">
-      <p className="font-medium text-gray-900">{formatTime(currentTime)}</p>
-      <p className="text-gray-500">{formatDate(currentTime)}</p>
+    <div className={`text-right text-sm ${className}`}>
+      <p className="font-medium text-white">{formatTime(currentTime)}</p>
+      <p className="opacity-75">{formatDate(currentTime)}</p>
     </div>
   );
 }

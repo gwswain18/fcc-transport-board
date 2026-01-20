@@ -402,7 +402,7 @@ export default function DispatcherView() {
               {/* Assigned */}
               {assignedRequests.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-sm font-medium text-blue-600 mb-2">
+                  <h3 className="text-sm font-medium text-primary mb-2">
                     Assigned ({assignedRequests.length})
                   </h3>
                   <div className="space-y-2">
@@ -520,8 +520,8 @@ export default function DispatcherView() {
                       }
                       className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
                         formData.priority === 'routine'
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-blue-100 text-blue-700'
+                          ? 'bg-primary text-white'
+                          : 'bg-primary-50 text-primary'
                       }`}
                     >
                       Routine
@@ -750,7 +750,7 @@ function RequestCard({
       <p className="text-sm text-gray-600 mb-2">{request.destination}</p>
 
       {request.assignee && (
-        <p className="text-sm text-blue-600 mb-2">
+        <p className="text-sm text-primary mb-2">
           Assigned to: {request.assignee.first_name} {request.assignee.last_name}
         </p>
       )}

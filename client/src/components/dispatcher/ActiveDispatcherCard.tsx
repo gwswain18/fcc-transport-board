@@ -118,7 +118,7 @@ export default function ActiveDispatcherCard({
               {!isCurrentUserPrimary && onSetPrimary && (
                 <button
                   onClick={onSetPrimary}
-                  className="w-full bg-blue-100 text-blue-700 hover:bg-blue-200 py-2 px-3 rounded-lg text-sm font-medium transition-colors"
+                  className="w-full bg-primary-50 text-primary hover:bg-primary-100 py-2 px-3 rounded-lg text-sm font-medium transition-colors"
                 >
                   Become Primary
                 </button>
@@ -137,7 +137,7 @@ export default function ActiveDispatcherCard({
             <div className="space-y-2">
               <button
                 onClick={() => handleReturnConfirm(true)}
-                className="w-full bg-blue-600 text-white hover:bg-blue-700 py-2 px-4 rounded-lg text-sm font-medium transition-colors"
+                className="w-full bg-primary text-white hover:bg-primary-700 py-2 px-4 rounded-lg text-sm font-medium transition-colors"
               >
                 Yes, as Primary
               </button>

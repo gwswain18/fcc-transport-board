@@ -24,12 +24,12 @@ export const formatTime = (dateString: string): string => {
 export const getStatusColor = (status: TransporterStatus): string => {
   const colors: Record<TransporterStatus, string> = {
     available: 'bg-green-500',
-    assigned: 'bg-blue-500',
-    accepted: 'bg-blue-600',
-    en_route: 'bg-purple-500',
-    with_patient: 'bg-orange-500',
+    assigned: 'bg-primary',
+    accepted: 'bg-primary-600',
+    en_route: 'bg-secondary',
+    with_patient: 'bg-accent',
     on_break: 'bg-yellow-500',
-    other: 'bg-gray-500',
+    other: 'bg-olive',
     offline: 'bg-gray-400',
   };
   return colors[status] || 'bg-gray-400';
@@ -52,13 +52,13 @@ export const getStatusLabel = (status: TransporterStatus): string => {
 export const getRequestStatusColor = (status: RequestStatus): string => {
   const colors: Record<RequestStatus, string> = {
     pending: 'bg-yellow-500',
-    assigned: 'bg-blue-500',
-    accepted: 'bg-blue-600',
-    en_route: 'bg-purple-500',
-    with_patient: 'bg-orange-500',
+    assigned: 'bg-primary',
+    accepted: 'bg-primary-600',
+    en_route: 'bg-secondary',
+    with_patient: 'bg-accent',
     complete: 'bg-green-500',
     cancelled: 'bg-red-500',
-    transferred_to_pct: 'bg-orange-400',
+    transferred_to_pct: 'bg-olive',
   };
   return colors[status] || 'bg-gray-400';
 };
@@ -78,7 +78,7 @@ export const getRequestStatusLabel = (status: RequestStatus): string => {
 };
 
 export const getPriorityColor = (priority: Priority): string => {
-  return priority === 'stat' ? 'bg-red-500' : 'bg-blue-500';
+  return priority === 'stat' ? 'bg-red-500' : 'bg-primary';
 };
 
 export const getElapsedTimeColor = (minutes: number): string => {
