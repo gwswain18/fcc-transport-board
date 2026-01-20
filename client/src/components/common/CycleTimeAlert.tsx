@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { CycleTimeAlert as CycleTimeAlertType } from '../../types';
+import { CycleTimeAlert as CycleTimeAlertType, TransportRequest } from '../../types';
 
 interface CycleTimeAlertProps {
   alert: CycleTimeAlertType;
+  request?: TransportRequest;
   onDismiss: (requestId: number, reason?: string) => void;
 }
 
-export default function CycleTimeAlert({ alert, onDismiss }: CycleTimeAlertProps) {
+export default function CycleTimeAlert({ alert, request, onDismiss }: CycleTimeAlertProps) {
   const [showReasonInput, setShowReasonInput] = useState(false);
   const [reason, setReason] = useState('');
 
@@ -29,7 +30,12 @@ export default function CycleTimeAlert({ alert, onDismiss }: CycleTimeAlertProps
   );
 
   const handleDismissClick = () => {
-    setShowReasonInput(true);
+    // If transporter already provided a reason, allow quick acknowledge
+    if (request?.delay_reason) {
+      onDismiss(alert.request_id, `Transporter provided: ${request.delay_reason}`);
+    } else {
+      setShowReasonInput(true);
+    }
   };
 
   const handleConfirmDismiss = () => {
@@ -52,6 +58,15 @@ export default function CycleTimeAlert({ alert, onDismiss }: CycleTimeAlertProps
     'Documentation pending',
   ];
 
+  // Build header text with transporter name if available
+  const headerText = request?.assignee
+    ? `${request.assignee.first_name} ${request.assignee.last_name}`
+    : `Request #${alert.request_id}`;
+
+  const locationText = request
+    ? ` (${request.origin_floor}-${request.room_number})`
+    : '';
+
   return (
     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
       <div className="flex items-start justify-between">
@@ -61,7 +76,7 @@ export default function CycleTimeAlert({ alert, onDismiss }: CycleTimeAlertProps
           </div>
           <div>
             <h4 className="text-sm font-medium text-yellow-800">
-              Cycle Time Alert - Request #{alert.request_id}
+              Cycle Time Alert - {headerText}{locationText}
             </h4>
             <p className="text-sm text-yellow-700 mt-1">
               <span className="font-medium">{phaseLabels[alert.phase] || alert.phase}</span>
@@ -74,14 +89,25 @@ export default function CycleTimeAlert({ alert, onDismiss }: CycleTimeAlertProps
               <span className="mx-2">|</span>
               <span className="font-medium">+{overagePercentage}% over average</span>
             </div>
+
+            {/* Show transporter's delay reason if provided */}
+            {request?.delay_reason && (
+              <p className="text-sm text-green-700 mt-2 bg-green-50 p-2 rounded">
+                <span className="font-medium">Transporter note:</span> {request.delay_reason}
+              </p>
+            )}
           </div>
         </div>
         {!showReasonInput && (
           <button
             onClick={handleDismissClick}
-            className="text-yellow-600 hover:text-yellow-800 text-sm font-medium"
+            className={`text-sm font-medium ${
+              request?.delay_reason
+                ? 'text-green-600 hover:text-green-800'
+                : 'text-yellow-600 hover:text-yellow-800'
+            }`}
           >
-            Dismiss
+            {request?.delay_reason ? 'Acknowledge' : 'Dismiss'}
           </button>
         )}
       </div>

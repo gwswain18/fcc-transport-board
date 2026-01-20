@@ -88,6 +88,7 @@ export interface TransportRequest {
   with_patient_at?: string;
   completed_at?: string;
   cancelled_at?: string;
+  delay_reason?: string;
   creator?: {
     id: number;
     first_name: string;

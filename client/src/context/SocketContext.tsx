@@ -54,6 +54,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [activeDispatchers, setActiveDispatchers] = useState<ActiveDispatcher[]>([]);
   const [alertSettings, setAlertSettings] = useState<AlertSettings | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
+  const [recentlyCompleted, setRecentlyCompleted] = useState<Map<number, number>>(new Map());
+  const [completedAlerts, setCompletedAlerts] = useState<CycleTimeAlert[]>([]);
   const heartbeatInterval = useRef<NodeJS.Timeout | null>(null);
 
   const requireExplanation = alertSettings?.require_explanation_on_dismiss ?? false;
@@ -129,6 +131,39 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         }
         return prev;
       });
+
+      // Track recently completed requests to keep their alerts visible for 30 seconds
+      if (request.status === 'complete') {
+        setRecentlyCompleted((prev) => {
+          const next = new Map(prev);
+          next.set(request.id, Date.now());
+          return next;
+        });
+
+        // Preserve cycle alert for this completed request
+        setCycleTimeAlerts((currentAlerts) => {
+          const alertForRequest = currentAlerts.find((a) => a.request_id === request.id);
+          if (alertForRequest) {
+            setCompletedAlerts((prev) => {
+              // Don't add duplicate
+              if (prev.some((a) => a.request_id === request.id)) return prev;
+              return [...prev, alertForRequest];
+            });
+          }
+          return currentAlerts;
+        });
+
+        // Clear from recently completed after 30 seconds
+        setTimeout(() => {
+          setRecentlyCompleted((prev) => {
+            const next = new Map(prev);
+            next.delete(request.id);
+            return next;
+          });
+          // Also remove from completed alerts
+          setCompletedAlerts((prev) => prev.filter((a) => a.request_id !== request.id));
+        }, 30000);
+      }
     });
 
     newSocket.on('request_cancelled', (request: TransportRequest) => {
@@ -235,6 +270,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
   const dismissCycleAlert = useCallback((requestId: number, explanation?: string) => {
     setCycleTimeAlerts((prev) => prev.filter((a) => a.request_id !== requestId));
+    setCompletedAlerts((prev) => prev.filter((a) => a.request_id !== requestId));
     if (socket) {
       socket.emit('cycle_alert_dismissed', { request_id: requestId, explanation });
     }
@@ -309,6 +345,16 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Combine active cycle alerts with preserved alerts for recently completed requests
+  // recentlyCompleted is used to track which requests recently finished (for 30-second alert window)
+  const visibleCycleAlerts = [
+    ...cycleTimeAlerts,
+    ...completedAlerts.filter(
+      (ca) => !cycleTimeAlerts.some((a) => a.request_id === ca.request_id) &&
+        recentlyCompleted.has(ca.request_id)
+    ),
+  ];
+
   return (
     <SocketContext.Provider
       value={{
@@ -317,7 +363,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         transporterStatuses,
         requests,
         alerts,
-        cycleTimeAlerts,
+        cycleTimeAlerts: visibleCycleAlerts,
         breakAlerts,
         offlineAlerts,
         activeDispatchers,

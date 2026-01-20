@@ -27,6 +27,9 @@ export default function TransporterView() {
   const [showShiftEndModal, setShowShiftEndModal] = useState(false);
   const [shiftLoading, setShiftLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDelayModal, setShowDelayModal] = useState(false);
+  const [delayReason, setDelayReason] = useState('');
+  const [pendingCompletion, setPendingCompletion] = useState(false);
 
   const myStatus = transporterStatuses.find((s) => s.user_id === user?.id);
   const currentJob = requests.find(
@@ -42,10 +45,18 @@ export default function TransporterView() {
       return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     });
 
-  // Get cycle time alerts for current job
-  const myAlerts = cycleTimeAlerts.filter(
-    (a) => currentJob && a.request_id === currentJob.id
-  );
+  // Get cycle time alert for current job
+  const currentJobAlert = currentJob
+    ? cycleTimeAlerts.find((a) => a.request_id === currentJob.id)
+    : null;
+
+  const phaseLabels: Record<string, string> = {
+    pending: 'Pending',
+    assigned: 'Response',
+    accepted: 'En Route',
+    en_route: 'Pickup',
+    with_patient: 'Transport',
+  };
 
   const handleStatusChange = async (status: TransporterStatus, explanation?: string) => {
     setLoading(true);
@@ -71,7 +82,6 @@ export default function TransporterView() {
 
   const handleJobAction = async () => {
     if (!currentJob) return;
-    setLoading(true);
 
     const nextStatus: Record<RequestStatus, RequestStatus> = {
       assigned: 'accepted',
@@ -84,9 +94,53 @@ export default function TransporterView() {
       transferred_to_pct: 'transferred_to_pct',
     };
 
-    await api.updateRequest(currentJob.id, { status: nextStatus[currentJob.status] });
+    const targetStatus = nextStatus[currentJob.status];
+
+    // If completing and there's an alert but no reason yet, prompt for one
+    if (targetStatus === 'complete' && currentJobAlert && !currentJob.delay_reason) {
+      setPendingCompletion(true);
+      setShowDelayModal(true);
+      return;
+    }
+
+    setLoading(true);
+    await api.updateRequest(currentJob.id, { status: targetStatus });
     await refreshData();
     setLoading(false);
+  };
+
+  const handleDelayNoteSave = async () => {
+    if (!currentJob) return;
+
+    setLoading(true);
+    if (delayReason.trim()) {
+      await api.updateRequest(currentJob.id, { delay_reason: delayReason.trim() });
+    }
+
+    if (pendingCompletion) {
+      await api.updateRequest(currentJob.id, { status: 'complete' });
+      setPendingCompletion(false);
+    }
+
+    setShowDelayModal(false);
+    setDelayReason('');
+    await refreshData();
+    setLoading(false);
+  };
+
+  const handleDelayNoteSkip = async () => {
+    if (!currentJob) return;
+
+    setShowDelayModal(false);
+    setDelayReason('');
+
+    if (pendingCompletion) {
+      setLoading(true);
+      await api.updateRequest(currentJob.id, { status: 'complete' });
+      setPendingCompletion(false);
+      await refreshData();
+      setLoading(false);
+    }
   };
 
   const handleClaimJob = async (jobId: number) => {
@@ -154,6 +208,13 @@ export default function TransporterView() {
     }`;
   };
 
+  const quickDelayReasons = [
+    'Patient not ready',
+    'Elevator delay',
+    'Waiting for equipment',
+    'Staff coordination',
+  ];
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -210,14 +271,32 @@ export default function TransporterView() {
           </div>
         </div>
 
-        {/* Cycle Time Alerts */}
-        {myAlerts.map((alert) => (
-          <CycleTimeAlert
-            key={alert.request_id}
-            alert={alert}
-            onDismiss={dismissCycleAlert}
-          />
-        ))}
+        {/* Cycle Time Alert Indicator for Current Job */}
+        {currentJobAlert && (
+          <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-3 animate-pulse-subtle">
+            <p className="text-yellow-800 font-medium text-sm">
+              This job is taking longer than usual ({phaseLabels[currentJobAlert.phase]} phase)
+            </p>
+            <button
+              onClick={() => setShowDelayModal(true)}
+              className="mt-2 text-sm bg-yellow-200 hover:bg-yellow-300 text-yellow-800 px-3 py-1 rounded"
+            >
+              Add Delay Note
+            </button>
+          </div>
+        )}
+
+        {/* Cycle Time Alerts (for dismissed alerts visibility) */}
+        {cycleTimeAlerts
+          .filter((a) => currentJob && a.request_id === currentJob.id)
+          .map((alert) => (
+            <CycleTimeAlert
+              key={alert.request_id}
+              alert={alert}
+              request={currentJob}
+              onDismiss={dismissCycleAlert}
+            />
+          ))}
 
         {/* Current Status */}
         <div className="card">
@@ -275,7 +354,7 @@ export default function TransporterView() {
 
         {/* Current Job Card */}
         {currentJob ? (
-          <div className="card border-2 border-primary-200">
+          <div className={`card border-2 ${currentJobAlert ? 'border-yellow-400 animate-pulse-subtle' : 'border-primary-200'}`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Current Job</h2>
               <PriorityBadge priority={currentJob.priority} size="lg" />
@@ -295,6 +374,15 @@ export default function TransporterView() {
                 </div>
               )}
 
+              {/* Show if delay reason already provided */}
+              {currentJob.delay_reason && (
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <p className="text-sm text-green-700">
+                    <span className="font-medium">Delay note:</span> {currentJob.delay_reason}
+                  </p>
+                </div>
+              )}
+
               <div className="flex items-center justify-center gap-2 text-gray-600">
                 <span>Elapsed:</span>
                 <ElapsedTimer startTime={currentJob.created_at} className="text-xl" />
@@ -308,13 +396,21 @@ export default function TransporterView() {
                 {loading ? 'Processing...' : getActionButtonText()}
               </button>
 
-              {/* Help Button */}
-              <button
-                onClick={handleRequestHelp}
-                className="w-full py-2 text-gray-600 hover:text-gray-800 text-sm"
-              >
-                Request Help
-              </button>
+              {/* Add Note Button (always visible) */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowDelayModal(true)}
+                  className="flex-1 py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg"
+                >
+                  + Add Note
+                </button>
+                <button
+                  onClick={handleRequestHelp}
+                  className="flex-1 py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg"
+                >
+                  Request Help
+                </button>
+              </div>
             </div>
           </div>
         ) : (
@@ -373,6 +469,67 @@ export default function TransporterView() {
             ))}
           </div>
         )}
+      </Modal>
+
+      {/* Delay Note Modal */}
+      <Modal
+        isOpen={showDelayModal}
+        onClose={() => {
+          if (!pendingCompletion) {
+            setShowDelayModal(false);
+            setDelayReason('');
+          }
+        }}
+        title="Delay Note"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-600">
+            {pendingCompletion
+              ? 'Please explain the delay (optional but helpful):'
+              : 'Add a note explaining any delays:'}
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            {quickDelayReasons.map((reason) => (
+              <button
+                key={reason}
+                onClick={() => setDelayReason(reason)}
+                className={`text-sm px-3 py-1 rounded ${
+                  delayReason === reason
+                    ? 'bg-primary text-white'
+                    : 'bg-gray-100 hover:bg-gray-200'
+                }`}
+              >
+                {reason}
+              </button>
+            ))}
+          </div>
+
+          <input
+            type="text"
+            value={delayReason}
+            onChange={(e) => setDelayReason(e.target.value)}
+            placeholder="Or enter custom reason..."
+            className="input w-full"
+          />
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleDelayNoteSave}
+              disabled={loading}
+              className="btn-primary flex-1"
+            >
+              {loading ? 'Saving...' : pendingCompletion ? 'Save & Complete' : 'Save Note'}
+            </button>
+            <button
+              onClick={handleDelayNoteSkip}
+              disabled={loading}
+              className="btn-secondary"
+            >
+              Skip
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Other Status Modal */}

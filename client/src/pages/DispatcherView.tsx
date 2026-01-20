@@ -7,6 +7,7 @@ import {
   TransportRequest,
   TransporterStatusRecord,
   CreateTransportRequestData,
+  CycleTimeAlert as CycleTimeAlertType,
 } from '../types';
 import Header from '../components/common/Header';
 import { TransporterStatusBadge } from '../components/common/StatusBadge';
@@ -142,6 +143,19 @@ export default function DispatcherView() {
   };
 
   const handleAssignRequest = async (requestId: number, transporterId: number) => {
+    // Find the request to check its status
+    const request = requests.find(r => r.id === requestId);
+    const inProgressStatuses = ['accepted', 'en_route', 'with_patient'];
+
+    if (request && inProgressStatuses.includes(request.status)) {
+      const confirmed = confirm(
+        `This request is currently in progress (${request.status.replace('_', ' ')}). ` +
+        `The current transporter (${request.assignee?.first_name} ${request.assignee?.last_name}) ` +
+        `will be removed from this job. Are you sure you want to reassign?`
+      );
+      if (!confirmed) return;
+    }
+
     setLoading(true);
     await api.updateRequest(requestId, { assigned_to: transporterId });
     await refreshData();
@@ -188,7 +202,18 @@ export default function DispatcherView() {
   };
 
   const handleAssignToPCT = async (requestId: number) => {
-    if (!confirm('Transfer this request to PCT? The request will auto-close after the configured time.')) return;
+    const request = requests.find(r => r.id === requestId);
+    const inProgressStatuses = ['accepted', 'en_route', 'with_patient'];
+
+    let confirmMessage = 'Transfer this request to PCT? The request will auto-close after the configured time.';
+
+    if (request && inProgressStatuses.includes(request.status)) {
+      confirmMessage = `This request is currently in progress (${request.status.replace('_', ' ')}). ` +
+        `The current transporter (${request.assignee?.first_name} ${request.assignee?.last_name}) ` +
+        `will be removed from this job. Transfer to PCT?`;
+    }
+
+    if (!confirm(confirmMessage)) return;
     setLoading(true);
     await api.assignToPCT(requestId);
     await refreshData();
@@ -334,6 +359,7 @@ export default function DispatcherView() {
               <CycleTimeAlert
                 key={alert.request_id}
                 alert={alert}
+                request={requests.find(r => r.id === alert.request_id)}
                 onDismiss={dismissCycleAlert}
               />
             ))}
@@ -393,6 +419,8 @@ export default function DispatcherView() {
                         onCancel={() => handleCancelRequest(request.id)}
                         onAssignToPCT={() => handleAssignToPCT(request.id)}
                         showAutoAssign
+                        cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
+                        onDismissAlert={dismissCycleAlert}
                       />
                     ))}
                   </div>
@@ -412,6 +440,8 @@ export default function DispatcherView() {
                         request={request}
                         onAssign={() => openAssignModal(request)}
                         onCancel={() => handleCancelRequest(request.id)}
+                        cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
+                        onDismissAlert={dismissCycleAlert}
                       />
                     ))}
                   </div>
@@ -429,7 +459,11 @@ export default function DispatcherView() {
                       <RequestCard
                         key={request.id}
                         request={request}
+                        onAssign={() => openAssignModal(request)}
                         onCancel={() => handleCancelRequest(request.id)}
+                        onAssignToPCT={() => handleAssignToPCT(request.id)}
+                        cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
+                        onDismissAlert={dismissCycleAlert}
                       />
                     ))}
                   </div>
@@ -721,17 +755,28 @@ function RequestCard({
   onCancel,
   onAssignToPCT,
   showAutoAssign,
+  cycleTimeAlert,
+  onDismissAlert,
 }: {
   request: TransportRequest;
   onAssign?: () => void;
   onCancel?: () => void;
   onAssignToPCT?: () => void;
   showAutoAssign?: boolean;
+  cycleTimeAlert?: CycleTimeAlertType;
+  onDismissAlert?: (requestId: number, reason?: string) => void;
 }) {
   const isPCTTransfer = request.status === 'transferred_to_pct';
+  const hasAlert = !!cycleTimeAlert;
 
   return (
-    <div className={`rounded-lg p-3 ${isPCTTransfer ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
+    <div className={`rounded-lg p-3 ${
+      isPCTTransfer
+        ? 'bg-orange-50 border border-orange-200'
+        : hasAlert
+          ? 'bg-yellow-50 border-2 border-yellow-400 animate-pulse-subtle'
+          : 'bg-gray-50'
+    }`}>
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
           <PriorityBadge priority={request.priority} size="sm" />
@@ -776,6 +821,21 @@ function RequestCard({
             className="bg-orange-100 text-orange-700 hover:bg-orange-200 px-3 py-1 rounded text-sm font-medium"
           >
             To PCT
+          </button>
+        )}
+        {hasAlert && onDismissAlert && (
+          <button
+            onClick={() => {
+              if (request.delay_reason) {
+                onDismissAlert(request.id, `Transporter provided: ${request.delay_reason}`);
+              } else {
+                const reason = prompt('Reason for dismissing alert:');
+                if (reason) onDismissAlert(request.id, reason);
+              }
+            }}
+            className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 px-3 py-1 rounded text-sm font-medium"
+          >
+            {request.delay_reason ? 'Acknowledge' : 'Dismiss Alert'}
           </button>
         )}
         {onCancel && !isPCTTransfer && (

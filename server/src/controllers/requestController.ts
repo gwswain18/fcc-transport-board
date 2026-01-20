@@ -281,7 +281,7 @@ export const updateRequest = async (
     }
 
     const { id } = req.params;
-    const { status, assigned_to } = req.body;
+    const { status, assigned_to, delay_reason } = req.body;
 
     const existing = await query('SELECT * FROM transport_requests WHERE id = $1', [id]);
 
@@ -389,6 +389,12 @@ export const updateRequest = async (
           }
         }
       }
+    }
+
+    // Handle delay_reason update
+    if (delay_reason !== undefined) {
+      updates.push(`delay_reason = $${paramIndex++}`);
+      params.push(delay_reason);
     }
 
     // Handle assignment change

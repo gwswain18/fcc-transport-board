@@ -165,7 +165,7 @@ export const api = {
       }
     ),
 
-  updateRequest: (id: number, data: { status?: string; assigned_to?: number }) =>
+  updateRequest: (id: number, data: { status?: string; assigned_to?: number; delay_reason?: string }) =>
     request<{ request: import('../types').TransportRequest; message: string }>(
       `/requests/${id}`,
       {
