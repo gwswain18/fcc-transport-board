@@ -6,16 +6,16 @@ services:
     buildCommand: cd server && npm install && npm run build
     startCommand: cd server && npm start
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        sync: false
-            - key: JWT_SECRET
-                value: aR7QGPCw2XgvnZppCtLZOISTnU1vgEmh5Nixt8tNG9Y=
-     - key: CLIENT_URL
-       value: https://placeholder.com
-     - key: LOG_LEVEL
-        value: info
+- key: NODE_ENV
+    value: production
+  - key: DATABASE_URL
+    value: ""
+  - key: JWT_SECRET
+    value: aR7QGPCw2XgvnZppCtLZOISTnU1vgEmh5Nixt8tNG9Y=
+  - key: CLIENT_URL
+    value: https://placeholder.com
+  - key: LOG_LEVEL
+    value: info
 
   # Frontend
   - type: web
