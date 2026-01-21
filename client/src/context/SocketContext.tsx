@@ -73,7 +73,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const newSocket = io({
+    // In production, connect to the API server URL
+    // In development, use relative path (Vite proxy handles it)
+    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || undefined;
+    const newSocket = io(socketUrl, {
       withCredentials: true,
     });
 
