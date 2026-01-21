@@ -285,10 +285,9 @@ export const exportData = async (
         tr.id,
         tr.origin_floor,
         tr.room_number,
-        tr.patient_initials,
         tr.destination,
         tr.priority,
-        tr.special_needs,
+        tr.notes,
         tr.status,
         tr.created_at,
         tr.assigned_at,
@@ -309,8 +308,8 @@ export const exportData = async (
 
     // Convert to CSV
     const headers = [
-      'ID', 'Floor', 'Room', 'Initials', 'Destination', 'Priority',
-      'Special Needs', 'Status', 'Created At', 'Assigned At', 'Accepted At',
+      'ID', 'Floor', 'Room', 'Destination', 'Priority',
+      'Notes', 'Status', 'Created At', 'Assigned At', 'Accepted At',
       'En Route At', 'With Patient At', 'Completed At', 'Cancelled At',
       'Created By', 'Assigned To'
     ];
@@ -319,10 +318,9 @@ export const exportData = async (
       row.id,
       row.origin_floor,
       row.room_number,
-      row.patient_initials || '',
       row.destination,
       row.priority,
-      JSON.stringify(row.special_needs),
+      row.notes || '',
       row.status,
       row.created_at,
       row.assigned_at || '',
