@@ -83,7 +83,7 @@ export default function ManagerDashboard() {
       api.getReportSummary(params),
       api.getReportByTransporter(params),
       api.getJobsByHour(params),
-      api.getJobsByDay(7),
+      api.getJobsByDay(params),
       api.getTimeMetrics(params),
     ]);
 
@@ -333,7 +333,7 @@ export default function ManagerDashboard() {
 
               {/* Jobs by Day */}
               <div className="card">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Jobs by Day (Last 7 Days)</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Jobs by Day</h3>
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={jobsByDay}>

@@ -714,20 +714,27 @@ export const getTimeMetrics = async (
   }
 };
 
-// Get jobs by day (for the last N days)
+// Get jobs by day of week (aggregated across date range)
 export const getJobsByDay = async (
   req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
-    const days = parseInt(req.query.days as string) || 7;
-    const { floor, transporter_id } = req.query;
+    const { start_date, end_date, floor, transporter_id } = req.query;
 
     let whereClause = "WHERE status = 'complete'";
-    const params: unknown[] = [days];
-    let paramIndex = 2;
+    const params: unknown[] = [];
+    let paramIndex = 1;
 
-    whereClause += ` AND created_at >= CURRENT_DATE - INTERVAL '1 day' * $1`;
+    if (start_date) {
+      whereClause += ` AND created_at >= $${paramIndex++}`;
+      params.push(start_date);
+    }
+
+    if (end_date) {
+      whereClause += ` AND created_at <= $${paramIndex++}`;
+      params.push(end_date);
+    }
 
     if (floor) {
       whereClause += ` AND origin_floor = $${paramIndex++}`;
@@ -739,20 +746,30 @@ export const getJobsByDay = async (
       params.push(transporter_id);
     }
 
+    // Aggregate jobs by day of week (0=Sun, 1=Mon, ..., 6=Sat in PostgreSQL)
     const result = await query(
-      `SELECT
-        DATE(created_at) as date,
-        COUNT(*) as count
-       FROM transport_requests
-       ${whereClause}
-       GROUP BY DATE(created_at)
-       ORDER BY date`,
+      `WITH days_of_week AS (
+        SELECT unnest(ARRAY[0, 1, 2, 3, 4, 5, 6]) AS dow
+      ),
+      job_counts AS (
+        SELECT EXTRACT(DOW FROM created_at)::int AS dow, COUNT(*) as count
+        FROM transport_requests
+        ${whereClause}
+        GROUP BY EXTRACT(DOW FROM created_at)
+      )
+      SELECT
+        dw.dow,
+        COALESCE(jc.count, 0) as count
+      FROM days_of_week dw
+      LEFT JOIN job_counts jc ON dw.dow = jc.dow
+      ORDER BY CASE WHEN dw.dow = 0 THEN 7 ELSE dw.dow END`,
       params
     );
 
-    // Format dates for display
+    // Map day of week numbers to names (ordered Mon-Sun)
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const jobsByDay = result.rows.map(row => ({
-      date: new Date(row.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+      date: dayNames[row.dow],
       count: parseInt(row.count),
     }));
 

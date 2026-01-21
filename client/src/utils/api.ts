@@ -335,8 +335,20 @@ export const api = {
     );
   },
 
-  getJobsByDay: (days: number = 7) =>
-    request<{ jobsByDay: { date: string; count: number }[] }>(`/reports/by-day?days=${days}`),
+  getJobsByDay: (params?: { start_date?: string; end_date?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
+    return request<{ jobsByDay: { date: string; count: number }[] }>(
+      `/reports/by-day${query ? `?${query}` : ''}`
+    );
+  },
 
   getStaffingByFloor: (params?: { start_date?: string; end_date?: string }) => {
     const searchParams = new URLSearchParams();

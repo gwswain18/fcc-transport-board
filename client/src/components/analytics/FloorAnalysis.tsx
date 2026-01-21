@@ -32,10 +32,10 @@ interface FloorAnalysisProps {
 }
 
 const FLOOR_COLORS: Record<Floor, string> = {
-  FCC1: '#3B82F6',
-  FCC4: '#10B981',
-  FCC5: '#F59E0B',
-  FCC6: '#8B5CF6',
+  FCC1: '#002952',  // Primary - Prussian Blue
+  FCC4: '#8598c1',  // Secondary - Wisteria Blue
+  FCC5: '#a36d00',  // Accent - Golden Earth
+  FCC6: '#4a6fa5',  // Mid-tone blue
 };
 
 export default function FloorAnalysis({ dateRange }: FloorAnalysisProps) {
@@ -115,9 +115,9 @@ export default function FloorAnalysis({ dateRange }: FloorAnalysisProps) {
               <YAxis dataKey="floor" type="category" />
               <Tooltip formatter={(value: number) => formatMinutes(value)} />
               <Legend />
-              <Bar dataKey="Response" fill="#10B981" name="Response Time" />
-              <Bar dataKey="Pickup" fill="#3B82F6" name="Pickup Time" />
-              <Bar dataKey="Transport" fill="#F59E0B" name="Transport Time" />
+              <Bar dataKey="Response" fill="#002952" name="Response Time" />
+              <Bar dataKey="Pickup" fill="#8598c1" name="Pickup Time" />
+              <Bar dataKey="Transport" fill="#a36d00" name="Transport Time" />
             </BarChart>
           </ResponsiveContainer>
         </div>
