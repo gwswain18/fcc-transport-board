@@ -2,13 +2,14 @@ import { query } from '../config/database.js';
 import { getIO } from '../socket/index.js';
 import { getHeartbeatTimeoutMs, getBreakAlertMinutes, getAlertSettings } from './configService.js';
 import { logStatusChange } from './auditService.js';
+import logger from '../utils/logger.js';
 
 const CHECK_INTERVAL_MS = 30000; // 30 seconds
 
 let intervalId: NodeJS.Timeout | null = null;
 
 export const startHeartbeatService = () => {
-  console.log('Starting heartbeat service...');
+  logger.info('Starting heartbeat service...');
 
   if (intervalId) {
     clearInterval(intervalId);
@@ -19,7 +20,7 @@ export const startHeartbeatService = () => {
       await checkHeartbeats();
       await checkBreakDurations();
     } catch (error) {
-      console.error('Heartbeat service error:', error);
+      logger.error('Heartbeat service error:', error);
     }
   }, CHECK_INTERVAL_MS);
 };
@@ -128,7 +129,7 @@ const checkHeartbeats = async () => {
       io.emit('transporter_status_changed', statusResult.rows[0]);
     }
 
-    console.log(`User ${row.user_id} marked offline due to heartbeat timeout`);
+    logger.info(`User ${row.user_id} marked offline due to heartbeat timeout`);
   }
 };
 
@@ -169,7 +170,7 @@ const checkBreakDurations = async () => {
       last_name: row.last_name,
     });
 
-    console.log(
+    logger.info(
       `Break alert: User ${row.user_id} (${row.first_name} ${row.last_name}) on break for ${minutesOnBreak} minutes`
     );
   }

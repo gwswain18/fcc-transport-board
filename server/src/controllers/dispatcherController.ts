@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../config/database.js';
 import { getIO } from '../socket/index.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import logger from '../utils/logger.js';
 
 // Helper to transform flat dispatcher rows to nested structure
 const transformDispatcherRows = (rows: any[]) => {
@@ -40,7 +41,7 @@ export const getActiveDispatchers = async (_req: Request, res: Response) => {
     const dispatchers = transformDispatcherRows(result.rows);
     res.json({ dispatchers });
   } catch (error) {
-    console.error('Get active dispatchers error:', error);
+    logger.error('Get active dispatchers error:', error);
     res.status(500).json({ error: 'Failed to get active dispatchers' });
   }
 };
@@ -86,7 +87,7 @@ export const setPrimaryDispatcher = async (req: AuthenticatedRequest, res: Respo
 
     res.json({ message: 'Set as primary dispatcher' });
   } catch (error) {
-    console.error('Set primary dispatcher error:', error);
+    logger.error('Set primary dispatcher error:', error);
     res.status(500).json({ error: 'Failed to set primary dispatcher' });
   }
 };
@@ -119,7 +120,7 @@ export const registerAsDispatcher = async (req: AuthenticatedRequest, res: Respo
 
     res.json({ message: 'Registered as assistant dispatcher' });
   } catch (error) {
-    console.error('Register as dispatcher error:', error);
+    logger.error('Register as dispatcher error:', error);
     res.status(500).json({ error: 'Failed to register as dispatcher' });
   }
 };
@@ -178,7 +179,7 @@ export const takeBreak = async (req: AuthenticatedRequest, res: Response) => {
 
     res.json({ message: 'On break' });
   } catch (error) {
-    console.error('Take break error:', error);
+    logger.error('Take break error:', error);
     res.status(500).json({ error: 'Failed to take break' });
   }
 };
@@ -242,7 +243,7 @@ export const returnFromBreak = async (req: AuthenticatedRequest, res: Response) 
 
     res.json({ message: 'Returned from break' });
   } catch (error) {
-    console.error('Return from break error:', error);
+    logger.error('Return from break error:', error);
     res.status(500).json({ error: 'Failed to return from break' });
   }
 };
@@ -262,7 +263,7 @@ export const endDispatcherSession = async (req: AuthenticatedRequest, res: Respo
 
     res.json({ message: 'Dispatcher session ended' });
   } catch (error) {
-    console.error('End dispatcher session error:', error);
+    logger.error('End dispatcher session error:', error);
     res.status(500).json({ error: 'Failed to end dispatcher session' });
   }
 };
@@ -299,7 +300,7 @@ export const getAvailableDispatchers = async (_req: Request, res: Response) => {
 
     res.json({ dispatchers: result.rows });
   } catch (error) {
-    console.error('Get available dispatchers error:', error);
+    logger.error('Get available dispatchers error:', error);
     res.status(500).json({ error: 'Failed to get available dispatchers' });
   }
 };

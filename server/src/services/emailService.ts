@@ -4,6 +4,19 @@
 import nodemailer from 'nodemailer';
 import { query } from '../config/database.js';
 import crypto from 'crypto';
+import logger from '../utils/logger.js';
+
+// HTML escape function to prevent XSS in email templates
+const escapeHtml = (text: string): string => {
+  const htmlEscapes: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  };
+  return text.replace(/[&<>"']/g, (char) => htmlEscapes[char]);
+};
 
 interface EmailConfig {
   host: string;
@@ -38,7 +51,7 @@ const getConfig = (): EmailConfig | null => {
 export const initializeEmail = async (): Promise<boolean> => {
   const config = getConfig();
   if (!config) {
-    console.log('Email not configured - email notifications disabled');
+    logger.info('Email not configured - email notifications disabled');
     return false;
   }
 
@@ -55,10 +68,10 @@ export const initializeEmail = async (): Promise<boolean> => {
 
     // Verify connection
     await transporter.verify();
-    console.log('Email service initialized');
+    logger.info('Email service initialized');
     return true;
   } catch (error) {
-    console.error('Failed to initialize email service:', error);
+    logger.error('Failed to initialize email service:', error);
     return false;
   }
 };
@@ -89,7 +102,7 @@ export const sendEmail = async (
 
     return { success: true, messageId: result.messageId };
   } catch (error) {
-    console.error('Email send error:', error);
+    logger.error('Email send error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -127,10 +140,10 @@ export const sendPasswordResetEmail = async (
 
   const html = `
     <h2>Password Reset Request</h2>
-    <p>Hello ${first_name},</p>
+    <p>Hello ${escapeHtml(first_name)},</p>
     <p>We received a request to reset your FCC Transport Board password.</p>
     <p>Click the link below to reset your password:</p>
-    <p><a href="${resetUrl}" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
+    <p><a href="${escapeHtml(resetUrl)}" style="background-color: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a></p>
     <p>This link will expire in 1 hour.</p>
     <p>If you did not request a password reset, please ignore this email.</p>
     <p>- FCC Transport Board Team</p>
@@ -157,9 +170,9 @@ export const sendUsernameRecoveryEmail = async (
 
   const html = `
     <h2>Username Recovery</h2>
-    <p>Hello ${first_name},</p>
+    <p>Hello ${escapeHtml(first_name)},</p>
     <p>Your FCC Transport Board username (email) is:</p>
-    <p><strong>${email}</strong></p>
+    <p><strong>${escapeHtml(email)}</strong></p>
     <p>If you did not request this information, please ignore this email.</p>
     <p>- FCC Transport Board Team</p>
   `;

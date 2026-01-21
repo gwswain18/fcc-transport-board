@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import logger from '../utils/logger.js';
 
 interface OfflineAction {
   action_type: string;
@@ -75,7 +76,7 @@ export const syncOfflineActions = async (req: AuthenticatedRequest, res: Respons
 
     res.json(response);
   } catch (error) {
-    console.error('Sync offline actions error:', error);
+    logger.error('Sync offline actions error:', error);
     res.status(500).json({ error: 'Failed to sync offline actions' });
   }
 };
@@ -220,7 +221,7 @@ export const getPendingActions = async (req: AuthenticatedRequest, res: Response
 
     res.json({ actions: result.rows });
   } catch (error) {
-    console.error('Get pending actions error:', error);
+    logger.error('Get pending actions error:', error);
     res.status(500).json({ error: 'Failed to get pending actions' });
   }
 };

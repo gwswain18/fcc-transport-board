@@ -13,6 +13,7 @@ import { startCycleTimeService } from './services/cycleTimeService.js';
 import { startAutoAssignService } from './services/autoAssignService.js';
 import { initializeTwilio } from './services/twilioService.js';
 import { initializeEmail } from './services/emailService.js';
+import logger from './utils/logger.js';
 
 dotenv.config();
 
@@ -36,7 +37,7 @@ app.use('/api', routes);
 
 // Error handling middleware
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
+  logger.error('Unhandled error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
@@ -44,8 +45,8 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 const PORT = process.env.PORT || 3001;
 
 httpServer.listen(PORT, async () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`Server running on port ${PORT}`);
+  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
 
   // Start services
   startAlertService();
@@ -57,7 +58,7 @@ httpServer.listen(PORT, async () => {
   await initializeTwilio();
   await initializeEmail();
 
-  console.log('All services started');
+  logger.info('All services started');
 });
 
 export default app;

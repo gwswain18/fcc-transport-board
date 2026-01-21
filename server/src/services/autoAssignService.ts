@@ -3,13 +3,14 @@ import { getIO } from '../socket/index.js';
 import { getAutoAssignTimeoutMs } from './configService.js';
 import { logStatusChange } from './auditService.js';
 import { Floor, TransportRequest } from '../types/index.js';
+import logger from '../utils/logger.js';
 
 const CHECK_INTERVAL_MS = 30000; // 30 seconds
 
 let intervalId: NodeJS.Timeout | null = null;
 
 export const startAutoAssignService = () => {
-  console.log('Starting auto-assign service...');
+  logger.info('Starting auto-assign service...');
 
   if (intervalId) {
     clearInterval(intervalId);
@@ -19,7 +20,7 @@ export const startAutoAssignService = () => {
     try {
       await checkAutoAssignTimeouts();
     } catch (error) {
-      console.error('Auto-assign service error:', error);
+      logger.error('Auto-assign service error:', error);
     }
   }, CHECK_INTERVAL_MS);
 };

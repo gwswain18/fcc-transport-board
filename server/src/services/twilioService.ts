@@ -2,6 +2,7 @@
 // Requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER environment variables
 
 import { query } from '../config/database.js';
+import logger from '../utils/logger.js';
 
 interface TwilioConfig {
   accountSid: string;
@@ -30,7 +31,7 @@ const getConfig = (): TwilioConfig | null => {
 export const initializeTwilio = async (): Promise<boolean> => {
   const config = getConfig();
   if (!config) {
-    console.log('Twilio not configured - SMS notifications disabled');
+    logger.info('Twilio not configured - SMS notifications disabled');
     return false;
   }
 
@@ -38,10 +39,10 @@ export const initializeTwilio = async (): Promise<boolean> => {
     // Dynamic import to avoid requiring twilio if not configured
     const twilio = await import('twilio');
     twilioClient = twilio.default(config.accountSid, config.authToken);
-    console.log('Twilio SMS service initialized');
+    logger.info('Twilio SMS service initialized');
     return true;
   } catch (error) {
-    console.error('Failed to initialize Twilio:', error);
+    logger.error('Failed to initialize Twilio:', error);
     return false;
   }
 };
@@ -74,7 +75,7 @@ export const sendSMS = async (
 
     return { success: true, messageId: result.sid };
   } catch (error) {
-    console.error('SMS send error:', error);
+    logger.error('SMS send error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

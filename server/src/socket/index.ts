@@ -3,6 +3,7 @@ import { Server, Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt.js';
 import { recordHeartbeat, removeHeartbeat } from '../services/heartbeatService.js';
 import { query } from '../config/database.js';
+import logger from '../utils/logger.js';
 
 let io: Server | null = null;
 
@@ -38,7 +39,7 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
 
   io.on('connection', async (socket) => {
     const userId = (socket as Socket & { userId?: number }).userId;
-    console.log(`Client connected: ${socket.id} (user: ${userId})`);
+    logger.info(`Client connected: ${socket.id} (user: ${userId})`);
 
     if (userId) {
       socketUserMap.set(socket.id, userId);
@@ -78,7 +79,7 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
 
         socket.emit('dispatcher_changed', { dispatchers });
       } catch (error) {
-        console.error('Error sending initial dispatcher data:', error);
+        logger.error('Error sending initial dispatcher data:', error);
       }
 
       // Update user status to available if they're a transporter with an active shift
@@ -108,7 +109,7 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     }
 
     socket.on('disconnect', async () => {
-      console.log(`Client disconnected: ${socket.id}`);
+      logger.info(`Client disconnected: ${socket.id}`);
       const disconnectedUserId = socketUserMap.get(socket.id);
 
       if (disconnectedUserId) {
@@ -176,32 +177,32 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     // Join role-specific rooms
     socket.on('join_room', (room: string) => {
       socket.join(room);
-      console.log(`Socket ${socket.id} joined room: ${room}`);
+      logger.info(`Socket ${socket.id} joined room: ${room}`);
     });
 
     socket.on('leave_room', (room: string) => {
       socket.leave(room);
-      console.log(`Socket ${socket.id} left room: ${room}`);
+      logger.info(`Socket ${socket.id} left room: ${room}`);
     });
 
     // Cycle time alert dismissed
     socket.on('cycle_alert_dismissed', async (data: { request_id: number; explanation?: string }) => {
-      console.log(`Cycle alert dismissed for request ${data.request_id}: ${data.explanation || 'no explanation'}`);
+      logger.info(`Cycle alert dismissed for request ${data.request_id}: ${data.explanation || 'no explanation'}`);
     });
 
     // Break alert dismissed
     socket.on('break_alert_dismissed', async (data: { user_id: number; explanation?: string }) => {
-      console.log(`Break alert dismissed for user ${data.user_id}: ${data.explanation || 'no explanation'}`);
+      logger.info(`Break alert dismissed for user ${data.user_id}: ${data.explanation || 'no explanation'}`);
     });
 
     // Offline alert dismissed
     socket.on('offline_alert_dismissed', async (data: { user_id: number; explanation?: string }) => {
-      console.log(`Offline alert dismissed for user ${data.user_id}: ${data.explanation || 'no explanation'}`);
+      logger.info(`Offline alert dismissed for user ${data.user_id}: ${data.explanation || 'no explanation'}`);
     });
 
     // Timeout alert dismissed
     socket.on('timeout_alert_dismissed', async (data: { request_id: number; explanation?: string }) => {
-      console.log(`Timeout alert dismissed for request ${data.request_id}: ${data.explanation || 'no explanation'}`);
+      logger.info(`Timeout alert dismissed for request ${data.request_id}: ${data.explanation || 'no explanation'}`);
     });
 
     // Transporter requests help
@@ -212,12 +213,12 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
           request_id: data.request_id,
           message: data.message,
         });
-        console.log(`Help requested by user ${userId}: ${data.message}`);
+        logger.info(`Help requested by user ${userId}: ${data.message}`);
       }
     });
   });
 
-  console.log('Socket.io initialized');
+  logger.info('Socket.io initialized');
   return io;
 };
 

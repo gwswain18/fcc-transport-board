@@ -4,6 +4,7 @@ import { getIO } from '../socket/index.js';
 import { logShiftStart, logShiftEnd } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import { AuthenticatedRequest, Floor } from '../types/index.js';
+import logger from '../utils/logger.js';
 
 interface StartShiftInput {
   extension?: string;
@@ -70,7 +71,7 @@ export const startShift = async (req: AuthenticatedRequest, res: Response) => {
 
     res.json({ shift, message: 'Shift started successfully' });
   } catch (error) {
-    console.error('Start shift error:', error);
+    logger.error('Start shift error:', error);
     res.status(500).json({ error: 'Failed to start shift' });
   }
 };
@@ -134,7 +135,7 @@ export const endShift = async (req: AuthenticatedRequest, res: Response) => {
 
     res.json({ shift, message: 'Shift ended successfully' });
   } catch (error) {
-    console.error('End shift error:', error);
+    logger.error('End shift error:', error);
     res.status(500).json({ error: 'Failed to end shift' });
   }
 };
@@ -169,7 +170,7 @@ export const updateExtension = async (req: AuthenticatedRequest, res: Response) 
 
     res.json({ shift: result.rows[0], message: 'Extension updated' });
   } catch (error) {
-    console.error('Update extension error:', error);
+    logger.error('Update extension error:', error);
     res.status(500).json({ error: 'Failed to update extension' });
   }
 };
@@ -193,7 +194,7 @@ export const getCurrentShift = async (req: AuthenticatedRequest, res: Response) 
 
     res.json({ shift: result.rows[0] });
   } catch (error) {
-    console.error('Get current shift error:', error);
+    logger.error('Get current shift error:', error);
     res.status(500).json({ error: 'Failed to get current shift' });
   }
 };
@@ -236,7 +237,7 @@ export const getShiftHistory = async (req: Request, res: Response) => {
 
     res.json({ shifts: result.rows });
   } catch (error) {
-    console.error('Get shift history error:', error);
+    logger.error('Get shift history error:', error);
     res.status(500).json({ error: 'Failed to get shift history' });
   }
 };

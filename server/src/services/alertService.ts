@@ -1,6 +1,7 @@
 import { query } from '../config/database.js';
 import { getIO } from '../socket/index.js';
 import { getAlertSettings } from './configService.js';
+import logger from '../utils/logger.js';
 
 const PENDING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const STAT_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
@@ -18,13 +19,13 @@ interface AlertRequest {
 }
 
 export const startAlertService = () => {
-  console.log('Starting alert service...');
+  logger.info('Starting alert service...');
 
   setInterval(async () => {
     try {
       await checkForAlerts();
     } catch (error) {
-      console.error('Alert service error:', error);
+      logger.error('Alert service error:', error);
     }
   }, CHECK_INTERVAL_MS);
 };

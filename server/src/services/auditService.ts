@@ -1,4 +1,5 @@
 import { query } from '../config/database.js';
+import logger from '../utils/logger.js';
 
 // Define AuditAction locally to avoid shared types import issues
 type AuditAction =
@@ -42,7 +43,7 @@ export const createAuditLog = async (entry: AuditLogEntry): Promise<void> => {
       ]
     );
   } catch (error) {
-    console.error('Failed to create audit log:', error);
+    logger.error('Failed to create audit log:', error);
     // Don't throw - audit logging should not break the main operation
   }
 };

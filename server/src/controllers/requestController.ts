@@ -13,6 +13,7 @@ import { autoAssignRequest } from '../services/autoAssignService.js';
 import { sendJobAssignmentSMS } from '../services/twilioService.js';
 import { logCreate, logStatusChange } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
+import logger from '../utils/logger.js';
 
 const validFloors: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 const validPriorities: Priority[] = ['routine', 'stat'];
@@ -123,7 +124,7 @@ export const getRequests = async (
 
     res.json({ requests });
   } catch (error) {
-    console.error('Get requests error:', error);
+    logger.error('Get requests error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -265,7 +266,7 @@ export const createRequest = async (
 
     res.status(201).json({ request, message: 'Transport request created' });
   } catch (error) {
-    console.error('Create request error:', error);
+    logger.error('Create request error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -469,7 +470,7 @@ export const updateRequest = async (
 
     res.json({ request: updatedRequest, message: 'Request updated' });
   } catch (error) {
-    console.error('Update request error:', error);
+    logger.error('Update request error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -531,7 +532,7 @@ export const cancelRequest = async (
 
     res.json({ request: cancelledRequest, message: 'Request cancelled' });
   } catch (error) {
-    console.error('Cancel request error:', error);
+    logger.error('Cancel request error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -603,7 +604,7 @@ export const claimRequest = async (
 
     res.json({ request: claimedRequest, message: 'Request claimed' });
   } catch (error) {
-    console.error('Claim request error:', error);
+    logger.error('Claim request error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -648,7 +649,7 @@ export const autoAssign = async (
       message: 'Request auto-assigned',
     });
   } catch (error) {
-    console.error('Auto-assign error:', error);
+    logger.error('Auto-assign error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -725,7 +726,7 @@ export const assignToPCT = async (
 
     res.json({ request: updatedRequest, message: 'Request transferred to PCT' });
   } catch (error) {
-    console.error('Assign to PCT error:', error);
+    logger.error('Assign to PCT error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

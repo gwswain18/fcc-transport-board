@@ -5,6 +5,7 @@ import { AuthenticatedRequest, UserRole, Floor } from '../types/index.js';
 import { logCreate, logUpdate } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import { isValidEmail, isValidPhoneNumber } from '../utils/validation.js';
+import logger from '../utils/logger.js';
 
 const validFloors: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 
@@ -23,7 +24,7 @@ export const getAllUsers = async (
 
     res.json({ users: result.rows });
   } catch (error) {
-    console.error('Get users error:', error);
+    logger.error('Get users error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -130,7 +131,7 @@ export const createUser = async (
 
     res.status(201).json({ user, message: 'User created successfully' });
   } catch (error) {
-    console.error('Create user error:', error);
+    logger.error('Create user error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -249,7 +250,7 @@ export const updateUser = async (
 
     res.json({ user: result.rows[0], message: 'User updated successfully' });
   } catch (error) {
-    console.error('Update user error:', error);
+    logger.error('Update user error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -283,7 +284,7 @@ export const resetPassword = async (
 
     res.json({ message: 'Password reset successfully' });
   } catch (error) {
-    console.error('Reset password error:', error);
+    logger.error('Reset password error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -305,7 +306,7 @@ export const getTransporters = async (
 
     res.json({ transporters: result.rows });
   } catch (error) {
-    console.error('Get transporters error:', error);
+    logger.error('Get transporters error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -333,7 +334,7 @@ export const getUserById = async (
 
     res.json({ user: result.rows[0] });
   } catch (error) {
-    console.error('Get user error:', error);
+    logger.error('Get user error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

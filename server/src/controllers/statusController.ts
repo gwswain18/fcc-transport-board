@@ -5,6 +5,7 @@ import { getIO } from '../socket/index.js';
 import { logStatusChange, logStatusOverride } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import { recordHeartbeat } from '../services/heartbeatService.js';
+import logger from '../utils/logger.js';
 
 export const getAllStatuses = async (
   _req: AuthenticatedRequest,
@@ -61,7 +62,7 @@ export const getAllStatuses = async (
 
     res.json({ statuses });
   } catch (error) {
-    console.error('Get statuses error:', error);
+    logger.error('Get statuses error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -184,7 +185,7 @@ export const updateOwnStatus = async (
 
     res.json({ status: updatedStatus, message: 'Status updated' });
   } catch (error) {
-    console.error('Update status error:', error);
+    logger.error('Update status error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -275,7 +276,7 @@ export const overrideStatus = async (
       message: `Status overridden to ${new_status}`,
     });
   } catch (error) {
-    console.error('Override status error:', error);
+    logger.error('Override status error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -295,7 +296,7 @@ export const handleHeartbeat = async (
 
     res.json({ message: 'ok', timestamp: new Date().toISOString() });
   } catch (error) {
-    console.error('Heartbeat error:', error);
+    logger.error('Heartbeat error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

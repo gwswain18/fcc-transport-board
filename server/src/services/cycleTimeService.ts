@@ -6,6 +6,7 @@ import {
   getAlertSettings,
 } from './configService.js';
 import { Floor, CycleTimeAlert } from '../types/index.js';
+import logger from '../utils/logger.js';
 
 const CHECK_INTERVAL_MS = 15000; // 15 seconds
 
@@ -21,20 +22,20 @@ const PHASES = [
 ];
 
 export const startCycleTimeService = () => {
-  console.log('Starting cycle time service...');
+  logger.info('Starting cycle time service...');
 
   if (intervalId) {
     clearInterval(intervalId);
   }
 
   // Initial calculation
-  calculateRollingAverages().catch(console.error);
+  calculateRollingAverages().catch(logger.error);
 
   intervalId = setInterval(async () => {
     try {
       await checkCycleTimeAlerts();
     } catch (error) {
-      console.error('Cycle time service error:', error);
+      logger.error('Cycle time service error:', error);
     }
   }, CHECK_INTERVAL_MS);
 
@@ -43,7 +44,7 @@ export const startCycleTimeService = () => {
     try {
       await calculateRollingAverages();
     } catch (error) {
-      console.error('Rolling average calculation error:', error);
+      logger.error('Rolling average calculation error:', error);
     }
   }, 300000);
 };
@@ -124,7 +125,7 @@ export const calculateRollingAverages = async (): Promise<void> => {
     }
   }
 
-  console.log('Cycle time rolling averages updated');
+  logger.info('Cycle time rolling averages updated');
 };
 
 const checkCycleTimeAlerts = async () => {

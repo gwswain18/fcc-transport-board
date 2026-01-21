@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { createAuditLog } from '../services/auditService.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import logger from '../utils/logger.js';
 
 // Get client IP address from request
 const getClientIp = (req: Request): string => {
@@ -38,7 +39,7 @@ export const auditMiddleware = (entityType: string, action: string) => {
           newValues: req.body,
           ipAddress,
           userAgent,
-        }).catch((err) => console.error('Audit middleware error:', err));
+        }).catch((err) => logger.error('Audit middleware error:', err));
       }
 
       return originalJson(body);

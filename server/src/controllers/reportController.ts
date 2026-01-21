@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { query } from '../config/database.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import logger from '../utils/logger.js';
 
 export const getSummary = async (
   req: AuthenticatedRequest,
@@ -79,7 +80,7 @@ export const getSummary = async (
       },
     });
   } catch (error) {
-    console.error('Get summary error:', error);
+    logger.error('Get summary error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -145,7 +146,7 @@ export const getByTransporter = async (
 
     res.json({ transporters });
   } catch (error) {
-    console.error('Get by transporter error:', error);
+    logger.error('Get by transporter error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -194,7 +195,7 @@ export const getJobsByHour = async (
 
     res.json({ data: result.rows });
   } catch (error) {
-    console.error('Get jobs by hour error:', error);
+    logger.error('Get jobs by hour error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -243,7 +244,7 @@ export const getJobsByFloor = async (
 
     res.json({ data: result.rows });
   } catch (error) {
-    console.error('Get jobs by floor error:', error);
+    logger.error('Get jobs by floor error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -343,7 +344,7 @@ export const exportData = async (
     res.setHeader('Content-Disposition', 'attachment; filename=transport_requests.csv');
     res.send(csv);
   } catch (error) {
-    console.error('Export data error:', error);
+    logger.error('Export data error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -402,7 +403,7 @@ export const getStaffingByFloor = async (
 
     res.json({ staffing });
   } catch (error) {
-    console.error('Get staffing by floor error:', error);
+    logger.error('Get staffing by floor error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -709,7 +710,7 @@ export const getTimeMetrics = async (
       totals,
     });
   } catch (error) {
-    console.error('Get time metrics error:', error);
+    logger.error('Get time metrics error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -775,7 +776,7 @@ export const getJobsByDay = async (
 
     res.json({ jobsByDay });
   } catch (error) {
-    console.error('Get jobs by day error:', error);
+    logger.error('Get jobs by day error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -846,7 +847,7 @@ export const getFloorAnalysis = async (
 
     res.json({ floors: floorData });
   } catch (error) {
-    console.error('Get floor analysis error:', error);
+    logger.error('Get floor analysis error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

@@ -1,5 +1,6 @@
 import { query } from '../config/database.js';
 import { getIO } from '../socket/index.js';
+import logger from '../utils/logger.js';
 
 // Check interval in milliseconds (every minute)
 const CHECK_INTERVAL = 60000;
@@ -13,11 +14,11 @@ let intervalId: NodeJS.Timeout | null = null;
  */
 export const startPCTAutoCloseJob = (): void => {
   if (intervalId) {
-    console.log('PCT auto-close job already running');
+    logger.info('PCT auto-close job already running');
     return;
   }
 
-  console.log('Starting PCT auto-close job');
+  logger.info('Starting PCT auto-close job');
 
   intervalId = setInterval(async () => {
     await processPCTAutoClose();
@@ -34,7 +35,7 @@ export const stopPCTAutoCloseJob = (): void => {
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
-    console.log('PCT auto-close job stopped');
+    logger.info('PCT auto-close job stopped');
   }
 };
 
@@ -56,13 +57,13 @@ const processPCTAutoClose = async (): Promise<void> => {
       return;
     }
 
-    console.log(`Auto-closing ${result.rows.length} PCT request(s)`);
+    logger.info(`Auto-closing ${result.rows.length} PCT request(s)`);
 
     for (const request of result.rows) {
       await autoClosePCTRequest(request.id);
     }
   } catch (error) {
-    console.error('PCT auto-close job error:', error);
+    logger.error('PCT auto-close job error:', error);
   }
 };
 
@@ -115,8 +116,8 @@ const autoClosePCTRequest = async (requestId: number): Promise<void> => {
       }
     }
 
-    console.log(`Auto-closed PCT request ${requestId}`);
+    logger.info(`Auto-closed PCT request ${requestId}`);
   } catch (error) {
-    console.error(`Failed to auto-close PCT request ${requestId}:`, error);
+    logger.error(`Failed to auto-close PCT request ${requestId}:`, error);
   }
 };

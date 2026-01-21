@@ -6,6 +6,7 @@ import {
   deleteConfig,
 } from '../services/configService.js';
 import { getIO } from '../socket/index.js';
+import logger from '../utils/logger.js';
 
 // Get a config value
 export const getConfigValue = async (req: Request, res: Response) => {
@@ -20,7 +21,7 @@ export const getConfigValue = async (req: Request, res: Response) => {
 
     res.json({ key, value });
   } catch (error) {
-    console.error('Get config error:', error);
+    logger.error('Get config error:', error);
     res.status(500).json({ error: 'Failed to get config' });
   }
 };
@@ -47,7 +48,7 @@ export const setConfigValue = async (req: Request, res: Response) => {
 
     res.json({ key, value, message: 'Config updated' });
   } catch (error) {
-    console.error('Set config error:', error);
+    logger.error('Set config error:', error);
     res.status(500).json({ error: 'Failed to set config' });
   }
 };
@@ -58,7 +59,7 @@ export const getAllConfigValues = async (_req: Request, res: Response) => {
     const config = await getAllConfig();
     res.json({ config });
   } catch (error) {
-    console.error('Get all config error:', error);
+    logger.error('Get all config error:', error);
     res.status(500).json({ error: 'Failed to get config' });
   }
 };
@@ -76,7 +77,7 @@ export const deleteConfigValue = async (req: Request, res: Response) => {
 
     res.json({ message: 'Config deleted' });
   } catch (error) {
-    console.error('Delete config error:', error);
+    logger.error('Delete config error:', error);
     res.status(500).json({ error: 'Failed to delete config' });
   }
 };

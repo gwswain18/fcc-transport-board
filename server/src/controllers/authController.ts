@@ -12,6 +12,7 @@ import {
   markTokenUsed,
 } from '../services/emailService.js';
 import { validatePasswordStrength } from '../utils/validation.js';
+import logger from '../utils/logger.js';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -81,7 +82,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       message: 'Login successful',
     });
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -97,7 +98,7 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
     res.clearCookie('token');
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
-    console.error('Logout error:', error);
+    logger.error('Logout error:', error);
     res.clearCookie('token');
     res.json({ message: 'Logged out successfully' });
   }
@@ -136,7 +137,7 @@ export const me = async (req: AuthenticatedRequest, res: Response): Promise<void
 
     res.json({ user: result.rows[0], activeShift });
   } catch (error) {
-    console.error('Me error:', error);
+    logger.error('Me error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -192,7 +193,7 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response): 
 
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
-    console.error('Change password error:', error);
+    logger.error('Change password error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -220,7 +221,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     // Always return success to prevent email enumeration
     res.json({ message: 'If an account exists with that email, a reset link has been sent' });
   } catch (error) {
-    console.error('Forgot password error:', error);
+    logger.error('Forgot password error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -265,7 +266,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 
     res.json({ message: 'Password reset successfully' });
   } catch (error) {
-    console.error('Reset password error:', error);
+    logger.error('Reset password error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -285,7 +286,7 @@ export const recoverUsername = async (req: Request, res: Response): Promise<void
     // Always return success to prevent email enumeration
     res.json({ message: 'If an account exists with that email, your username has been sent' });
   } catch (error) {
-    console.error('Recover username error:', error);
+    logger.error('Recover username error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -304,7 +305,7 @@ export const heartbeat = async (req: AuthenticatedRequest, res: Response): Promi
 
     res.json({ message: 'ok', timestamp: new Date().toISOString() });
   } catch (error) {
-    console.error('Heartbeat error:', error);
+    logger.error('Heartbeat error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
