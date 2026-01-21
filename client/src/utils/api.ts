@@ -21,6 +21,23 @@ async function request<T>(
       credentials: 'include',
     });
 
+    // Handle 204 No Content and empty responses
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      if (!response.ok) {
+        return { error: 'An error occurred' };
+      }
+      return { data: {} as T };
+    }
+
+    // Check content type before parsing
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      if (!response.ok) {
+        return { error: `Server error: ${response.status}` };
+      }
+      return { data: {} as T };
+    }
+
     const data = await response.json();
 
     if (!response.ok) {
