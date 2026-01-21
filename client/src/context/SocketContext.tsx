@@ -56,7 +56,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
   const [recentlyCompleted, setRecentlyCompleted] = useState<Map<number, number>>(new Map());
   const [completedAlerts, setCompletedAlerts] = useState<CycleTimeAlert[]>([]);
-  const heartbeatInterval = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const requireExplanation = alertSettings?.require_explanation_on_dismiss ?? false;
 
