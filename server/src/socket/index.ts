@@ -15,9 +15,18 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     cors: {
       origin: process.env.CLIENT_URL || 'http://localhost:5173',
       credentials: true,
+      methods: ['GET', 'POST'],
     },
-    pingTimeout: 60000,
-    pingInterval: 25000,
+    pingTimeout: 120000,
+    pingInterval: 30000,
+    transports: ['websocket', 'polling'],
+    allowUpgrades: true,
+    cookie: {
+      name: 'io',
+      httpOnly: true,
+      sameSite: 'none',
+      secure: true,
+    },
   });
 
   // Authentication middleware

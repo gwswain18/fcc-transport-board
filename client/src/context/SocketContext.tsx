@@ -78,6 +78,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     const socketUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || undefined;
     const newSocket = io(socketUrl, {
       withCredentials: true,
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
     });
 
     newSocket.on('connect', () => {
