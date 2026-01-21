@@ -20,6 +20,9 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 
+// Trust proxy for Render (required for rate limiting and getting real client IP)
+app.set('trust proxy', 1);
+
 // Initialize Socket.io
 initializeSocket(httpServer);
 
