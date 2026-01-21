@@ -417,7 +417,6 @@ export default function DispatcherView() {
                         request={request}
                         onAssign={() => openAssignModal(request)}
                         onCancel={() => handleCancelRequest(request.id)}
-                        onAssignToPCT={() => handleAssignToPCT(request.id)}
                         showAutoAssign
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
@@ -461,7 +460,6 @@ export default function DispatcherView() {
                         request={request}
                         onAssign={() => openAssignModal(request)}
                         onCancel={() => handleCancelRequest(request.id)}
-                        onAssignToPCT={() => handleAssignToPCT(request.id)}
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
                       />
@@ -566,7 +564,7 @@ export default function DispatcherView() {
                       }
                       className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
                         formData.priority === 'stat'
-                          ? 'bg-red-500 text-white'
+                          ? 'bg-red-600 text-white'
                           : 'bg-red-100 text-red-700'
                       }`}
                     >
@@ -599,7 +597,7 @@ export default function DispatcherView() {
                   <button
                     onClick={() => handleCreateRequest(undefined, true)}
                     disabled={!formData.room_number || loading || availableTransporters.length === 0}
-                    className="flex-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 py-2 px-4"
+                    className="flex-1 bg-accent text-white rounded-lg hover:bg-accent-600 disabled:opacity-50 py-2 px-4"
                   >
                     Auto-Assign
                   </button>
@@ -653,14 +651,26 @@ export default function DispatcherView() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium">Available Transporters</h4>
-                <AutoAssignButton
-                  requestId={selectedRequest.id}
-                  onAssigned={() => {
-                    setAssignModalOpen(false);
-                    setSelectedRequest(null);
-                    refreshData();
-                  }}
-                />
+                <div className="flex gap-2">
+                  <AutoAssignButton
+                    requestId={selectedRequest.id}
+                    onAssigned={() => {
+                      setAssignModalOpen(false);
+                      setSelectedRequest(null);
+                      refreshData();
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      handleAssignToPCT(selectedRequest.id);
+                      setAssignModalOpen(false);
+                      setSelectedRequest(null);
+                    }}
+                    className="px-3 py-1.5 bg-secondary text-white text-sm rounded-lg hover:bg-secondary-600 flex items-center space-x-1"
+                  >
+                    <span>To PCT</span>
+                  </button>
+                </div>
               </div>
               {availableTransporters.length === 0 ? (
                 <p className="text-gray-500">No transporters available</p>
@@ -753,7 +763,6 @@ function RequestCard({
   request,
   onAssign,
   onCancel,
-  onAssignToPCT,
   showAutoAssign,
   cycleTimeAlert,
   onDismissAlert,
@@ -761,7 +770,6 @@ function RequestCard({
   request: TransportRequest;
   onAssign?: () => void;
   onCancel?: () => void;
-  onAssignToPCT?: () => void;
   showAutoAssign?: boolean;
   cycleTimeAlert?: CycleTimeAlertType;
   onDismissAlert?: (requestId: number, reason?: string) => void;
@@ -801,7 +809,7 @@ function RequestCard({
       )}
 
       {request.assignment_method === 'auto' && (
-        <span className="inline-block text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded mb-2">
+        <span className="inline-block text-xs bg-accent-100 text-accent-700 px-2 py-0.5 rounded mb-2">
           Auto-assigned
         </span>
       )}
@@ -814,14 +822,6 @@ function RequestCard({
         )}
         {showAutoAssign && !request.assignee && !isPCTTransfer && (
           <AutoAssignButton requestId={request.id} />
-        )}
-        {onAssignToPCT && !isPCTTransfer && (
-          <button
-            onClick={onAssignToPCT}
-            className="bg-orange-100 text-orange-700 hover:bg-orange-200 px-3 py-1 rounded text-sm font-medium"
-          >
-            To PCT
-          </button>
         )}
         {hasAlert && onDismissAlert && (
           <button

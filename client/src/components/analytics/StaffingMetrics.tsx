@@ -109,8 +109,8 @@ export default function StaffingMetrics({ dateRange }: StaffingMetricsProps) {
             <Tooltip />
             <Legend />
             <Bar dataKey="Available" stackId="a" fill="#10B981" />
-            <Bar dataKey="Busy" stackId="a" fill="#3B82F6" />
-            <Bar dataKey="On Break" stackId="a" fill="#F59E0B" />
+            <Bar dataKey="Busy" stackId="a" fill="#002952" />
+            <Bar dataKey="On Break" stackId="a" fill="#a36d00" />
           </BarChart>
         </ResponsiveContainer>
       </div>

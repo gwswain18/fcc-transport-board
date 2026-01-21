@@ -714,6 +714,55 @@ export const getTimeMetrics = async (
   }
 };
 
+// Get jobs by day (for the last N days)
+export const getJobsByDay = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const days = parseInt(req.query.days as string) || 7;
+    const { floor, transporter_id } = req.query;
+
+    let whereClause = "WHERE status = 'complete'";
+    const params: unknown[] = [days];
+    let paramIndex = 2;
+
+    whereClause += ` AND created_at >= CURRENT_DATE - INTERVAL '1 day' * $1`;
+
+    if (floor) {
+      whereClause += ` AND origin_floor = $${paramIndex++}`;
+      params.push(floor);
+    }
+
+    if (transporter_id) {
+      whereClause += ` AND assigned_to = $${paramIndex++}`;
+      params.push(transporter_id);
+    }
+
+    const result = await query(
+      `SELECT
+        DATE(created_at) as date,
+        COUNT(*) as count
+       FROM transport_requests
+       ${whereClause}
+       GROUP BY DATE(created_at)
+       ORDER BY date`,
+      params
+    );
+
+    // Format dates for display
+    const jobsByDay = result.rows.map(row => ({
+      date: new Date(row.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+      count: parseInt(row.count),
+    }));
+
+    res.json({ jobsByDay });
+  } catch (error) {
+    console.error('Get jobs by day error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Get detailed floor analysis
 export const getFloorAnalysis = async (
   req: AuthenticatedRequest,

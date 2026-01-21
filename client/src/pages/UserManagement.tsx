@@ -205,9 +205,6 @@ export default function UserManagement() {
                     <th className="text-left py-3 px-4 font-medium text-gray-600">
                       Phone
                     </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">
-                      Active
-                    </th>
                     <th className="text-right py-3 px-4 font-medium text-gray-600">
                       Actions
                     </th>
@@ -238,17 +235,6 @@ export default function UserManagement() {
                       </td>
                       <td className="py-3 px-4 text-gray-600">
                         {user.phone_number || '-'}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            user.is_active
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}
-                        >
-                          {user.is_active ? 'Active' : 'Inactive'}
-                        </span>
                       </td>
                       <td className="py-3 px-4 text-right space-x-2">
                         <button

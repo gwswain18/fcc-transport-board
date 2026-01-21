@@ -4,6 +4,7 @@ import {
   getByTransporter,
   getJobsByHour,
   getJobsByFloor,
+  getJobsByDay,
   exportData,
   getStaffingByFloor,
   getFloorAnalysis,
@@ -21,6 +22,7 @@ router.get('/summary', getSummary);
 router.get('/by-transporter', getByTransporter);
 router.get('/by-hour', getJobsByHour);
 router.get('/by-floor', getJobsByFloor);
+router.get('/by-day', getJobsByDay);
 router.get('/staffing-by-floor', getStaffingByFloor);
 router.get('/floor-analysis', getFloorAnalysis);
 router.get('/time-metrics', getTimeMetrics);

@@ -213,6 +213,8 @@ export default function TransporterView() {
     'Elevator delay',
     'Waiting for equipment',
     'Staff coordination',
+    'Forgot to press button',
+    'Documentation pending',
   ];
 
   return (

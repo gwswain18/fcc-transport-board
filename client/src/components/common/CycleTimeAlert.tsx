@@ -52,9 +52,10 @@ export default function CycleTimeAlert({ alert, request, onDismiss }: CycleTimeA
 
   const quickReasons = [
     'Patient not ready',
-    'Waiting for equipment',
     'Elevator delay',
-    'Staff break overlap',
+    'Waiting for equipment',
+    'Staff coordination',
+    'Forgot to press button',
     'Documentation pending',
   ];
 

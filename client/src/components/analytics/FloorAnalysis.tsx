@@ -96,8 +96,8 @@ export default function FloorAnalysis({ dateRange }: FloorAnalysisProps) {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="Requests" fill="#3B82F6" name="Total Requests" />
-              <Bar dataKey="PCT" fill="#F97316" name="PCT Transfers" />
+              <Bar dataKey="Requests" fill="#002952" name="Total Requests" />
+              <Bar dataKey="PCT" fill="#a36d00" name="PCT Transfers" />
               <Bar dataKey="Cancelled" fill="#EF4444" name="Cancelled" />
             </BarChart>
           </ResponsiveContainer>

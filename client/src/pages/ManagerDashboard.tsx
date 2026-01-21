@@ -25,6 +25,7 @@ export default function ManagerDashboard() {
   const [summary, setSummary] = useState<ReportSummary | null>(null);
   const [transporterStats, setTransporterStats] = useState<TransporterStats[]>([]);
   const [jobsByHour, setJobsByHour] = useState<{ hour: number; count: number }[]>([]);
+  const [jobsByDay, setJobsByDay] = useState<{ date: string; count: number }[]>([]);
   const [timeMetrics, setTimeMetrics] = useState<{
     transporters: Array<{
       user_id: number;
@@ -78,10 +79,11 @@ export default function ManagerDashboard() {
       transporter_id: filters.transporter_id ? parseInt(filters.transporter_id) : undefined,
     };
 
-    const [summaryRes, statsRes, hourRes, timeMetricsRes] = await Promise.all([
+    const [summaryRes, statsRes, hourRes, dayRes, timeMetricsRes] = await Promise.all([
       api.getReportSummary(params),
       api.getReportByTransporter(params),
       api.getJobsByHour(params),
+      api.getJobsByDay(7),
       api.getTimeMetrics(params),
     ]);
 
@@ -93,6 +95,9 @@ export default function ManagerDashboard() {
     }
     if (hourRes.data?.data) {
       setJobsByHour(fillMissingEvenHours(hourRes.data.data));
+    }
+    if (dayRes.data?.jobsByDay) {
+      setJobsByDay(dayRes.data.jobsByDay);
     }
     if (timeMetricsRes.data) {
       setTimeMetrics(timeMetricsRes.data);
@@ -304,7 +309,7 @@ export default function ManagerDashboard() {
             )}
 
             {/* Charts */}
-            <div className="grid grid-cols-1 gap-6 mb-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               {/* Jobs by Hour */}
               <div className="card">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Jobs by Hour</h3>
@@ -320,7 +325,23 @@ export default function ManagerDashboard() {
                       <Tooltip
                         labelFormatter={(h) => `${h}:00 - ${Number(h) + 1}:59`}
                       />
-                      <Bar dataKey="count" fill="#3B82F6" name="Jobs" />
+                      <Bar dataKey="count" fill="#002952" name="Jobs" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Jobs by Day */}
+              <div className="card">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Jobs by Day (Last 7 Days)</h3>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={jobsByDay}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="count" fill="#002952" name="Jobs" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

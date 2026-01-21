@@ -335,6 +335,9 @@ export const api = {
     );
   },
 
+  getJobsByDay: (days: number = 7) =>
+    request<{ jobsByDay: { date: string; count: number }[] }>(`/reports/by-day?days=${days}`),
+
   getStaffingByFloor: (params?: { start_date?: string; end_date?: string }) => {
     const searchParams = new URLSearchParams();
     if (params) {

@@ -35,7 +35,7 @@ export default function AutoAssignButton({
       <button
         onClick={handleAutoAssign}
         disabled={disabled || loading}
-        className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+        className="px-3 py-1.5 bg-accent text-white text-sm rounded-lg hover:bg-accent-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
         title="Automatically assign to best available transporter"
       >
         <svg
