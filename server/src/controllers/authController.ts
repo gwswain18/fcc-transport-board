@@ -13,6 +13,7 @@ import {
 } from '../services/emailService.js';
 import { validatePasswordStrength } from '../utils/validation.js';
 import logger from '../utils/logger.js';
+import { getIO } from '../socket/index.js';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -94,6 +95,44 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
     if (authReq.user) {
       const { ipAddress, userAgent } = getAuditContext(authReq);
       await logLogout(authReq.user.id, ipAddress, userAgent);
+
+      // End any active dispatcher session for this user
+      await query(
+        `UPDATE active_dispatchers
+         SET ended_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1 AND ended_at IS NULL`,
+        [authReq.user.id]
+      );
+
+      // Broadcast dispatcher change via socket
+      const io = getIO();
+      if (io) {
+        const dispatcherResult = await query(
+          `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
+           FROM active_dispatchers ad
+           JOIN users u ON ad.user_id = u.id
+           WHERE ad.ended_at IS NULL
+           ORDER BY ad.is_primary DESC, ad.started_at ASC`
+        );
+
+        const dispatchers = dispatcherResult.rows.map((row) => ({
+          id: row.id,
+          user_id: row.user_id,
+          is_primary: row.is_primary,
+          on_break: row.on_break,
+          contact_info: row.contact_info,
+          started_at: row.started_at,
+          user: {
+            id: row.user_id,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            email: row.email,
+            phone_number: row.phone_number,
+          },
+        }));
+
+        io.emit('dispatcher_changed', { dispatchers });
+      }
     }
 
     res.clearCookie('token');
