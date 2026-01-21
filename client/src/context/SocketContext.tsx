@@ -306,11 +306,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   }, [socket]);
 
   const refreshData = async () => {
+    const apiBase = import.meta.env.VITE_API_URL || '/api';
     const [statusRes, requestRes, dispatcherRes, alertSettingsRes] = await Promise.all([
-      fetch('/api/status', { credentials: 'include' }).then((r) => r.json()),
-      fetch('/api/requests', { credentials: 'include' }).then((r) => r.json()),
-      fetch('/api/dispatchers/active', { credentials: 'include' }).then((r) => r.json()).catch(() => ({ dispatchers: [] })),
-      fetch('/api/config/alert_settings', { credentials: 'include' }).then((r) => r.json()).catch(() => ({ value: null })),
+      fetch(`${apiBase}/status`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { statuses: [] }),
+      fetch(`${apiBase}/requests`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { requests: [] }),
+      fetch(`${apiBase}/dispatchers/active`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { dispatchers: [] }).catch(() => ({ dispatchers: [] })),
+      fetch(`${apiBase}/config/alert_settings`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { value: null }).catch(() => ({ value: null })),
     ]);
 
     if (statusRes.statuses) {

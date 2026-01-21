@@ -56,11 +56,12 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const { ipAddress, userAgent } = getAuditContext(req as AuthenticatedRequest);
     await logLogin(user.id, ipAddress, userAgent);
 
-    // Set httpOnly cookie - sameSite: 'none' required for cross-origin
+    // Set httpOnly cookie - sameSite: 'none' and partitioned required for cross-origin
     res.cookie('token', token, {
       httpOnly: true,
       secure: true,
       sameSite: 'none',
+      partitioned: true,
       maxAge: 12 * 60 * 60 * 1000, // 12 hours
     });
 
