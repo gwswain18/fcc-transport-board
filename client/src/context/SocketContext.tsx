@@ -75,7 +75,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     // In production, connect to the API server URL
     // In development, use relative path (Vite proxy handles it)
-    const socketUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || undefined;
+    let socketUrl: string | undefined = undefined;
+    if (import.meta.env.VITE_API_URL) {
+      // Remove /api suffix and ensure valid URL
+      const apiUrl = import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '');
+      try {
+        const url = new URL(apiUrl);
+        socketUrl = url.origin;
+      } catch {
+        console.error('Invalid VITE_API_URL:', import.meta.env.VITE_API_URL);
+      }
+    }
     const newSocket = io(socketUrl, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
