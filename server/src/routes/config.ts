@@ -13,6 +13,9 @@ const router = express.Router();
 // All routes require authentication
 router.use(authenticate);
 
+// Alert settings readable by all authenticated users (needed for UI)
+router.get('/alert_settings', getConfigValue);
+
 // Get config (supervisor+)
 router.get('/', canViewReports, getAllConfigValues);
 router.get('/:key', canViewReports, getConfigValue);
