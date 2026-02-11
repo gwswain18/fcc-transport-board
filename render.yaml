@@ -13,7 +13,7 @@ services:
   - key: JWT_SECRET
     value: aR7QGPCw2XgvnZppCtLZOISTnU1vgEmh5Nixt8tNG9Y=
   - key: CLIENT_URL
-    value: https://placeholder.com
+    value: https://fcc-transport-client.onrender.com
   - key: LOG_LEVEL
     value: info
 
