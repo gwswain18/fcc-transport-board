@@ -17,6 +17,18 @@ import {
   initAudioContext,
 } from '../utils/audioNotifications';
 
+export interface HelpAlert {
+  id?: number;
+  user_id: number;
+  request_id?: number;
+  message?: string;
+  first_name?: string;
+  last_name?: string;
+  origin_floor?: string;
+  room_number?: string;
+  created_at?: string;
+}
+
 interface SocketContextType {
   socket: Socket | null;
   connected: boolean;
@@ -26,6 +38,7 @@ interface SocketContextType {
   cycleTimeAlerts: CycleTimeAlert[];
   breakAlerts: BreakAlert[];
   offlineAlerts: TransporterOffline[];
+  helpAlerts: HelpAlert[];
   activeDispatchers: ActiveDispatcher[];
   alertSettings: AlertSettings | null;
   requireExplanation: boolean;
@@ -33,6 +46,7 @@ interface SocketContextType {
   dismissCycleAlert: (requestId: number, explanation?: string) => void;
   dismissBreakAlert: (userId: number, explanation?: string) => void;
   dismissOfflineAlert: (userId: number, explanation?: string) => void;
+  dismissHelpAlert: (alertId: number) => void;
   refreshData: () => void;
   requestHelp: (requestId?: number, message?: string) => void;
 }
@@ -51,6 +65,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [cycleTimeAlerts, setCycleTimeAlerts] = useState<CycleTimeAlert[]>([]);
   const [breakAlerts, setBreakAlerts] = useState<BreakAlert[]>([]);
   const [offlineAlerts, setOfflineAlerts] = useState<TransporterOffline[]>([]);
+  const [helpAlerts, setHelpAlerts] = useState<HelpAlert[]>([]);
   const [activeDispatchers, setActiveDispatchers] = useState<ActiveDispatcher[]>([]);
   const [alertSettings, setAlertSettings] = useState<AlertSettings | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
@@ -248,6 +263,15 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       });
     });
 
+    // Help requested alerts
+    newSocket.on('help_requested', (alert: HelpAlert) => {
+      setHelpAlerts((prev) => {
+        const exists = prev.some((a) => a.id === alert.id && alert.id);
+        if (exists) return prev;
+        return [...prev, alert];
+      });
+    });
+
     // Dispatcher changes
     newSocket.on('dispatcher_changed', (data: { dispatchers: ActiveDispatcher[] }) => {
       setActiveDispatchers(data.dispatchers);
@@ -308,6 +332,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socket.emit('offline_alert_dismissed', { user_id: userId, explanation });
     }
   }, [socket]);
+
+  const dismissHelpAlert = useCallback((alertId: number) => {
+    setHelpAlerts((prev) => prev.filter((a) => (a.id || a.user_id) !== alertId));
+  }, []);
 
   const requestHelp = useCallback((requestId?: number, message?: string) => {
     if (socket) {
@@ -386,6 +414,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         cycleTimeAlerts: visibleCycleAlerts,
         breakAlerts,
         offlineAlerts,
+        helpAlerts,
         activeDispatchers,
         alertSettings,
         requireExplanation,
@@ -393,6 +422,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         dismissCycleAlert,
         dismissBreakAlert,
         dismissOfflineAlert,
+        dismissHelpAlert,
         refreshData,
         requestHelp,
       }}

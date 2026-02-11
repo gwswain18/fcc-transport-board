@@ -63,6 +63,10 @@ export interface TransporterStatusRecord {
     room_number: string;
     status: RequestStatus;
     priority?: Priority;
+    assigned_at?: string;
+    accepted_at?: string;
+    en_route_at?: string;
+    with_patient_at?: string;
   } | null;
   shift?: {
     extension?: string;

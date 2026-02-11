@@ -34,12 +34,14 @@ export default function ManagerDashboard() {
       job_time_seconds: number;
       break_time_seconds: number;
       other_time_seconds: number;
+      offline_time_seconds: number;
       down_time_seconds: number;
     }>;
     totals: {
       total_job_time_seconds: number;
       total_break_time_seconds: number;
       total_other_time_seconds: number;
+      total_offline_time_seconds: number;
       total_down_time_seconds: number;
     };
   } | null>(null);
@@ -284,7 +286,7 @@ export default function ManagerDashboard() {
 
             {/* Time Metrics Cards */}
             {timeMetrics && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
                 <MetricCard
                   title="Total Time on Jobs"
                   value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_job_time_seconds)}
@@ -296,9 +298,32 @@ export default function ManagerDashboard() {
                   color="bg-yellow-500"
                 />
                 <MetricCard
+                  title="Avg Break Time"
+                  value={formatSecondsAsHoursMinutes(
+                    timeMetrics.transporters.length > 0
+                      ? timeMetrics.totals.total_break_time_seconds / timeMetrics.transporters.length
+                      : 0
+                  )}
+                  color="bg-amber-500"
+                />
+                <MetricCard
                   title="Total Other Time"
                   value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_other_time_seconds)}
                   color="bg-orange-500"
+                />
+                <MetricCard
+                  title="Offline Time"
+                  value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_offline_time_seconds)}
+                  color="bg-gray-500"
+                />
+                <MetricCard
+                  title="Avg Offline Time"
+                  value={formatSecondsAsHoursMinutes(
+                    timeMetrics.transporters.length > 0
+                      ? timeMetrics.totals.total_offline_time_seconds / timeMetrics.transporters.length
+                      : 0
+                  )}
+                  color="bg-gray-400"
                 />
                 <MetricCard
                   title="Down Time"
@@ -379,6 +404,9 @@ export default function ManagerDashboard() {
                         Other Time
                       </th>
                       <th className="text-right py-3 px-4 font-medium text-gray-600">
+                        Offline Time
+                      </th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-600">
                         Down Time
                       </th>
                     </tr>
@@ -413,6 +441,9 @@ export default function ManagerDashboard() {
                             {tm ? formatSecondsAsHoursMinutes(tm.other_time_seconds) : '-'}
                           </td>
                           <td className="py-3 px-4 text-right text-gray-600">
+                            {tm ? formatSecondsAsHoursMinutes(tm.offline_time_seconds) : '-'}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
                             {tm ? formatSecondsAsHoursMinutes(tm.down_time_seconds) : '-'}
                           </td>
                         </tr>
@@ -421,7 +452,7 @@ export default function ManagerDashboard() {
                     {transporterStats.length === 0 && (
                       <tr>
                         <td
-                          colSpan={8}
+                          colSpan={9}
                           className="py-8 text-center text-gray-500"
                         >
                           No data available

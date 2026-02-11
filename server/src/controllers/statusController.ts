@@ -18,6 +18,10 @@ export const getAllStatuses = async (
               tr.id as current_job_id,
               tr.origin_floor, tr.room_number, tr.status as job_status,
               tr.priority as job_priority,
+              tr.assigned_at as job_assigned_at,
+              tr.accepted_at as job_accepted_at,
+              tr.en_route_at as job_en_route_at,
+              tr.with_patient_at as job_with_patient_at,
               sl.extension, sl.floor_assignment
        FROM transporter_status ts
        JOIN users u ON ts.user_id = u.id
@@ -50,6 +54,10 @@ export const getAllStatuses = async (
             room_number: row.room_number,
             status: row.job_status,
             priority: row.job_priority,
+            assigned_at: row.job_assigned_at,
+            accepted_at: row.job_accepted_at,
+            en_route_at: row.job_en_route_at,
+            with_patient_at: row.job_with_patient_at,
           }
         : null,
       shift: row.extension

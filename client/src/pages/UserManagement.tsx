@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { api } from '../utils/api';
 import { User, UserRole, Floor } from '../types';
 import Header from '../components/common/Header';
@@ -16,6 +16,54 @@ export default function UserManagement() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
+  const [sortField, setSortField] = useState<'name' | 'email' | 'role' | 'primary_floor' | 'phone'>('name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const sortedUsers = useMemo(() => {
+    return [...users].sort((a, b) => {
+      let aVal: string;
+      let bVal: string;
+      switch (sortField) {
+        case 'name':
+          aVal = `${a.first_name} ${a.last_name}`.toLowerCase();
+          bVal = `${b.first_name} ${b.last_name}`.toLowerCase();
+          break;
+        case 'email':
+          aVal = a.email.toLowerCase();
+          bVal = b.email.toLowerCase();
+          break;
+        case 'role':
+          aVal = a.role;
+          bVal = b.role;
+          break;
+        case 'primary_floor':
+          aVal = a.primary_floor || '';
+          bVal = b.primary_floor || '';
+          break;
+        case 'phone':
+          aVal = a.phone_number || '';
+          bVal = b.phone_number || '';
+          break;
+      }
+      const cmp = aVal.localeCompare(bVal);
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [users, sortField, sortDirection]);
+
+  const handleSort = (field: typeof sortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortIndicator = (field: typeof sortField) =>
+    sortField === field ? (sortDirection === 'asc' ? ' \u25B2' : ' \u25BC') : '';
 
   const [formData, setFormData] = useState({
     email: '',
@@ -168,6 +216,25 @@ export default function UserManagement() {
     setResetPasswordModal(true);
   };
 
+  const openDeleteModal = (user: User) => {
+    setDeletingUser(user);
+    setDeleteModalOpen(true);
+  };
+
+  const handleDeleteUser = async (permanent: boolean) => {
+    if (!deletingUser) return;
+    setDeleteLoading(true);
+    const response = await api.deleteUser(deletingUser.id, permanent);
+    setDeleteLoading(false);
+    if (response.error) {
+      setError(response.error);
+      return;
+    }
+    setDeleteModalOpen(false);
+    setDeletingUser(null);
+    await loadUsers();
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <Header />
@@ -190,20 +257,20 @@ export default function UserManagement() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">
-                      Name
+                    <th onClick={() => handleSort('name')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
+                      Name{sortIndicator('name')}
                     </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">
-                      Email
+                    <th onClick={() => handleSort('email')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
+                      Email{sortIndicator('email')}
                     </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">
-                      Role
+                    <th onClick={() => handleSort('role')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
+                      Role{sortIndicator('role')}
                     </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">
-                      Primary Floor
+                    <th onClick={() => handleSort('primary_floor')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
+                      Primary Floor{sortIndicator('primary_floor')}
                     </th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">
-                      Phone
+                    <th onClick={() => handleSort('phone')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
+                      Phone{sortIndicator('phone')}
                     </th>
                     <th className="text-right py-3 px-4 font-medium text-gray-600">
                       Actions
@@ -211,7 +278,7 @@ export default function UserManagement() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => (
+                  {sortedUsers.map((user) => (
                     <tr
                       key={user.id}
                       className="border-b border-gray-100 hover:bg-gray-50"
@@ -248,6 +315,12 @@ export default function UserManagement() {
                           className="text-gray-600 hover:text-gray-800"
                         >
                           Reset Password
+                        </button>
+                        <button
+                          onClick={() => openDeleteModal(user)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          Delete
                         </button>
                       </td>
                     </tr>
@@ -431,6 +504,46 @@ export default function UserManagement() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete User Modal */}
+      <Modal
+        isOpen={deleteModalOpen}
+        onClose={() => { setDeleteModalOpen(false); setDeletingUser(null); }}
+        title="Delete User"
+        size="sm"
+      >
+        {deletingUser && (
+          <div className="space-y-4">
+            <p className="text-gray-700">
+              What would you like to do with <span className="font-medium">{deletingUser.first_name} {deletingUser.last_name}</span>?
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={() => handleDeleteUser(false)}
+                disabled={deleteLoading}
+                className="w-full btn-secondary"
+              >
+                {deleteLoading ? 'Processing...' : 'Deactivate (Soft Delete)'}
+              </button>
+              <p className="text-xs text-gray-500 text-center">User will be marked inactive but data preserved</p>
+              <button
+                onClick={() => handleDeleteUser(true)}
+                disabled={deleteLoading}
+                className="w-full bg-red-600 text-white rounded-lg py-2 px-4 hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteLoading ? 'Processing...' : 'Permanently Delete'}
+              </button>
+              <p className="text-xs text-red-500 text-center">This cannot be undone</p>
+            </div>
+            <button
+              onClick={() => { setDeleteModalOpen(false); setDeletingUser(null); }}
+              className="w-full btn-secondary mt-2"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
       </Modal>
 
       {/* Reset Password Modal */}

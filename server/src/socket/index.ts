@@ -109,11 +109,20 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
 
         if (jobResult.rows.length === 0) {
           await query(
-            `UPDATE transporter_status SET status = 'available', updated_at = CURRENT_TIMESTAMP
+            `UPDATE transporter_status SET status = 'available', went_offline_at = NULL, updated_at = CURRENT_TIMESTAMP
              WHERE user_id = $1 AND status = 'offline'`,
             [userId]
           );
         }
+
+        // Close any open offline_periods records
+        await query(
+          `UPDATE offline_periods
+           SET online_at = CURRENT_TIMESTAMP,
+               duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - offline_at))::int
+           WHERE user_id = $1 AND online_at IS NULL`,
+          [userId]
+        );
       }
     }
 
@@ -146,9 +155,20 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
 
           if (jobResult.rows.length === 0) {
             await query(
-              `UPDATE transporter_status SET status = 'offline', updated_at = CURRENT_TIMESTAMP
+              `UPDATE transporter_status SET status = 'offline', went_offline_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
                WHERE user_id = $1`,
               [disconnectedUserId]
+            );
+
+            // Create offline_periods record
+            const shiftResult2 = await query(
+              `SELECT id FROM shift_logs WHERE user_id = $1 AND shift_end IS NULL ORDER BY shift_start DESC LIMIT 1`,
+              [disconnectedUserId]
+            );
+            const shiftId = shiftResult2.rows[0]?.id || null;
+            await query(
+              `INSERT INTO offline_periods (user_id, shift_id, offline_at) VALUES ($1, $2, CURRENT_TIMESTAMP)`,
+              [disconnectedUserId, shiftId]
             );
 
             // Emit status change
@@ -217,12 +237,53 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     // Transporter requests help
     socket.on('help_requested', async (data: { request_id?: number; message?: string }) => {
       if (userId) {
-        io?.emit('help_requested', {
-          user_id: userId,
-          request_id: data.request_id,
-          message: data.message,
-        });
-        logger.info(`Help requested by user ${userId}: ${data.message}`);
+        try {
+          // Get transporter name and job info
+          const userResult = await query(
+            'SELECT first_name, last_name FROM users WHERE id = $1',
+            [userId]
+          );
+          const userName = userResult.rows[0];
+
+          let jobInfo: { origin_floor?: string; room_number?: string } = {};
+          if (data.request_id) {
+            const jobResult = await query(
+              'SELECT origin_floor, room_number FROM transport_requests WHERE id = $1',
+              [data.request_id]
+            );
+            if (jobResult.rows[0]) {
+              jobInfo = jobResult.rows[0];
+            }
+          }
+
+          // Persist help request
+          const insertResult = await query(
+            `INSERT INTO help_requests (user_id, request_id, message)
+             VALUES ($1, $2, $3) RETURNING id, created_at`,
+            [userId, data.request_id || null, data.message || null]
+          );
+
+          io?.emit('help_requested', {
+            id: insertResult.rows[0].id,
+            user_id: userId,
+            request_id: data.request_id,
+            message: data.message,
+            first_name: userName?.first_name,
+            last_name: userName?.last_name,
+            origin_floor: jobInfo.origin_floor,
+            room_number: jobInfo.room_number,
+            created_at: insertResult.rows[0].created_at,
+          });
+          logger.info(`Help requested by user ${userId} (${userName?.first_name} ${userName?.last_name}): ${data.message}`);
+        } catch (error) {
+          logger.error('Error processing help request:', error);
+          // Still emit basic event on error
+          io?.emit('help_requested', {
+            user_id: userId,
+            request_id: data.request_id,
+            message: data.message,
+          });
+        }
       }
     });
   });

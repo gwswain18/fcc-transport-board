@@ -82,11 +82,22 @@ const checkHeartbeats = async () => {
   for (const row of result.rows) {
     const oldStatus = row.status;
 
-    // Mark user as offline
+    // Mark user as offline and record went_offline_at
     await query(
-      `UPDATE transporter_status SET status = 'offline', updated_at = CURRENT_TIMESTAMP
+      `UPDATE transporter_status SET status = 'offline', went_offline_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
        WHERE user_id = $1`,
       [row.user_id]
+    );
+
+    // Create offline_periods record if user has active shift
+    const shiftResult = await query(
+      `SELECT id FROM shift_logs WHERE user_id = $1 AND shift_end IS NULL ORDER BY shift_start DESC LIMIT 1`,
+      [row.user_id]
+    );
+    const shiftId = shiftResult.rows[0]?.id || null;
+    await query(
+      `INSERT INTO offline_periods (user_id, shift_id, offline_at) VALUES ($1, $2, CURRENT_TIMESTAMP)`,
+      [row.user_id, shiftId]
     );
 
     // Log the status change

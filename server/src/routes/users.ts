@@ -6,9 +6,11 @@ import {
   createUser,
   updateUser,
   resetPassword,
+  deleteUser,
   getTransporters,
   getUserById,
 } from '../controllers/userController.js';
+import { getUserDelays } from '../controllers/delayController.js';
 
 const router = Router();
 
@@ -23,6 +25,8 @@ router.get('/', canManageUsers, getAllUsers);
 router.get('/:id', canManageUsers, getUserById);
 router.post('/', canManageUsers, createUser);
 router.put('/:id', canManageUsers, updateUser);
+router.delete('/:id', canManageUsers, deleteUser);
 router.put('/:id/reset-password', canManageUsers, resetPassword);
+router.get('/:id/delays', canManageUsers, getUserDelays);
 
 export default router;

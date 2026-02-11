@@ -47,12 +47,14 @@ export default function DispatcherView() {
     cycleTimeAlerts,
     breakAlerts,
     offlineAlerts,
+    helpAlerts,
     activeDispatchers,
     requireExplanation,
     dismissAlert,
     dismissCycleAlert,
     dismissBreakAlert,
     dismissOfflineAlert,
+    dismissHelpAlert,
     refreshData,
   } = useSocket();
   const [loading, setLoading] = useState(false);
@@ -347,6 +349,34 @@ export default function DispatcherView() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Help Request Alerts */}
+      {helpAlerts.length > 0 && (
+        <div className="bg-red-600 text-white px-4 py-2">
+          <div className="max-w-7xl mx-auto space-y-1">
+            {helpAlerts.map((alert) => (
+              <div key={alert.id || alert.user_id} className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="font-bold">HELP NEEDED:</span>
+                  <span>
+                    {alert.first_name} {alert.last_name}
+                    {alert.origin_floor && alert.room_number && (
+                      <> at {alert.origin_floor}-{alert.room_number}</>
+                    )}
+                    {alert.message && <> — {alert.message}</>}
+                  </span>
+                </div>
+                <button
+                  onClick={() => dismissHelpAlert(alert.id || alert.user_id)}
+                  className="bg-red-700 hover:bg-red-800 px-3 py-1 rounded text-sm"
+                >
+                  Acknowledge
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -729,6 +759,33 @@ function TransporterCard({
   transporter: TransporterStatusRecord;
   onClick?: () => void;
 }) {
+  // Determine elapsed timer start time and label
+  const getTimerInfo = (): { startTime: string; label: string } | null => {
+    const job = transporter.current_job;
+    if (job) {
+      // Show time in current transport phase
+      const phaseMap: Record<string, { field: keyof typeof job; label: string }> = {
+        assigned: { field: 'assigned_at', label: 'Assigned' },
+        accepted: { field: 'accepted_at', label: 'En Route' },
+        en_route: { field: 'en_route_at', label: 'Pickup' },
+        with_patient: { field: 'with_patient_at', label: 'Transport' },
+      };
+      const phase = phaseMap[job.status];
+      if (phase) {
+        const ts = job[phase.field];
+        if (ts) return { startTime: ts as string, label: phase.label };
+      }
+      return null;
+    }
+    // Non-job statuses
+    if (['available', 'on_break', 'other'].includes(transporter.status)) {
+      return { startTime: transporter.updated_at, label: transporter.status === 'available' ? 'Available' : transporter.status === 'on_break' ? 'On Break' : 'Other' };
+    }
+    return null;
+  };
+
+  const timerInfo = getTimerInfo();
+
   return (
     <div
       onClick={onClick}
@@ -754,6 +811,12 @@ function TransporterCard({
         <p className="text-sm text-gray-600 mt-1">
           {transporter.current_job.origin_floor}-{transporter.current_job.room_number}
         </p>
+      )}
+      {timerInfo && (
+        <div className="flex items-center gap-1 mt-1">
+          <span className="text-xs text-gray-400">{timerInfo.label}:</span>
+          <ElapsedTimer startTime={timerInfo.startTime} className="text-xs" />
+        </div>
       )}
     </div>
   );

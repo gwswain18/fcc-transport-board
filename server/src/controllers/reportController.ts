@@ -603,6 +603,43 @@ export const getTimeMetrics = async (
       otherParams
     );
 
+    // Get offline time from offline_periods table
+    const offlineParams: unknown[] = [];
+    let offlineParamIndex = 1;
+    let offlineDateFilter = '';
+    if (start_date) {
+      offlineDateFilter += ` AND op.offline_at >= $${offlineParamIndex++}`;
+      offlineParams.push(start_date);
+    }
+    if (end_date) {
+      offlineDateFilter += ` AND op.offline_at <= $${offlineParamIndex++}`;
+      offlineParams.push(end_date);
+    }
+    let offlineUserFilter = '';
+    if (transporter_id) {
+      offlineUserFilter = ` AND op.user_id = $${offlineParamIndex++}`;
+      offlineParams.push(transporter_id);
+    }
+
+    const offlineTimeResult = await query(
+      `SELECT
+        op.user_id,
+        u.first_name,
+        u.last_name,
+        COALESCE(SUM(
+          CASE
+            WHEN op.duration_seconds IS NOT NULL THEN op.duration_seconds
+            WHEN op.online_at IS NULL THEN EXTRACT(EPOCH FROM (NOW() - op.offline_at))::int
+            ELSE EXTRACT(EPOCH FROM (op.online_at - op.offline_at))::int
+          END
+        ), 0) as offline_time_seconds
+      FROM offline_periods op
+      JOIN users u ON op.user_id = u.id
+      WHERE 1=1 ${offlineDateFilter} ${offlineUserFilter}
+      GROUP BY op.user_id, u.first_name, u.last_name`,
+      offlineParams
+    );
+
     // Combine all data
     const userMap = new Map<number, {
       user_id: number;
@@ -611,85 +648,63 @@ export const getTimeMetrics = async (
       job_time_seconds: number;
       break_time_seconds: number;
       other_time_seconds: number;
+      offline_time_seconds: number;
       shift_duration_seconds: number;
       down_time_seconds: number;
     }>();
 
+    // Helper to get or create user entry
+    const getOrCreate = (userId: number, firstName: string, lastName: string) => {
+      if (!userMap.has(userId)) {
+        userMap.set(userId, {
+          user_id: userId,
+          first_name: firstName,
+          last_name: lastName,
+          job_time_seconds: 0,
+          break_time_seconds: 0,
+          other_time_seconds: 0,
+          offline_time_seconds: 0,
+          shift_duration_seconds: 0,
+          down_time_seconds: 0,
+        });
+      }
+      return userMap.get(userId)!;
+    };
+
     // Initialize with job time data
     for (const row of jobTimeResult.rows) {
-      userMap.set(row.user_id, {
-        user_id: row.user_id,
-        first_name: row.first_name,
-        last_name: row.last_name,
-        job_time_seconds: parseFloat(row.job_time_seconds) || 0,
-        break_time_seconds: 0,
-        other_time_seconds: 0,
-        shift_duration_seconds: 0,
-        down_time_seconds: 0,
-      });
+      const entry = getOrCreate(row.user_id, row.first_name, row.last_name);
+      entry.job_time_seconds = parseFloat(row.job_time_seconds) || 0;
     }
 
     // Add shift data
     for (const row of shiftTimeResult.rows) {
-      const existing = userMap.get(row.user_id);
-      if (existing) {
-        existing.shift_duration_seconds = parseFloat(row.shift_duration_seconds) || 0;
-      } else {
-        userMap.set(row.user_id, {
-          user_id: row.user_id,
-          first_name: row.first_name,
-          last_name: row.last_name,
-          job_time_seconds: 0,
-          break_time_seconds: 0,
-          other_time_seconds: 0,
-          shift_duration_seconds: parseFloat(row.shift_duration_seconds) || 0,
-          down_time_seconds: 0,
-        });
-      }
+      const entry = getOrCreate(row.user_id, row.first_name, row.last_name);
+      entry.shift_duration_seconds = parseFloat(row.shift_duration_seconds) || 0;
     }
 
     // Add break data
     for (const row of breakTimeResult.rows) {
-      const existing = userMap.get(row.user_id);
-      if (existing) {
-        existing.break_time_seconds = parseFloat(row.break_time_seconds) || 0;
-      } else {
-        userMap.set(row.user_id, {
-          user_id: row.user_id,
-          first_name: row.first_name,
-          last_name: row.last_name,
-          job_time_seconds: 0,
-          break_time_seconds: parseFloat(row.break_time_seconds) || 0,
-          other_time_seconds: 0,
-          shift_duration_seconds: 0,
-          down_time_seconds: 0,
-        });
-      }
+      const entry = getOrCreate(row.user_id, row.first_name, row.last_name);
+      entry.break_time_seconds = parseFloat(row.break_time_seconds) || 0;
     }
 
     // Add other time data
     for (const row of otherTimeResult.rows) {
-      const existing = userMap.get(row.user_id);
-      if (existing) {
-        existing.other_time_seconds = parseFloat(row.other_time_seconds) || 0;
-      } else {
-        userMap.set(row.user_id, {
-          user_id: row.user_id,
-          first_name: row.first_name,
-          last_name: row.last_name,
-          job_time_seconds: 0,
-          break_time_seconds: 0,
-          other_time_seconds: parseFloat(row.other_time_seconds) || 0,
-          shift_duration_seconds: 0,
-          down_time_seconds: 0,
-        });
-      }
+      const entry = getOrCreate(row.user_id, row.first_name, row.last_name);
+      entry.other_time_seconds = parseFloat(row.other_time_seconds) || 0;
     }
 
-    // Calculate down time: shift_duration - job_time - break_time - other_time
+    // Add offline time data
+    for (const row of offlineTimeResult.rows) {
+      const entry = getOrCreate(row.user_id, row.first_name, row.last_name);
+      entry.offline_time_seconds = parseFloat(row.offline_time_seconds) || 0;
+    }
+
+    // Calculate down time: shift_duration - job_time - break_time - other_time - offline_time
     const transporters = Array.from(userMap.values()).map(t => ({
       ...t,
-      down_time_seconds: Math.max(0, t.shift_duration_seconds - t.job_time_seconds - t.break_time_seconds - t.other_time_seconds),
+      down_time_seconds: Math.max(0, t.shift_duration_seconds - t.job_time_seconds - t.break_time_seconds - t.other_time_seconds - t.offline_time_seconds),
     }));
 
     // Calculate totals
@@ -698,9 +713,10 @@ export const getTimeMetrics = async (
         total_job_time_seconds: acc.total_job_time_seconds + t.job_time_seconds,
         total_break_time_seconds: acc.total_break_time_seconds + t.break_time_seconds,
         total_other_time_seconds: acc.total_other_time_seconds + t.other_time_seconds,
+        total_offline_time_seconds: acc.total_offline_time_seconds + t.offline_time_seconds,
         total_down_time_seconds: acc.total_down_time_seconds + t.down_time_seconds,
       }),
-      { total_job_time_seconds: 0, total_break_time_seconds: 0, total_other_time_seconds: 0, total_down_time_seconds: 0 }
+      { total_job_time_seconds: 0, total_break_time_seconds: 0, total_other_time_seconds: 0, total_offline_time_seconds: 0, total_down_time_seconds: 0 }
     );
 
     res.json({

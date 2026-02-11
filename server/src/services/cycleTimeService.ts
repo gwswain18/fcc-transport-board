@@ -4,6 +4,8 @@ import {
   getCycleTimeSampleSize,
   getCycleTimeThresholdPercentage,
   getAlertSettings,
+  getCycleTimeAlertMode,
+  getPhaseThreshold,
 } from './configService.js';
 import { Floor, CycleTimeAlert } from '../types/index.js';
 import logger from '../utils/logger.js';
@@ -138,6 +140,7 @@ const checkCycleTimeAlerts = async () => {
     return;
   }
 
+  const alertMode = await getCycleTimeAlertMode();
   const thresholdPercentage = await getCycleTimeThresholdPercentage();
 
   // Get all in-progress requests with their current phase timing
@@ -162,31 +165,49 @@ const checkCycleTimeAlerts = async () => {
 
     const currentSeconds = (Date.now() - new Date(startTime as string).getTime()) / 1000;
 
-    // Get average for this phase and floor
-    const avgResult = await query(
-      `SELECT avg_seconds FROM cycle_time_averages
-       WHERE phase = $1 AND (floor = $2 OR floor IS NULL)
-       ORDER BY floor NULLS LAST
-       LIMIT 1`,
-      [currentPhase, request.origin_floor]
-    );
+    if (alertMode === 'manual_threshold') {
+      // Manual threshold mode: use configured per-phase thresholds
+      const phaseThreshold = await getPhaseThreshold(currentPhase);
+      if (!phaseThreshold || !phaseThreshold.enabled) continue;
 
-    if (!avgResult.rows[0]) continue;
+      const thresholdSeconds = phaseThreshold.minutes * 60;
+      if (currentSeconds > thresholdSeconds) {
+        const alert: CycleTimeAlert = {
+          request_id: request.id,
+          phase: currentPhase,
+          current_seconds: Math.round(currentSeconds),
+          avg_seconds: thresholdSeconds,
+          threshold_percentage: 0,
+          transporter_id: request.assigned_to,
+        };
+        io.emit('cycle_time_alert', alert);
+      }
+    } else {
+      // Rolling average mode: use average + threshold percentage
+      const avgResult = await query(
+        `SELECT avg_seconds FROM cycle_time_averages
+         WHERE phase = $1 AND (floor = $2 OR floor IS NULL)
+         ORDER BY floor NULLS LAST
+         LIMIT 1`,
+        [currentPhase, request.origin_floor]
+      );
 
-    const avgSeconds = parseFloat(avgResult.rows[0].avg_seconds);
-    const threshold = avgSeconds * (1 + thresholdPercentage / 100);
+      if (!avgResult.rows[0]) continue;
 
-    if (currentSeconds > threshold) {
-      const alert: CycleTimeAlert = {
-        request_id: request.id,
-        phase: currentPhase,
-        current_seconds: Math.round(currentSeconds),
-        avg_seconds: Math.round(avgSeconds),
-        threshold_percentage: thresholdPercentage,
-        transporter_id: request.assigned_to,
-      };
+      const avgSeconds = parseFloat(avgResult.rows[0].avg_seconds);
+      const threshold = avgSeconds * (1 + thresholdPercentage / 100);
 
-      io.emit('cycle_time_alert', alert);
+      if (currentSeconds > threshold) {
+        const alert: CycleTimeAlert = {
+          request_id: request.id,
+          phase: currentPhase,
+          current_seconds: Math.round(currentSeconds),
+          avg_seconds: Math.round(avgSeconds),
+          threshold_percentage: thresholdPercentage,
+          transporter_id: request.assigned_to,
+        };
+        io.emit('cycle_time_alert', alert);
+      }
     }
   }
 };

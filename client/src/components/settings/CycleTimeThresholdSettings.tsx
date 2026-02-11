@@ -30,7 +30,10 @@ const PHASE_LABELS: Record<string, string> = {
   phase_threshold_transport: 'Transport (with_patient to complete)',
 };
 
+type AlertMode = 'rolling_average' | 'manual_threshold';
+
 export default function CycleTimeThresholdSettings() {
+  const [alertMode, setAlertMode] = useState<AlertMode>('rolling_average');
   const [thresholds, setThresholds] = useState<ThresholdConfig>(DEFAULT_THRESHOLDS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -47,6 +50,20 @@ export default function CycleTimeThresholdSettings() {
     if (response.data?.config) {
       const config = response.data.config as Record<string, string>;
       const loaded: Partial<ThresholdConfig> = {};
+
+      // Load alert mode
+      if (config.cycle_time_alert_mode) {
+        try {
+          const mode = typeof config.cycle_time_alert_mode === 'string'
+            ? JSON.parse(config.cycle_time_alert_mode)
+            : config.cycle_time_alert_mode;
+          if (mode === 'manual_threshold' || mode === 'rolling_average') {
+            setAlertMode(mode);
+          }
+        } catch {
+          // Keep default
+        }
+      }
 
       for (const key of Object.keys(DEFAULT_THRESHOLDS) as (keyof ThresholdConfig)[]) {
         if (config[key]) {
@@ -81,6 +98,12 @@ export default function CycleTimeThresholdSettings() {
     setSuccess(null);
 
     try {
+      // Save alert mode
+      const modeResponse = await api.updateConfig('cycle_time_alert_mode', alertMode);
+      if (modeResponse.error) {
+        throw new Error(modeResponse.error);
+      }
+
       // Save each threshold to config
       for (const [key, value] of Object.entries(thresholds)) {
         const response = await api.updateConfig(key, JSON.stringify(value));
@@ -88,9 +111,9 @@ export default function CycleTimeThresholdSettings() {
           throw new Error(response.error);
         }
       }
-      setSuccess('Thresholds saved successfully');
+      setSuccess('Settings saved successfully');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save thresholds');
+      setError(err instanceof Error ? err.message : 'Failed to save settings');
     }
 
     setSaving(false);
@@ -111,8 +134,42 @@ export default function CycleTimeThresholdSettings() {
       </h3>
       <p className="text-sm text-gray-600 mb-6">
         Configure when alerts should be triggered for each phase of the transport process.
-        Alerts will appear when a phase exceeds the specified threshold.
       </p>
+
+      {/* Alert Mode Toggle */}
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+        <p className="text-sm font-medium text-gray-700 mb-3">Alert Mode</p>
+        <div className="flex gap-6">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="alertMode"
+              value="rolling_average"
+              checked={alertMode === 'rolling_average'}
+              onChange={() => { setAlertMode('rolling_average'); setSuccess(null); }}
+              className="text-primary focus:ring-primary"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-700">Rolling Average (auto)</span>
+              <p className="text-xs text-gray-500">Alert when phase exceeds average + 30%</p>
+            </div>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="alertMode"
+              value="manual_threshold"
+              checked={alertMode === 'manual_threshold'}
+              onChange={() => { setAlertMode('manual_threshold'); setSuccess(null); }}
+              className="text-primary focus:ring-primary"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-700">Manual Thresholds</span>
+              <p className="text-xs text-gray-500">Alert when phase exceeds configured minutes</p>
+            </div>
+          </label>
+        </div>
+      </div>
 
       {error && (
         <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-4">
@@ -126,7 +183,12 @@ export default function CycleTimeThresholdSettings() {
         </div>
       )}
 
-      <div className="space-y-4">
+      <div className={`space-y-4 ${alertMode === 'rolling_average' ? 'opacity-50 pointer-events-none' : ''}`}>
+        <p className="text-sm text-gray-600">
+          {alertMode === 'rolling_average'
+            ? 'Per-phase thresholds are disabled in Rolling Average mode.'
+            : 'Set alert thresholds per phase (alerts fire when phase exceeds configured minutes).'}
+        </p>
         {(Object.keys(thresholds) as (keyof ThresholdConfig)[]).map((key) => (
           <div
             key={key}
@@ -139,6 +201,7 @@ export default function CycleTimeThresholdSettings() {
                   checked={thresholds[key].enabled}
                   onChange={(e) => handleThresholdChange(key, 'enabled', e.target.checked)}
                   className="rounded border-gray-300 text-primary focus:ring-primary"
+                  disabled={alertMode === 'rolling_average'}
                 />
                 <span className="text-sm font-medium text-gray-700">
                   {PHASE_LABELS[key]}
@@ -150,7 +213,7 @@ export default function CycleTimeThresholdSettings() {
                 type="number"
                 value={thresholds[key].minutes}
                 onChange={(e) => handleThresholdChange(key, 'minutes', parseInt(e.target.value) || 0)}
-                disabled={!thresholds[key].enabled}
+                disabled={!thresholds[key].enabled || alertMode === 'rolling_average'}
                 className="w-20 px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100 disabled:text-gray-400"
                 min={1}
                 max={60}

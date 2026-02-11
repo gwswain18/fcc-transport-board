@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { query } from '../config/database.js';
 import { hashPassword } from '../utils/password.js';
 import { AuthenticatedRequest, UserRole, Floor } from '../types/index.js';
-import { logCreate, logUpdate } from '../services/auditService.js';
+import { logCreate, logUpdate, logDelete } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import { isValidEmail, isValidPhoneNumber } from '../utils/validation.js';
 import logger from '../utils/logger.js';
@@ -307,6 +307,64 @@ export const getTransporters = async (
     res.json({ transporters: result.rows });
   } catch (error) {
     logger.error('Get transporters error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Delete user (soft or hard)
+export const deleteUser = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const { id } = req.params;
+    const permanent = req.query.permanent === 'true';
+    const userId = parseInt(id);
+
+    // Prevent self-deletion
+    if (userId === req.user.id) {
+      res.status(400).json({ error: 'Cannot delete your own account' });
+      return;
+    }
+
+    const existing = await query('SELECT * FROM users WHERE id = $1', [userId]);
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const targetUser = existing.rows[0];
+    const { ipAddress } = getAuditContext(req);
+
+    if (permanent) {
+      // Hard delete
+      await query('DELETE FROM users WHERE id = $1', [userId]);
+      await logDelete(req.user.id, 'user', userId, {
+        email: targetUser.email,
+        role: targetUser.role,
+        type: 'permanent',
+      }, ipAddress);
+      res.json({ message: 'User permanently deleted' });
+    } else {
+      // Soft delete (deactivate)
+      await query(
+        'UPDATE users SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [userId]
+      );
+      await logDelete(req.user.id, 'user', userId, {
+        email: targetUser.email,
+        role: targetUser.role,
+        type: 'deactivated',
+      }, ipAddress);
+      res.json({ message: 'User deactivated' });
+    }
+  } catch (error) {
+    logger.error('Delete user error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

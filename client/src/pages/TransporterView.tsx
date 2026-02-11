@@ -29,6 +29,8 @@ export default function TransporterView() {
   const [error, setError] = useState<string | null>(null);
   const [showDelayModal, setShowDelayModal] = useState(false);
   const [delayReason, setDelayReason] = useState('');
+  const [selectedDelayReasons, setSelectedDelayReasons] = useState<Set<string>>(new Set());
+  const [customDelayNote, setCustomDelayNote] = useState('');
   const [pendingCompletion, setPendingCompletion] = useState(false);
 
   const myStatus = transporterStatuses.find((s) => s.user_id === user?.id);
@@ -113,7 +115,20 @@ export default function TransporterView() {
     if (!currentJob) return;
 
     setLoading(true);
-    if (delayReason.trim()) {
+
+    // Use multi-delay API if checkboxes selected, otherwise fall back to legacy
+    const reasons = Array.from(selectedDelayReasons);
+    if (reasons.length > 0 || customDelayNote.trim()) {
+      const allReasons = reasons.length > 0 ? reasons : (customDelayNote.trim() ? [customDelayNote.trim()] : []);
+      if (allReasons.length > 0) {
+        await api.addDelays(currentJob.id, {
+          reasons: allReasons,
+          custom_note: customDelayNote.trim() || undefined,
+          phase: currentJob.status,
+        });
+      }
+    } else if (delayReason.trim()) {
+      // Legacy single reason
       await api.updateRequest(currentJob.id, { delay_reason: delayReason.trim() });
     }
 
@@ -124,6 +139,8 @@ export default function TransporterView() {
 
     setShowDelayModal(false);
     setDelayReason('');
+    setSelectedDelayReasons(new Set());
+    setCustomDelayNote('');
     await refreshData();
     setLoading(false);
   };
@@ -133,6 +150,8 @@ export default function TransporterView() {
 
     setShowDelayModal(false);
     setDelayReason('');
+    setSelectedDelayReasons(new Set());
+    setCustomDelayNote('');
 
     if (pendingCompletion) {
       setLoading(true);
@@ -141,6 +160,18 @@ export default function TransporterView() {
       await refreshData();
       setLoading(false);
     }
+  };
+
+  const toggleDelayReason = (reason: string) => {
+    setSelectedDelayReasons((prev) => {
+      const next = new Set(prev);
+      if (next.has(reason)) {
+        next.delete(reason);
+      } else {
+        next.add(reason);
+      }
+      return next;
+    });
   };
 
   const handleClaimJob = async (jobId: number) => {
@@ -480,6 +511,8 @@ export default function TransporterView() {
           if (!pendingCompletion) {
             setShowDelayModal(false);
             setDelayReason('');
+            setSelectedDelayReasons(new Set());
+            setCustomDelayNote('');
           }
         }}
         title="Delay Note"
@@ -488,32 +521,40 @@ export default function TransporterView() {
           <p className="text-gray-600">
             {pendingCompletion
               ? 'Please explain the delay (optional but helpful):'
-              : 'Add a note explaining any delays:'}
+              : 'Select all reasons that apply:'}
           </p>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="space-y-2">
             {quickDelayReasons.map((reason) => (
-              <button
+              <label
                 key={reason}
-                onClick={() => setDelayReason(reason)}
-                className={`text-sm px-3 py-1 rounded ${
-                  delayReason === reason
-                    ? 'bg-primary text-white'
-                    : 'bg-gray-100 hover:bg-gray-200'
+                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${
+                  selectedDelayReasons.has(reason)
+                    ? 'bg-primary-50 border border-primary-200'
+                    : 'bg-gray-50 border border-gray-200 hover:bg-gray-100'
                 }`}
               >
-                {reason}
-              </button>
+                <input
+                  type="checkbox"
+                  checked={selectedDelayReasons.has(reason)}
+                  onChange={() => toggleDelayReason(reason)}
+                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="text-sm font-medium text-gray-700">{reason}</span>
+              </label>
             ))}
           </div>
 
-          <input
-            type="text"
-            value={delayReason}
-            onChange={(e) => setDelayReason(e.target.value)}
-            placeholder="Or enter custom reason..."
-            className="input w-full"
-          />
+          <div>
+            <label className="text-sm text-gray-600 mb-1 block">Additional notes (optional)</label>
+            <input
+              type="text"
+              value={customDelayNote}
+              onChange={(e) => setCustomDelayNote(e.target.value)}
+              placeholder="Enter additional details..."
+              className="input w-full"
+            />
+          </div>
 
           <div className="flex gap-2">
             <button

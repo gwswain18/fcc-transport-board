@@ -108,6 +108,22 @@ export const getBreakAlertMinutes = async (): Promise<number> => {
   return value ? parseInt(value, 10) : 30;
 };
 
+export const getCycleTimeAlertMode = async (): Promise<'rolling_average' | 'manual_threshold'> => {
+  const value = await getConfig<string>('cycle_time_alert_mode');
+  if (value === 'manual_threshold') return 'manual_threshold';
+  return 'rolling_average';
+};
+
+export const getPhaseThreshold = async (phase: string): Promise<{ minutes: number; enabled: boolean } | null> => {
+  const value = await getConfig<string>(`phase_threshold_${phase}`);
+  if (!value) return null;
+  try {
+    return typeof value === 'string' ? JSON.parse(value) : value;
+  } catch {
+    return null;
+  }
+};
+
 // Clear cache (useful for testing or forced refresh)
 export const clearConfigCache = (): void => {
   configCache.clear();

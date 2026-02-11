@@ -132,6 +132,11 @@ export const api = {
       body: JSON.stringify({ password }),
     }),
 
+  deleteUser: (id: number, permanent: boolean = false) =>
+    request<{ message: string }>(`/users/${id}${permanent ? '?permanent=true' : ''}`, {
+      method: 'DELETE',
+    }),
+
   // Transporter Status
   getStatuses: () =>
     request<{ statuses: import('../types').TransporterStatusRecord[] }>('/status'),
@@ -216,6 +221,18 @@ export const api = {
       `/requests/${id}/assign-pct`,
       { method: 'PUT' }
     ),
+
+  addDelays: (requestId: number, data: { reasons: string[]; custom_note?: string; phase?: string }) =>
+    request<{ delays: unknown[]; message: string }>(`/requests/${requestId}/delays`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getDelays: (requestId: number) =>
+    request<{ delays: unknown[] }>(`/requests/${requestId}/delays`),
+
+  getUserDelays: (userId: number) =>
+    request<{ delays: Array<{ reason: string; count: number }> }>(`/users/${userId}/delays`),
 
   // Shifts
   startShift: (data?: { extension?: string; floor_assignment?: string }) =>
@@ -437,6 +454,7 @@ export const api = {
         job_time_seconds: number;
         break_time_seconds: number;
         other_time_seconds: number;
+        offline_time_seconds: number;
         shift_duration_seconds: number;
         down_time_seconds: number;
       }>;
@@ -444,6 +462,7 @@ export const api = {
         total_job_time_seconds: number;
         total_break_time_seconds: number;
         total_other_time_seconds: number;
+        total_offline_time_seconds: number;
         total_down_time_seconds: number;
       };
     }>(`/reports/time-metrics${query ? `?${query}` : ''}`);

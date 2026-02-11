@@ -406,6 +406,36 @@ export interface StaffingMetrics {
   requests_per_transporter: number;
 }
 
+// Request delays (feature #7)
+export interface RequestDelay {
+  id: number;
+  request_id: number;
+  user_id?: number;
+  reason: string;
+  custom_note?: string;
+  phase?: string;
+  created_at: string;
+}
+
+export const PREDEFINED_DELAY_REASONS = [
+  'Patient not ready',
+  'Elevator delay',
+  'Waiting for equipment',
+  'Staff coordination',
+  'Forgot to press button',
+  'Documentation pending',
+] as const;
+
+// Offline period tracking (feature #6)
+export interface OfflinePeriod {
+  id: number;
+  user_id: number;
+  shift_id?: number;
+  offline_at: string;
+  online_at?: string;
+  duration_seconds?: number;
+}
+
 // Status override (feature #18)
 export interface StatusOverrideInput {
   user_id: number;
