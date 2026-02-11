@@ -14,7 +14,10 @@ const router = express.Router();
 router.use(authenticate);
 
 // Alert settings readable by all authenticated users (needed for UI)
-router.get('/alert_settings', getConfigValue);
+router.get('/alert_settings', (req, res) => {
+  (req.params as Record<string, string>).key = 'alert_settings';
+  getConfigValue(req, res);
+});
 
 // Get config (supervisor+)
 router.get('/', canViewReports, getAllConfigValues);
