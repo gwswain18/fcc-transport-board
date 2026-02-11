@@ -10,6 +10,7 @@ import {
   TransporterOffline,
   ActiveDispatcher,
   AlertSettings,
+  JobRemovedNotification,
 } from '../types';
 import {
   playJobAssignmentBeep,
@@ -29,10 +30,12 @@ interface SocketContextType {
   activeDispatchers: ActiveDispatcher[];
   alertSettings: AlertSettings | null;
   requireExplanation: boolean;
+  jobRemovedNotification: JobRemovedNotification | null;
   dismissAlert: (requestId: number, explanation?: string) => void;
   dismissCycleAlert: (requestId: number, explanation?: string) => void;
   dismissBreakAlert: (userId: number, explanation?: string) => void;
   dismissOfflineAlert: (userId: number, explanation?: string) => void;
+  clearJobRemovedNotification: () => void;
   refreshData: () => void;
 }
 
@@ -52,6 +55,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [offlineAlerts, setOfflineAlerts] = useState<TransporterOffline[]>([]);
   const [activeDispatchers, setActiveDispatchers] = useState<ActiveDispatcher[]>([]);
   const [alertSettings, setAlertSettings] = useState<AlertSettings | null>(null);
+  const [jobRemovedNotification, setJobRemovedNotification] = useState<JobRemovedNotification | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
   const [recentlyCompleted, setRecentlyCompleted] = useState<Map<number, number>>(new Map());
   const [completedAlerts, setCompletedAlerts] = useState<CycleTimeAlert[]>([]);
@@ -258,6 +262,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setActiveDispatchers(data.dispatchers);
     });
 
+    // Job removed notification (cancel/reassign)
+    newSocket.on('job_removed', (notification: JobRemovedNotification) => {
+      setJobRemovedNotification(notification);
+    });
+
     // Alert settings changes
     newSocket.on('alert_settings_changed', (settings: AlertSettings) => {
       setAlertSettings(settings);
@@ -313,6 +322,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       socket.emit('offline_alert_dismissed', { user_id: userId, explanation });
     }
   }, [socket]);
+
+  const clearJobRemovedNotification = useCallback(() => {
+    setJobRemovedNotification(null);
+  }, []);
 
   const refreshData = async () => {
     const apiBase = import.meta.env.VITE_API_URL || '/api';
@@ -388,10 +401,12 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         activeDispatchers,
         alertSettings,
         requireExplanation,
+        jobRemovedNotification,
         dismissAlert,
         dismissCycleAlert,
         dismissBreakAlert,
         dismissOfflineAlert,
+        clearJobRemovedNotification,
         refreshData,
       }}
     >

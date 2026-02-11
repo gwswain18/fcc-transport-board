@@ -566,6 +566,7 @@ export const api = {
         assignee: { first_name: string; last_name: string } | null;
         reassignments: Array<{ from_name: string; to_name: string; timestamp: string }>;
         delays: Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>;
+        cancelled_by: { first_name: string; last_name: string } | null;
       }>;
       pagination: { page: number; limit: number; total: number; pages: number };
     }>(`/reports/completed-jobs${query ? `?${query}` : ''}`);

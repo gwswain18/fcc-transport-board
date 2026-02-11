@@ -15,8 +15,19 @@ interface AlertRequest {
   assigned_at: string | null;
 }
 
-export const startAlertService = () => {
+export const startAlertService = async () => {
   logger.info('Starting alert service...');
+
+  // Log initial alert settings on startup
+  try {
+    const alertSettings = await getAlertSettings();
+    const timing = await getAlertTiming();
+    logger.info(`[AlertService] Alert settings: master_enabled=${alertSettings.master_enabled}`);
+    logger.info(`[AlertService] Individual alerts: pending_timeout=${alertSettings.alerts.pending_timeout}, stat_timeout=${alertSettings.alerts.stat_timeout}, acceptance_timeout=${alertSettings.alerts.acceptance_timeout}`);
+    logger.info(`[AlertService] Timing: pending=${timing.pending_timeout_minutes}min, stat=${timing.stat_timeout_minutes}min, acceptance=${timing.acceptance_timeout_minutes}min`);
+  } catch (error) {
+    logger.error('[AlertService] Failed to load initial settings:', error);
+  }
 
   setInterval(async () => {
     try {
@@ -34,7 +45,8 @@ const checkForAlerts = async () => {
   // Check alert settings
   const alertSettings = await getAlertSettings();
   if (!alertSettings.master_enabled) {
-    return; // All alerts disabled
+    logger.info('[AlertService] All alerts disabled (master_enabled=false)');
+    return;
   }
 
   const timing = await getAlertTiming();
@@ -64,6 +76,7 @@ const checkForAlerts = async () => {
           type: 'pending_timeout',
           request,
         });
+        logger.info(`[AlertService] Emitted pending_timeout for request ${request.id}`);
       }
     }
   }
@@ -85,6 +98,7 @@ const checkForAlerts = async () => {
         type: 'stat_timeout',
         request,
       });
+      logger.info(`[AlertService] Emitted stat_timeout for request ${request.id}`);
     }
   }
 
@@ -104,6 +118,7 @@ const checkForAlerts = async () => {
         type: 'acceptance_timeout',
         request,
       });
+      logger.info(`[AlertService] Emitted acceptance_timeout for request ${request.id}`);
     }
   }
 };

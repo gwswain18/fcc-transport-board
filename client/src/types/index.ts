@@ -122,6 +122,8 @@ export interface CreateTransportRequestData {
 
 export interface ReportSummary {
   total_completed: number;
+  total_cancelled: number;
+  total_pct: number;
   avg_response_time_minutes: number;
   avg_pickup_time_minutes: number;
   avg_transport_time_minutes: number;
@@ -200,6 +202,14 @@ export interface AlertTiming {
   acceptance_timeout_minutes: number;
   break_alert_minutes: number;
   offline_alert_minutes: number;
+}
+
+// Job removed notification (cancel/reassign)
+export interface JobRemovedNotification {
+  request_id: number;
+  action: 'cancelled' | 'reassigned';
+  actor_name: string;
+  job_summary: string;
 }
 
 // Alert settings

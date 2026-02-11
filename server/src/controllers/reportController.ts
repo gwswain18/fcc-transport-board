@@ -10,7 +10,7 @@ export const getSummary = async (
   try {
     const { start_date, end_date, shift_start, shift_end, floor, transporter_id } = req.query;
 
-    let whereClause = "WHERE status = 'complete'";
+    let whereClause = "WHERE status IN ('complete', 'cancelled', 'transferred_to_pct')";
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -43,23 +43,29 @@ export const getSummary = async (
 
     const result = await query(
       `SELECT
-        COUNT(*) as total_completed,
-        AVG(EXTRACT(EPOCH FROM (accepted_at - created_at)) / 60) as avg_response_time,
-        AVG(EXTRACT(EPOCH FROM (with_patient_at - created_at)) / 60) as avg_pickup_time,
-        AVG(EXTRACT(EPOCH FROM (completed_at - with_patient_at)) / 60) as avg_transport_time,
-        AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 60) as avg_cycle_time
+        COUNT(*) FILTER (WHERE status = 'complete') as total_completed,
+        COUNT(*) FILTER (WHERE status = 'cancelled') as total_cancelled,
+        COUNT(*) FILTER (WHERE status = 'transferred_to_pct') as total_pct,
+        AVG(EXTRACT(EPOCH FROM (accepted_at - created_at)) / 60) FILTER (WHERE status = 'complete') as avg_response_time,
+        AVG(EXTRACT(EPOCH FROM (with_patient_at - created_at)) / 60) FILTER (WHERE status = 'complete') as avg_pickup_time,
+        AVG(EXTRACT(EPOCH FROM (completed_at - with_patient_at)) / 60) FILTER (WHERE status = 'complete') as avg_transport_time,
+        AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 60) FILTER (WHERE status = 'complete') as avg_cycle_time
        FROM transport_requests
        ${whereClause}`,
       params
     );
 
-    // Calculate timeout rate (jobs that took > 5 min to accept)
+    // Calculate timeout rate (jobs that took > 5 min to accept, only for completed)
+    const completeWhereClause = whereClause.replace(
+      "status IN ('complete', 'cancelled', 'transferred_to_pct')",
+      "status = 'complete'"
+    );
     const timeoutResult = await query(
       `SELECT
         COUNT(*) FILTER (WHERE EXTRACT(EPOCH FROM (accepted_at - created_at)) > 300) as timed_out,
         COUNT(*) as total
        FROM transport_requests
-       ${whereClause}`,
+       ${completeWhereClause}`,
       params
     );
 
@@ -72,6 +78,8 @@ export const getSummary = async (
     res.json({
       summary: {
         total_completed: parseInt(summary.total_completed) || 0,
+        total_cancelled: parseInt(summary.total_cancelled) || 0,
+        total_pct: parseInt(summary.total_pct) || 0,
         avg_response_time_minutes: parseFloat(summary.avg_response_time) || 0,
         avg_pickup_time_minutes: parseFloat(summary.avg_pickup_time) || 0,
         avg_transport_time_minutes: parseFloat(summary.avg_transport_time) || 0,
@@ -1056,6 +1064,7 @@ export const getCompletedJobs = async (
 
     let reassignments: Record<number, Array<{ from_name: string; to_name: string; timestamp: string }>> = {};
     let delays: Record<number, Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>> = {};
+    let cancelledByMap: Record<number, { first_name: string; last_name: string }> = {};
 
     if (jobIds.length > 0) {
       // Get reassignment audit logs
@@ -1086,6 +1095,20 @@ export const getCompletedJobs = async (
           to_name: row.to_name || 'Unknown',
           timestamp: row.timestamp,
         });
+      }
+
+      // Get cancellation actor from status_history
+      const cancelResult = await query(
+        `SELECT sh.request_id, u.first_name, u.last_name
+         FROM status_history sh
+         JOIN users u ON sh.user_id = u.id
+         WHERE sh.to_status = 'cancelled'
+           AND sh.request_id = ANY($1)`,
+        [jobIds]
+      );
+
+      for (const row of cancelResult.rows) {
+        cancelledByMap[row.request_id] = { first_name: row.first_name, last_name: row.last_name };
       }
 
       // Get delays
@@ -1130,6 +1153,7 @@ export const getCompletedJobs = async (
       assignee: row.assignee_id ? { first_name: row.assignee_first_name, last_name: row.assignee_last_name } : null,
       reassignments: reassignments[row.id as number] || [],
       delays: delays[row.id as number] || [],
+      cancelled_by: cancelledByMap[row.id as number] || null,
     }));
 
     res.json({

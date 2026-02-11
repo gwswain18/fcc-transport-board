@@ -23,6 +23,7 @@ interface CompletedJob {
   assignee: { first_name: string; last_name: string } | null;
   reassignments: Array<{ from_name: string; to_name: string; timestamp: string }>;
   delays: Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>;
+  cancelled_by: { first_name: string; last_name: string } | null;
 }
 
 interface Pagination {
@@ -80,8 +81,11 @@ function formatDuration(startTs: string | null, endTs: string | null): string {
   return `${hours}h ${remainingMins}m`;
 }
 
-function PersonName({ person }: { person: { first_name: string; last_name: string } | null }) {
-  if (!person) return <span className="text-gray-400">Unassigned</span>;
+function PersonName({ person, status }: { person: { first_name: string; last_name: string } | null; status?: string }) {
+  if (!person) {
+    if (status === 'transferred_to_pct') return <span className="text-purple-600 font-medium">PCT</span>;
+    return <span className="text-gray-400">Unassigned</span>;
+  }
   return <span>{person.first_name} {person.last_name}</span>;
 }
 
@@ -91,30 +95,160 @@ interface TimelineStepProps {
   duration?: string;
   isLast?: boolean;
   isCancelled?: boolean;
+  isReassignment?: boolean;
+  subtitle?: string;
 }
 
-function TimelineStep({ label, time, duration, isLast, isCancelled }: TimelineStepProps) {
+function TimelineStep({ label, time, duration, isLast, isCancelled, isReassignment, subtitle }: TimelineStepProps) {
   const hasTime = !!time;
   return (
     <div className="flex items-start gap-3">
       <div className="flex flex-col items-center">
         <div className={`w-3 h-3 rounded-full mt-1 ${
-          isCancelled ? 'bg-red-400' : hasTime ? 'bg-blue-500' : 'bg-gray-300'
+          isCancelled ? 'bg-red-400' : isReassignment ? 'bg-orange-400' : hasTime ? 'bg-blue-500' : 'bg-gray-300'
         }`} />
-        {!isLast && <div className={`w-0.5 h-8 ${hasTime ? 'bg-blue-200' : 'bg-gray-200'}`} />}
+        {!isLast && <div className={`w-0.5 h-8 ${
+          isReassignment ? 'bg-orange-200' : hasTime ? 'bg-blue-200' : 'bg-gray-200'
+        }`} />}
       </div>
       <div className="flex-1 pb-2">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-700">{label}</span>
+          <span className={`text-sm font-medium ${isReassignment ? 'text-orange-700' : 'text-gray-700'}`}>{label}</span>
           {duration && duration !== '-' && (
             <span className="text-xs text-gray-400">({duration})</span>
           )}
         </div>
+        {subtitle && <div className="text-xs text-gray-500">{subtitle}</div>}
         <span className={`text-xs ${hasTime ? 'text-gray-500' : 'text-gray-300'}`}>
           {hasTime ? formatTime(time) : 'N/A'}
         </span>
       </div>
     </div>
+  );
+}
+
+function TimelineSteps({ job }: { job: CompletedJob }) {
+  // Build a list of all timeline events (phase steps + reassignments) sorted by time
+  type TimelineEvent =
+    | { type: 'phase'; label: string; time: string | null; duration?: string; isCancelled?: boolean; subtitle?: string }
+    | { type: 'reassignment'; from_name: string; to_name: string; time: string };
+
+  const events: TimelineEvent[] = [];
+
+  // Phase steps with their timestamps
+  const phases: Array<{ label: string; time: string | null; nextTime: string | null }> = [
+    { label: 'Created', time: job.created_at, nextTime: job.assigned_at },
+    { label: 'Assigned', time: job.assigned_at, nextTime: job.accepted_at },
+    { label: 'Accepted', time: job.accepted_at, nextTime: job.en_route_at },
+    { label: 'En Route', time: job.en_route_at, nextTime: job.with_patient_at },
+    { label: 'With Patient', time: job.with_patient_at, nextTime: job.completed_at },
+  ];
+
+  for (const phase of phases) {
+    events.push({
+      type: 'phase',
+      label: phase.label,
+      time: phase.time,
+      duration: formatDuration(phase.time, phase.nextTime),
+    });
+  }
+
+  // Add reassignment events
+  for (const r of job.reassignments) {
+    events.push({
+      type: 'reassignment',
+      from_name: r.from_name,
+      to_name: r.to_name,
+      time: r.timestamp,
+    });
+  }
+
+  // Add final step (cancelled or completed)
+  if (job.status === 'cancelled') {
+    const cancelledSubtitle = job.cancelled_by
+      ? `by ${job.cancelled_by.first_name} ${job.cancelled_by.last_name}`
+      : undefined;
+    events.push({
+      type: 'phase',
+      label: 'Cancelled',
+      time: job.cancelled_at,
+      isCancelled: true,
+      subtitle: cancelledSubtitle,
+    });
+  } else {
+    events.push({
+      type: 'phase',
+      label: job.status === 'transferred_to_pct' ? 'Transferred to PCT' : 'Completed',
+      time: job.completed_at,
+    });
+  }
+
+  // Sort events: phase steps without time go in their natural order,
+  // reassignments are inserted by timestamp between phase steps
+  // We keep phases in order but insert reassignments at the right position
+  const phaseEvents = events.filter(e => e.type === 'phase') as Array<TimelineEvent & { type: 'phase' }>;
+  const reassignEvents = (events.filter(e => e.type === 'reassignment') as Array<TimelineEvent & { type: 'reassignment' }>)
+    .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+  // Build merged timeline: insert reassignments after the last phase step that occurred before them
+  const merged: TimelineEvent[] = [];
+  let reassignIdx = 0;
+
+  for (const phase of phaseEvents) {
+    merged.push(phase);
+    // Insert any reassignments that occurred after this phase but before the next
+    while (reassignIdx < reassignEvents.length) {
+      const r = reassignEvents[reassignIdx];
+      const rTime = new Date(r.time).getTime();
+      // Find the next phase with a time
+      const nextPhaseIdx = phaseEvents.indexOf(phase) + 1;
+      const nextPhase = nextPhaseIdx < phaseEvents.length ? phaseEvents[nextPhaseIdx] : null;
+      const nextPhaseTime = nextPhase?.time ? new Date(nextPhase.time).getTime() : Infinity;
+
+      if (phase.time && rTime >= new Date(phase.time).getTime() && rTime < nextPhaseTime) {
+        merged.push(r);
+        reassignIdx++;
+      } else {
+        break;
+      }
+    }
+  }
+
+  // Add any remaining reassignments at the end
+  while (reassignIdx < reassignEvents.length) {
+    merged.push(reassignEvents[reassignIdx]);
+    reassignIdx++;
+  }
+
+  return (
+    <>
+      {merged.map((event, i) => {
+        const isLast = i === merged.length - 1;
+        if (event.type === 'reassignment') {
+          return (
+            <TimelineStep
+              key={`reassign-${i}`}
+              label={`Reassigned`}
+              time={event.time}
+              isReassignment
+              subtitle={`${event.from_name} → ${event.to_name}`}
+              isLast={isLast}
+            />
+          );
+        }
+        return (
+          <TimelineStep
+            key={`phase-${i}`}
+            label={event.label}
+            time={event.time}
+            duration={event.duration}
+            isCancelled={event.isCancelled}
+            subtitle={event.subtitle}
+            isLast={isLast}
+          />
+        );
+      })}
+    </>
   );
 }
 
@@ -159,7 +293,7 @@ function JobCard({ job, expanded, onToggle }: { job: CompletedJob; expanded: boo
 
         {/* Assignee */}
         <div className="flex-shrink-0 text-sm text-gray-600 hidden sm:block">
-          <PersonName person={job.assignee} />
+          <PersonName person={job.assignee} status={job.status} />
         </div>
 
         {/* Duration */}
@@ -190,7 +324,7 @@ function JobCard({ job, expanded, onToggle }: { job: CompletedJob; expanded: boo
               <div className="space-y-1 text-sm">
                 <div><span className="text-gray-500">Job ID:</span> <span className="font-medium">#{job.id}</span></div>
                 <div><span className="text-gray-500">Created by:</span> <span className="font-medium"><PersonName person={job.creator} /></span></div>
-                <div><span className="text-gray-500">Assigned to:</span> <span className="font-medium"><PersonName person={job.assignee} /></span></div>
+                <div><span className="text-gray-500">Assigned to:</span> <span className="font-medium"><PersonName person={job.assignee} status={job.status} /></span></div>
                 {job.assignment_method && (
                   <div><span className="text-gray-500">Assignment:</span> <span className="font-medium capitalize">{job.assignment_method.replace('_', ' ')}</span></div>
                 )}
@@ -206,66 +340,12 @@ function JobCard({ job, expanded, onToggle }: { job: CompletedJob; expanded: boo
             <div>
               <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Timeline</h4>
               <div>
-                <TimelineStep
-                  label="Created"
-                  time={job.created_at}
-                  duration={formatDuration(job.created_at, job.assigned_at)}
-                />
-                <TimelineStep
-                  label="Assigned"
-                  time={job.assigned_at}
-                  duration={formatDuration(job.assigned_at, job.accepted_at)}
-                />
-                <TimelineStep
-                  label="Accepted"
-                  time={job.accepted_at}
-                  duration={formatDuration(job.accepted_at, job.en_route_at)}
-                />
-                <TimelineStep
-                  label="En Route"
-                  time={job.en_route_at}
-                  duration={formatDuration(job.en_route_at, job.with_patient_at)}
-                />
-                <TimelineStep
-                  label="With Patient"
-                  time={job.with_patient_at}
-                  duration={formatDuration(job.with_patient_at, job.completed_at)}
-                />
-                {job.status === 'cancelled' ? (
-                  <TimelineStep
-                    label="Cancelled"
-                    time={job.cancelled_at}
-                    isLast
-                    isCancelled
-                  />
-                ) : (
-                  <TimelineStep
-                    label="Completed"
-                    time={job.completed_at}
-                    isLast
-                  />
-                )}
+                <TimelineSteps job={job} />
               </div>
             </div>
 
-            {/* Right column: Reassignments & Delays */}
+            {/* Right column: Delays */}
             <div>
-              {job.reassignments.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Reassignments</h4>
-                  <div className="space-y-2">
-                    {job.reassignments.map((r, i) => (
-                      <div key={i} className="text-sm p-2 bg-orange-50 rounded">
-                        <span className="text-gray-600">{r.from_name}</span>
-                        <span className="text-gray-400 mx-1">&rarr;</span>
-                        <span className="text-gray-600">{r.to_name}</span>
-                        <div className="text-xs text-gray-400 mt-0.5">{formatDateTime(r.timestamp)}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {job.delays.length > 0 && (
                 <div>
                   <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Delays</h4>
@@ -282,8 +362,8 @@ function JobCard({ job, expanded, onToggle }: { job: CompletedJob; expanded: boo
                 </div>
               )}
 
-              {job.reassignments.length === 0 && job.delays.length === 0 && (
-                <div className="text-sm text-gray-400 italic">No reassignments or delays</div>
+              {job.delays.length === 0 && (
+                <div className="text-sm text-gray-400 italic">No delays recorded</div>
               )}
             </div>
           </div>

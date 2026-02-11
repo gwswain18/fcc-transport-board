@@ -7,7 +7,7 @@ import {
   Priority,
   AssignmentMethod,
 } from '../types/index.js';
-import { getIO } from '../socket/index.js';
+import { getIO, emitToUser } from '../socket/index.js';
 import { validateFloorRoom } from '../utils/validation.js';
 import { autoAssignRequest } from '../services/autoAssignService.js';
 import { sendJobAssignmentSMS } from '../services/twilioService.js';
@@ -460,6 +460,17 @@ export const updateRequest = async (
            WHERE user_id = $1`,
           [currentRequest.assigned_to]
         );
+
+        // Notify the old assignee that their job was reassigned
+        if (assigned_to && assigned_to !== currentRequest.assigned_to) {
+          const actorName = `${req.user!.first_name || ''} ${req.user!.last_name || ''}`.trim() || 'A dispatcher';
+          emitToUser(currentRequest.assigned_to, 'job_removed', {
+            request_id: parseInt(id),
+            action: 'reassigned',
+            actor_name: actorName,
+            job_summary: `${currentRequest.origin_floor}-${currentRequest.room_number} → ${currentRequest.destination}`,
+          });
+        }
       }
     }
 
@@ -547,6 +558,17 @@ export const cancelRequest = async (
     const io = getIO();
     if (io) {
       io.emit('request_cancelled', cancelledRequest);
+    }
+
+    // Notify the previous assignee that their job was cancelled
+    if (currentRequest.assigned_to) {
+      const actorName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || 'A dispatcher';
+      emitToUser(currentRequest.assigned_to, 'job_removed', {
+        request_id: parseInt(id),
+        action: 'cancelled',
+        actor_name: actorName,
+        job_summary: `${currentRequest.origin_floor}-${currentRequest.room_number} → ${currentRequest.destination}`,
+      });
     }
 
     res.json({ request: cancelledRequest, message: 'Request cancelled' });

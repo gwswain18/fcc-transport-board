@@ -18,7 +18,7 @@ import { Floor } from '../types';
 
 export default function TransporterView() {
   const { user, activeShift, setActiveShift, logout } = useAuth();
-  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, refreshData } = useSocket();
+  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, jobRemovedNotification, clearJobRemovedNotification, refreshData } = useSocket();
   const navigate = useNavigate();
   const [queueOpen, setQueueOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -584,6 +584,40 @@ export default function TransporterView() {
         onConfirm={handleEndShift}
         loading={shiftLoading}
       />
+
+      {/* Job Removed Notification Modal */}
+      <Modal
+        isOpen={!!jobRemovedNotification}
+        onClose={() => {}}
+        title={jobRemovedNotification?.action === 'cancelled' ? 'Job Cancelled' : 'Job Reassigned'}
+      >
+        {jobRemovedNotification && (
+          <div className="space-y-4">
+            <div className={`p-4 rounded-lg ${jobRemovedNotification.action === 'cancelled' ? 'bg-red-50 border border-red-200' : 'bg-orange-50 border border-orange-200'}`}>
+              <p className={`font-medium ${jobRemovedNotification.action === 'cancelled' ? 'text-red-800' : 'text-orange-800'}`}>
+                {jobRemovedNotification.action === 'cancelled'
+                  ? 'Your current job has been cancelled.'
+                  : 'Your current job has been reassigned to another transporter.'}
+              </p>
+              <p className="text-sm text-gray-600 mt-2">
+                <span className="font-medium">Job:</span> {jobRemovedNotification.job_summary}
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                <span className="font-medium">By:</span> {jobRemovedNotification.actor_name}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                clearJobRemovedNotification();
+                refreshData();
+              }}
+              className={`w-full py-3 text-white font-bold rounded-xl ${jobRemovedNotification.action === 'cancelled' ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'}`}
+            >
+              Acknowledge
+            </button>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

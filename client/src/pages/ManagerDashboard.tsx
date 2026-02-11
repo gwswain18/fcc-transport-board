@@ -287,11 +287,21 @@ export default function ManagerDashboard() {
           <>
             {/* Metrics Cards */}
             {summary && (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-6">
                 <MetricCard
                   title="Total Completed"
                   value={summary.total_completed.toString()}
                   color="bg-green-500"
+                />
+                <MetricCard
+                  title="Total Cancelled"
+                  value={summary.total_cancelled.toString()}
+                  color="bg-red-500"
+                />
+                <MetricCard
+                  title="Total PCT"
+                  value={summary.total_pct.toString()}
+                  color="bg-purple-500"
                 />
                 <MetricCard
                   title="Avg Response"

@@ -332,16 +332,20 @@ const emitDispatcherChange = async () => {
 };
 
 // Get available dispatchers (for replacement selection)
-export const getAvailableDispatchers = async (_req: Request, res: Response) => {
+export const getAvailableDispatchers = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const currentUserId = req.user?.id;
     const result = await query(
       `SELECT u.id, u.first_name, u.last_name, u.email, u.phone_number,
               ad.id as dispatcher_id, ad.is_primary, ad.on_break
        FROM users u
-       LEFT JOIN active_dispatchers ad ON u.id = ad.user_id AND ad.ended_at IS NULL
+       JOIN active_dispatchers ad ON u.id = ad.user_id AND ad.ended_at IS NULL
        WHERE u.role IN ('dispatcher', 'supervisor', 'manager')
        AND u.is_active = true
-       ORDER BY u.first_name, u.last_name`
+       AND ad.on_break = false
+       AND u.id != $1
+       ORDER BY u.first_name, u.last_name`,
+      [currentUserId]
     );
 
     res.json({ dispatchers: result.rows });

@@ -17,7 +17,6 @@ import Modal from '../components/common/Modal';
 import AutoAssignButton from '../components/dispatcher/AutoAssignButton';
 import ActiveDispatcherCard from '../components/dispatcher/ActiveDispatcherCard';
 import BreakModal from '../components/dispatcher/BreakModal';
-import CycleTimeAlert from '../components/common/CycleTimeAlert';
 import AlertBanners from '../components/common/AlertBanners';
 import JobHistoryModal from '../components/dispatcher/JobHistoryModal';
 
@@ -213,20 +212,6 @@ export default function DispatcherView() {
       <AlertBanners />
 
       <main className="max-w-7xl mx-auto p-4">
-        {/* Cycle Time Alerts */}
-        {cycleTimeAlerts.length > 0 && (
-          <div className="mb-4 space-y-2">
-            {cycleTimeAlerts.map((alert) => (
-              <CycleTimeAlert
-                key={alert.request_id}
-                alert={alert}
-                request={requests.find(r => r.id === alert.request_id)}
-                onDismiss={dismissCycleAlert}
-              />
-            ))}
-          </div>
-        )}
-
         <div className="grid grid-cols-12 gap-4">
           {/* Left Panel - Transporters */}
           <div className="col-span-3 space-y-4">

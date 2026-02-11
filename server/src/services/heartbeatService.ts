@@ -8,8 +8,18 @@ const CHECK_INTERVAL_MS = 30000; // 30 seconds
 
 let intervalId: NodeJS.Timeout | null = null;
 
-export const startHeartbeatService = () => {
+export const startHeartbeatService = async () => {
   logger.info('Starting heartbeat service...');
+
+  // Log alert settings and timing on startup
+  try {
+    const alertSettings = await getAlertSettings();
+    const timing = await getAlertTiming();
+    logger.info(`[Heartbeat] Alert settings: master_enabled=${alertSettings.master_enabled}, offline_alert=${alertSettings.alerts.offline_alert}, break_alert=${alertSettings.alerts.break_alert}`);
+    logger.info(`[Heartbeat] Timing: offline_alert_minutes=${timing.offline_alert_minutes}, break_alert_minutes=${timing.break_alert_minutes}`);
+  } catch (error) {
+    logger.error('[Heartbeat] Failed to load initial settings:', error);
+  }
 
   if (intervalId) {
     clearInterval(intervalId);
@@ -80,6 +90,10 @@ const checkHeartbeats = async () => {
     [cutoffTime]
   );
 
+  if (result.rows.length > 0) {
+    logger.info(`[Heartbeat] Found ${result.rows.length} stale heartbeat(s) (cutoff: ${cutoffTime})`);
+  }
+
   for (const row of result.rows) {
     const oldStatus = row.status;
 
@@ -127,6 +141,9 @@ const checkHeartbeats = async () => {
         first_name: user?.first_name,
         last_name: user?.last_name,
       });
+      logger.info(`[Heartbeat] Emitted transporter_offline for user ${row.user_id}`);
+    } else {
+      logger.info(`[Heartbeat] Offline alert skipped for user ${row.user_id} (master_enabled=${alertSettings.master_enabled}, offline_alert=${alertSettings.alerts.offline_alert})`);
     }
 
     // Also emit status change
@@ -152,6 +169,7 @@ const checkBreakDurations = async () => {
   // Check alert settings first
   const alertSettings = await getAlertSettings();
   if (!alertSettings.master_enabled || !alertSettings.alerts.break_alert) {
+    logger.info(`[BreakCheck] Skipped (master_enabled=${alertSettings.master_enabled}, break_alert=${alertSettings.alerts.break_alert})`);
     return;
   }
 
@@ -170,6 +188,10 @@ const checkBreakDurations = async () => {
      AND ts.on_break_since < $1`,
     [cutoffTime]
   );
+
+  if (result.rows.length > 0) {
+    logger.info(`[BreakCheck] Found ${result.rows.length} user(s) on break exceeding ${timing.break_alert_minutes} min threshold`);
+  }
 
   for (const row of result.rows) {
     const breakStart = new Date(row.on_break_since);
