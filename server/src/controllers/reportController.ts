@@ -795,6 +795,90 @@ export const getJobsByDay = async (
   }
 };
 
+// Get delay report (by reason + by transporter)
+export const getDelayReport = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { start_date, end_date } = req.query;
+
+    let whereClause = 'WHERE 1=1';
+    const params: unknown[] = [];
+    let paramIndex = 1;
+
+    if (start_date) {
+      whereClause += ` AND rd.created_at >= $${paramIndex++}`;
+      params.push(start_date);
+    }
+
+    if (end_date) {
+      whereClause += ` AND rd.created_at <= $${paramIndex++}`;
+      params.push(end_date);
+    }
+
+    // By reason
+    const byReasonResult = await query(
+      `SELECT rd.reason, COUNT(*) as count
+       FROM request_delays rd
+       ${whereClause}
+       GROUP BY rd.reason
+       ORDER BY count DESC`,
+      params
+    );
+
+    // By transporter
+    const byTransporterResult = await query(
+      `SELECT rd.user_id, u.first_name, u.last_name, rd.reason, COUNT(*) as count
+       FROM request_delays rd
+       LEFT JOIN users u ON rd.user_id = u.id
+       ${whereClause}
+       GROUP BY rd.user_id, u.first_name, u.last_name, rd.reason
+       ORDER BY u.last_name, u.first_name`,
+      params
+    );
+
+    const byReason = byReasonResult.rows.map((row) => ({
+      reason: row.reason,
+      count: parseInt(row.count),
+    }));
+
+    // Group by transporter
+    const transporterMap = new Map<number, {
+      user_id: number;
+      first_name: string;
+      last_name: string;
+      total_delays: number;
+      reasons: { reason: string; count: number }[];
+    }>();
+
+    for (const row of byTransporterResult.rows) {
+      const userId = row.user_id;
+      if (!transporterMap.has(userId)) {
+        transporterMap.set(userId, {
+          user_id: userId,
+          first_name: row.first_name || 'Unknown',
+          last_name: row.last_name || '',
+          total_delays: 0,
+          reasons: [],
+        });
+      }
+      const entry = transporterMap.get(userId)!;
+      const count = parseInt(row.count);
+      entry.total_delays += count;
+      entry.reasons.push({ reason: row.reason, count });
+    }
+
+    const byTransporter = Array.from(transporterMap.values())
+      .sort((a, b) => b.total_delays - a.total_delays);
+
+    res.json({ byReason, byTransporter });
+  } catch (error) {
+    logger.error('Get delay report error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Get detailed floor analysis
 export const getFloorAnalysis = async (
   req: AuthenticatedRequest,

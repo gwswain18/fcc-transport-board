@@ -4,6 +4,7 @@ import { Floor, ReportSummary, TransporterStats } from '../types';
 import Header from '../components/common/Header';
 import { formatMinutes, formatSecondsAsHoursMinutes } from '../utils/formatters';
 import FloorAnalysis from '../components/analytics/FloorAnalysis';
+import DelayReport from '../components/analytics/DelayReport';
 import CycleTimeThresholdSettings from '../components/settings/CycleTimeThresholdSettings';
 import AlertSettings from '../components/settings/AlertSettings';
 import {
@@ -18,7 +19,7 @@ import {
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 
-type TabType = 'overview' | 'floors' | 'settings';
+type TabType = 'overview' | 'floors' | 'delays' | 'settings';
 
 export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -145,6 +146,16 @@ export default function ManagerDashboard() {
             Floor Analysis
           </button>
           <button
+            onClick={() => setActiveTab('delays')}
+            className={`px-6 py-3 font-medium text-sm ${
+              activeTab === 'delays'
+                ? 'border-b-2 border-primary text-primary'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Delays
+          </button>
+          <button
             onClick={() => setActiveTab('settings')}
             className={`px-6 py-3 font-medium text-sm ${
               activeTab === 'settings'
@@ -159,6 +170,16 @@ export default function ManagerDashboard() {
         {/* Floor Analysis Tab */}
         {activeTab === 'floors' && (
           <FloorAnalysis
+            dateRange={{
+              start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : '',
+              end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : '',
+            }}
+          />
+        )}
+
+        {/* Delays Tab */}
+        {activeTab === 'delays' && (
+          <DelayReport
             dateRange={{
               start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : '',
               end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : '',

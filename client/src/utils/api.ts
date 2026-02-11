@@ -431,6 +431,28 @@ export const api = {
     }>(`/reports/floor-analysis${query ? `?${query}` : ''}`);
   },
 
+  getDelayReport: (params?: { start_date?: string; end_date?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
+    return request<{
+      byReason: Array<{ reason: string; count: number }>;
+      byTransporter: Array<{
+        user_id: number;
+        first_name: string;
+        last_name: string;
+        total_delays: number;
+        reasons: Array<{ reason: string; count: number }>;
+      }>;
+    }>(`/reports/delays${query ? `?${query}` : ''}`);
+  },
+
   getTimeMetrics: (params?: {
     start_date?: string;
     end_date?: string;
