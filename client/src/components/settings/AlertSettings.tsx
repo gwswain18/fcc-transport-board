@@ -38,10 +38,10 @@ export default function AlertSettings() {
     setLoading(true);
     try {
       const response = await api.getConfigByKey('alert_settings');
-      if (response.error) {
+      if (response.error && response.error !== 'Config key not found') {
         console.error('[AlertSettings] Failed to load settings:', response.error);
         setMessage({ type: 'error', text: 'Failed to load alert settings. Using defaults.' });
-      } else {
+      } else if (!response.error) {
         const value = response.data?.value as AlertSettingsType | undefined;
         if (value) {
           setSettings({
