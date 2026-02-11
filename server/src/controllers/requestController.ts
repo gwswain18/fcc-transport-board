@@ -11,7 +11,7 @@ import { getIO, emitToUser } from '../socket/index.js';
 import { validateFloorRoom } from '../utils/validation.js';
 import { autoAssignRequest } from '../services/autoAssignService.js';
 import { sendJobAssignmentSMS } from '../services/twilioService.js';
-import { logCreate, logStatusChange } from '../services/auditService.js';
+import { logCreate, logStatusChange, logReassignment } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import logger from '../utils/logger.js';
 
@@ -470,6 +470,45 @@ export const updateRequest = async (
             actor_name: actorName,
             job_summary: `${currentRequest.origin_floor}-${currentRequest.room_number} → ${currentRequest.destination}`,
           });
+
+          // Log reassignment for audit trail
+          const { ipAddress } = getAuditContext(req);
+          await logReassignment(req.user!.id, parseInt(id), currentRequest.assigned_to, assigned_to, ipAddress);
+
+          // Reset status and timestamps for new transporter (Fix B)
+          updates.push(`status = $${paramIndex++}`);
+          params.push('assigned');
+          updates.push(`assigned_at = $${paramIndex++}`);
+          params.push(new Date().toISOString());
+          updates.push(`accepted_at = $${paramIndex++}`);
+          params.push(null);
+          updates.push(`en_route_at = $${paramIndex++}`);
+          params.push(null);
+          updates.push(`with_patient_at = $${paramIndex++}`);
+          params.push(null);
+
+          // Record status history for the reassignment
+          await query(
+            `INSERT INTO status_history (request_id, user_id, from_status, to_status)
+             VALUES ($1, $2, $3, $4)`,
+            [id, req.user!.id, currentRequest.status, 'assigned']
+          );
+
+          // Update new transporter's status to 'assigned'
+          await query(
+            `UPDATE transporter_status SET status = 'assigned', updated_at = CURRENT_TIMESTAMP
+             WHERE user_id = $1`,
+            [assigned_to]
+          );
+
+          // Send SMS to new transporter
+          await sendJobAssignmentSMS(
+            assigned_to,
+            parseInt(id),
+            currentRequest.origin_floor,
+            currentRequest.room_number,
+            currentRequest.priority
+          );
         }
       }
     }
@@ -756,6 +795,15 @@ export const assignToPCT = async (
          WHERE user_id = $1`,
         [currentRequest.assigned_to]
       );
+
+      // Notify the transporter that their job was transferred to PCT
+      const actorName = `${req.user!.first_name || ''} ${req.user!.last_name || ''}`.trim() || 'A dispatcher';
+      emitToUser(currentRequest.assigned_to, 'job_removed', {
+        request_id: parseInt(id),
+        action: 'reassigned',
+        actor_name: actorName,
+        job_summary: `${currentRequest.origin_floor}-${currentRequest.room_number} → ${currentRequest.destination} (transferred to PCT)`,
+      });
     }
 
     const updatedRequest = await getRequestWithRelations(parseInt(id));

@@ -206,6 +206,24 @@ export const logShiftEnd = async (
   });
 };
 
+export const logReassignment = async (
+  userId: number,
+  entityId: number,
+  oldAssigneeId: number,
+  newAssigneeId: number,
+  ipAddress?: string
+): Promise<void> => {
+  await createAuditLog({
+    userId,
+    action: 'reassignment',
+    entityType: 'transport_request',
+    entityId,
+    oldValues: { assigned_to: oldAssigneeId },
+    newValues: { assigned_to: newAssigneeId },
+    ipAddress,
+  });
+};
+
 export const logStatusOverride = async (
   overriderId: number,
   targetUserId: number,

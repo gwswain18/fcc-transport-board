@@ -1047,7 +1047,7 @@ export const getCompletedJobs = async (
         tr.id, tr.origin_floor, tr.room_number, tr.destination, tr.priority,
         tr.notes, tr.status, tr.delay_reason, tr.assignment_method,
         tr.created_at, tr.assigned_at, tr.accepted_at, tr.en_route_at,
-        tr.with_patient_at, tr.completed_at, tr.cancelled_at,
+        tr.with_patient_at, tr.completed_at, tr.cancelled_at, tr.pct_assigned_at,
         creator.id as creator_id, creator.first_name as creator_first_name, creator.last_name as creator_last_name,
         assignee.id as assignee_id, assignee.first_name as assignee_first_name, assignee.last_name as assignee_last_name
        FROM transport_requests tr
@@ -1078,7 +1078,7 @@ export const getCompletedJobs = async (
          LEFT JOIN users old_user ON (al.old_values->>'assigned_to')::int = old_user.id
          LEFT JOIN users new_user ON (al.new_values->>'assigned_to')::int = new_user.id
          WHERE al.entity_type = 'transport_request'
-           AND al.action = 'status_change'
+           AND al.action IN ('status_change', 'reassignment')
            AND al.old_values->>'assigned_to' IS NOT NULL
            AND al.new_values->>'assigned_to' IS NOT NULL
            AND al.old_values->>'assigned_to' != al.new_values->>'assigned_to'
@@ -1149,6 +1149,7 @@ export const getCompletedJobs = async (
       with_patient_at: row.with_patient_at,
       completed_at: row.completed_at,
       cancelled_at: row.cancelled_at,
+      pct_assigned_at: row.pct_assigned_at,
       creator: row.creator_id ? { first_name: row.creator_first_name, last_name: row.creator_last_name } : null,
       assignee: row.assignee_id ? { first_name: row.assignee_first_name, last_name: row.assignee_last_name } : null,
       reassignments: reassignments[row.id as number] || [],

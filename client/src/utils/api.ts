@@ -562,6 +562,7 @@ export const api = {
         with_patient_at: string | null;
         completed_at: string | null;
         cancelled_at: string | null;
+        pct_assigned_at: string | null;
         creator: { first_name: string; last_name: string } | null;
         assignee: { first_name: string; last_name: string } | null;
         reassignments: Array<{ from_name: string; to_name: string; timestamp: string }>;

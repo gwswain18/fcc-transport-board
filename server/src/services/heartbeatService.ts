@@ -7,6 +7,7 @@ import logger from '../utils/logger.js';
 const CHECK_INTERVAL_MS = 30000; // 30 seconds
 
 let intervalId: NodeJS.Timeout | null = null;
+let heartbeatCheckCount = 0;
 
 export const startHeartbeatService = async () => {
   logger.info('Starting heartbeat service...');
@@ -74,9 +75,21 @@ const checkHeartbeats = async () => {
   const io = getIO();
   if (!io) return;
 
+  heartbeatCheckCount++;
+
   const timing = await getAlertTiming();
   const timeoutMs = timing.offline_alert_minutes * 60 * 1000;
   const cutoffTime = new Date(Date.now() - timeoutMs).toISOString();
+
+  // Periodic diagnostic (every 10th check = ~5 minutes)
+  if (heartbeatCheckCount % 10 === 0) {
+    const totalHeartbeats = await query('SELECT COUNT(*) as count FROM user_heartbeats');
+    const onlineCount = await query(
+      'SELECT COUNT(*) as count FROM user_heartbeats WHERE last_heartbeat >= $1',
+      [cutoffTime]
+    );
+    logger.info(`[Heartbeat] Diagnostic (check #${heartbeatCheckCount}): total_heartbeat_records=${totalHeartbeats.rows[0].count}, online=${onlineCount.rows[0].count}, offline_threshold=${timing.offline_alert_minutes}min`);
+  }
 
   // Find users with stale heartbeats who are not already offline
   const result = await query(
@@ -188,6 +201,14 @@ const checkBreakDurations = async () => {
      AND ts.on_break_since < $1`,
     [cutoffTime]
   );
+
+  // Periodic diagnostic for break check
+  if (heartbeatCheckCount % 10 === 0) {
+    const onBreakCount = await query(
+      `SELECT COUNT(*) as count FROM transporter_status WHERE status = 'on_break'`
+    );
+    logger.info(`[BreakCheck] Diagnostic: total_on_break=${onBreakCount.rows[0].count}, exceeding_threshold=${result.rows.length}, threshold=${timing.break_alert_minutes}min`);
+  }
 
   if (result.rows.length > 0) {
     logger.info(`[BreakCheck] Found ${result.rows.length} user(s) on break exceeding ${timing.break_alert_minutes} min threshold`);

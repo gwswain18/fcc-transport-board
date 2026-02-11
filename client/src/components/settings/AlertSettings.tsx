@@ -36,21 +36,31 @@ export default function AlertSettings() {
 
   const loadSettings = async () => {
     setLoading(true);
-    const response = await api.getConfigByKey('alert_settings');
-    const value = response.data?.value as AlertSettingsType | undefined;
-    if (value) {
-      setSettings({
-        ...DEFAULT_SETTINGS,
-        ...value,
-        alerts: {
-          ...DEFAULT_SETTINGS.alerts,
-          ...(value.alerts || {}),
-        },
-        timing: {
-          ...DEFAULT_TIMING,
-          ...(value.timing || {}),
-        },
-      });
+    try {
+      const response = await api.getConfigByKey('alert_settings');
+      if (response.error) {
+        console.error('[AlertSettings] Failed to load settings:', response.error);
+        setMessage({ type: 'error', text: 'Failed to load alert settings. Using defaults.' });
+      } else {
+        const value = response.data?.value as AlertSettingsType | undefined;
+        if (value) {
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            ...value,
+            alerts: {
+              ...DEFAULT_SETTINGS.alerts,
+              ...(value.alerts || {}),
+            },
+            timing: {
+              ...DEFAULT_TIMING,
+              ...(value.timing || {}),
+            },
+          });
+        }
+      }
+    } catch (error) {
+      console.error('[AlertSettings] Exception loading settings:', error);
+      setMessage({ type: 'error', text: 'Failed to load alert settings. Using defaults.' });
     }
     setLoading(false);
   };
@@ -58,11 +68,17 @@ export default function AlertSettings() {
   const handleSave = async () => {
     setSaving(true);
     setMessage(null);
-    const response = await api.updateConfig('alert_settings', settings);
-    if (response.error) {
+    try {
+      const response = await api.updateConfig('alert_settings', settings);
+      if (response.error) {
+        console.error('[AlertSettings] Failed to save settings:', response.error);
+        setMessage({ type: 'error', text: 'Failed to save settings' });
+      } else {
+        setMessage({ type: 'success', text: 'Settings saved successfully' });
+      }
+    } catch (error) {
+      console.error('[AlertSettings] Exception saving settings:', error);
       setMessage({ type: 'error', text: 'Failed to save settings' });
-    } else {
-      setMessage({ type: 'success', text: 'Settings saved successfully' });
     }
     setSaving(false);
   };

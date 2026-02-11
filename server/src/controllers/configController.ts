@@ -15,6 +15,10 @@ export const getConfigValue = async (req: Request, res: Response) => {
 
     const value = await getConfig(key);
 
+    if (key === 'alert_settings') {
+      logger.info(`[Config] GET alert_settings: ${value !== null ? 'found' : 'not found'}`);
+    }
+
     if (value === null) {
       return res.status(404).json({ error: 'Config key not found' });
     }
@@ -37,6 +41,10 @@ export const setConfigValue = async (req: Request, res: Response) => {
     }
 
     await setConfig(key, value);
+
+    if (key === 'alert_settings') {
+      logger.info(`[Config] SET alert_settings: master_enabled=${value?.master_enabled}`);
+    }
 
     // Emit socket event when alert_settings is updated
     if (key === 'alert_settings') {

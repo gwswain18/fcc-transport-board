@@ -4,6 +4,7 @@ import { getAlertSettings, getAlertTiming } from './configService.js';
 import logger from '../utils/logger.js';
 
 const CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
+let checkCount = 0;
 
 interface AlertRequest {
   id: number;
@@ -42,10 +43,14 @@ const checkForAlerts = async () => {
   const io = getIO();
   if (!io) return;
 
+  checkCount++;
+
   // Check alert settings
   const alertSettings = await getAlertSettings();
   if (!alertSettings.master_enabled) {
-    logger.info('[AlertService] All alerts disabled (master_enabled=false)');
+    if (checkCount % 10 === 0) {
+      logger.info('[AlertService] All alerts disabled (master_enabled=false)');
+    }
     return;
   }
 
@@ -120,5 +125,10 @@ const checkForAlerts = async () => {
       });
       logger.info(`[AlertService] Emitted acceptance_timeout for request ${request.id}`);
     }
+  }
+
+  // Periodic diagnostic summary (every 10th check = ~5 minutes)
+  if (checkCount % 10 === 0) {
+    logger.info(`[AlertService] Diagnostic (check #${checkCount}): master_enabled=${alertSettings.master_enabled}, pending=${alertSettings.alerts.pending_timeout}, stat=${alertSettings.alerts.stat_timeout}, acceptance=${alertSettings.alerts.acceptance_timeout}, timing: pending=${timing.pending_timeout_minutes}min stat=${timing.stat_timeout_minutes}min acceptance=${timing.acceptance_timeout_minutes}min`);
   }
 };
