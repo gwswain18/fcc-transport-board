@@ -14,6 +14,24 @@ const CHECK_INTERVAL_MS = 15000; // 15 seconds
 
 let intervalId: NodeJS.Timeout | null = null;
 
+// Track acknowledged delay phases per request: Map<requestId, Set<phase>>
+const delayAcknowledgedPhases = new Map<number, Set<string>>();
+
+export const acknowledgeDelay = (requestId: number, phase: string): void => {
+  if (!delayAcknowledgedPhases.has(requestId)) {
+    delayAcknowledgedPhases.set(requestId, new Set());
+  }
+  delayAcknowledgedPhases.get(requestId)!.add(phase);
+};
+
+export const isPhaseAcknowledged = (requestId: number, phase: string): boolean => {
+  return delayAcknowledgedPhases.get(requestId)?.has(phase) ?? false;
+};
+
+export const clearDelayAcknowledgment = (requestId: number): void => {
+  delayAcknowledgedPhases.delete(requestId);
+};
+
 // Phase definitions for cycle time tracking
 const PHASES = [
   { name: 'response', startField: 'created_at', endField: 'assigned_at' },
@@ -153,9 +171,20 @@ const checkCycleTimeAlerts = async () => {
      AND assigned_to IS NOT NULL`
   );
 
+  // Clean up acknowledgments for completed requests
+  const activeRequestIds = new Set(activeRequests.rows.map((r: { id: number }) => r.id));
+  for (const requestId of delayAcknowledgedPhases.keys()) {
+    if (!activeRequestIds.has(requestId)) {
+      delayAcknowledgedPhases.delete(requestId);
+    }
+  }
+
   for (const request of activeRequests.rows) {
     const currentPhase = getPhaseForStatus(request.status);
     if (!currentPhase) continue;
+
+    // Skip alerts for acknowledged phases
+    if (isPhaseAcknowledged(request.id, currentPhase)) continue;
 
     const phaseConfig = PHASES.find((p) => p.name === currentPhase);
     if (!phaseConfig) continue;

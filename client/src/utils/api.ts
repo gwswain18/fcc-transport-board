@@ -527,6 +527,50 @@ export const api = {
     }>(`/reports/activity-log${query ? `?${query}` : ''}`);
   },
 
+  getCompletedJobs: (params?: {
+    start_date?: string;
+    end_date?: string;
+    floor?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
+    return request<{
+      jobs: Array<{
+        id: number;
+        origin_floor: string;
+        room_number: string;
+        destination: string;
+        priority: string;
+        notes: string | null;
+        status: string;
+        delay_reason: string | null;
+        assignment_method: string | null;
+        created_at: string;
+        assigned_at: string | null;
+        accepted_at: string | null;
+        en_route_at: string | null;
+        with_patient_at: string | null;
+        completed_at: string | null;
+        cancelled_at: string | null;
+        creator: { first_name: string; last_name: string } | null;
+        assignee: { first_name: string; last_name: string } | null;
+        reassignments: Array<{ from_name: string; to_name: string; timestamp: string }>;
+        delays: Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>;
+      }>;
+      pagination: { page: number; limit: number; total: number; pages: number };
+    }>(`/reports/completed-jobs${query ? `?${query}` : ''}`);
+  },
+
   getCycleTimeAverages: () =>
     request<{
       averages: Array<{

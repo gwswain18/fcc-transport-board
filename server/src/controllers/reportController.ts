@@ -988,6 +988,160 @@ export const getFloorAnalysis = async (
   }
 };
 
+// Get completed jobs (card view data)
+export const getCompletedJobs = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { start_date, end_date, floor, search, page = '1', limit = '20' } = req.query;
+
+    let whereClause = "WHERE tr.status IN ('complete', 'cancelled', 'transferred_to_pct')";
+    const params: unknown[] = [];
+    let paramIndex = 1;
+
+    if (start_date) {
+      whereClause += ` AND tr.created_at >= $${paramIndex++}`;
+      params.push(start_date);
+    }
+    if (end_date) {
+      whereClause += ` AND tr.created_at <= $${paramIndex++}`;
+      params.push(end_date);
+    }
+    if (floor) {
+      whereClause += ` AND tr.origin_floor = $${paramIndex++}`;
+      params.push(floor);
+    }
+    if (search) {
+      whereClause += ` AND (tr.room_number ILIKE $${paramIndex} OR creator.first_name ILIKE $${paramIndex} OR creator.last_name ILIKE $${paramIndex} OR assignee.first_name ILIKE $${paramIndex} OR assignee.last_name ILIKE $${paramIndex})`;
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
+    const offset = (pageNum - 1) * limitNum;
+
+    // Get total count
+    const countResult = await query(
+      `SELECT COUNT(*) as total
+       FROM transport_requests tr
+       LEFT JOIN users creator ON tr.created_by = creator.id
+       LEFT JOIN users assignee ON tr.assigned_to = assignee.id
+       ${whereClause}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].total) || 0;
+
+    // Get jobs with creator/assignee info
+    const jobsResult = await query(
+      `SELECT
+        tr.id, tr.origin_floor, tr.room_number, tr.destination, tr.priority,
+        tr.notes, tr.status, tr.delay_reason, tr.assignment_method,
+        tr.created_at, tr.assigned_at, tr.accepted_at, tr.en_route_at,
+        tr.with_patient_at, tr.completed_at, tr.cancelled_at,
+        creator.id as creator_id, creator.first_name as creator_first_name, creator.last_name as creator_last_name,
+        assignee.id as assignee_id, assignee.first_name as assignee_first_name, assignee.last_name as assignee_last_name
+       FROM transport_requests tr
+       LEFT JOIN users creator ON tr.created_by = creator.id
+       LEFT JOIN users assignee ON tr.assigned_to = assignee.id
+       ${whereClause}
+       ORDER BY tr.created_at DESC
+       LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+      [...params, limitNum, offset]
+    );
+
+    // Get reassignment history and delays for these jobs
+    const jobIds = jobsResult.rows.map((r: { id: number }) => r.id);
+
+    let reassignments: Record<number, Array<{ from_name: string; to_name: string; timestamp: string }>> = {};
+    let delays: Record<number, Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>> = {};
+
+    if (jobIds.length > 0) {
+      // Get reassignment audit logs
+      const reassignResult = await query(
+        `SELECT al.entity_id as request_id, al.timestamp,
+                al.old_values->>'assigned_to' as old_assignee,
+                al.new_values->>'assigned_to' as new_assignee,
+                old_user.first_name || ' ' || old_user.last_name as from_name,
+                new_user.first_name || ' ' || new_user.last_name as to_name
+         FROM audit_logs al
+         LEFT JOIN users old_user ON (al.old_values->>'assigned_to')::int = old_user.id
+         LEFT JOIN users new_user ON (al.new_values->>'assigned_to')::int = new_user.id
+         WHERE al.entity_type = 'transport_request'
+           AND al.action = 'status_change'
+           AND al.old_values->>'assigned_to' IS NOT NULL
+           AND al.new_values->>'assigned_to' IS NOT NULL
+           AND al.old_values->>'assigned_to' != al.new_values->>'assigned_to'
+           AND al.entity_id = ANY($1)
+         ORDER BY al.timestamp ASC`,
+        [jobIds]
+      );
+
+      for (const row of reassignResult.rows) {
+        const rid = row.request_id;
+        if (!reassignments[rid]) reassignments[rid] = [];
+        reassignments[rid].push({
+          from_name: row.from_name || 'Unknown',
+          to_name: row.to_name || 'Unknown',
+          timestamp: row.timestamp,
+        });
+      }
+
+      // Get delays
+      const delayResult = await query(
+        `SELECT request_id, reason, custom_note, phase, created_at
+         FROM request_delays
+         WHERE request_id = ANY($1)
+         ORDER BY created_at ASC`,
+        [jobIds]
+      );
+
+      for (const row of delayResult.rows) {
+        const rid = row.request_id;
+        if (!delays[rid]) delays[rid] = [];
+        delays[rid].push({
+          reason: row.reason,
+          custom_note: row.custom_note,
+          phase: row.phase,
+          created_at: row.created_at,
+        });
+      }
+    }
+
+    const jobs = jobsResult.rows.map((row: Record<string, unknown>) => ({
+      id: row.id,
+      origin_floor: row.origin_floor,
+      room_number: row.room_number,
+      destination: row.destination,
+      priority: row.priority,
+      notes: row.notes,
+      status: row.status,
+      delay_reason: row.delay_reason,
+      assignment_method: row.assignment_method,
+      created_at: row.created_at,
+      assigned_at: row.assigned_at,
+      accepted_at: row.accepted_at,
+      en_route_at: row.en_route_at,
+      with_patient_at: row.with_patient_at,
+      completed_at: row.completed_at,
+      cancelled_at: row.cancelled_at,
+      creator: row.creator_id ? { first_name: row.creator_first_name, last_name: row.creator_last_name } : null,
+      assignee: row.assignee_id ? { first_name: row.assignee_first_name, last_name: row.assignee_last_name } : null,
+      reassignments: reassignments[row.id as number] || [],
+      delays: delays[row.id as number] || [],
+    }));
+
+    res.json({
+      jobs,
+      pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
+    });
+  } catch (error) {
+    logger.error('Get completed jobs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Get activity log (audit_logs for transport_requests)
 export const getActivityLog = async (
   req: AuthenticatedRequest,

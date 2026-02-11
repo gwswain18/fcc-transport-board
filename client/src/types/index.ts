@@ -193,6 +193,15 @@ export interface TransporterOffline {
   last_name?: string;
 }
 
+// Alert timing configuration (minutes)
+export interface AlertTiming {
+  pending_timeout_minutes: number;
+  stat_timeout_minutes: number;
+  acceptance_timeout_minutes: number;
+  break_alert_minutes: number;
+  offline_alert_minutes: number;
+}
+
 // Alert settings
 export interface AlertSettings {
   master_enabled: boolean;
@@ -203,7 +212,7 @@ export interface AlertSettings {
     break_alert: boolean;
     offline_alert: boolean;
     cycle_time_alert: boolean;
-    help_request_enabled: boolean;
   };
+  timing?: AlertTiming;
   require_explanation_on_dismiss: boolean;
 }

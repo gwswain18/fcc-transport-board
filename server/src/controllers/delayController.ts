@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { query } from '../config/database.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import { acknowledgeDelay } from '../services/cycleTimeService.js';
+import { getIO } from '../socket/index.js';
 import logger from '../utils/logger.js';
 
 export const addDelays = async (
@@ -51,6 +53,18 @@ export const addDelays = async (
       'UPDATE transport_requests SET delay_reason = $1 WHERE id = $2',
       [combinedReason, id]
     );
+
+    // Acknowledge the delay for cycle time alert suppression
+    const requestId = parseInt(id, 10);
+    if (phase) {
+      acknowledgeDelay(requestId, phase);
+    }
+
+    // Emit delay_note_added so clients can clear the cycle time alert
+    const io = getIO();
+    if (io) {
+      io.emit('delay_note_added', { request_id: requestId, phase });
+    }
 
     res.status(201).json({ delays: inserted, message: 'Delays recorded' });
   } catch (error) {

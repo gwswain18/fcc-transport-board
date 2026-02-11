@@ -1,5 +1,14 @@
 import { query } from '../config/database.js';
 
+// Alert timing configuration (minutes)
+export interface AlertTiming {
+  pending_timeout_minutes: number;
+  stat_timeout_minutes: number;
+  acceptance_timeout_minutes: number;
+  break_alert_minutes: number;
+  offline_alert_minutes: number;
+}
+
 // Alert Settings Interface
 export interface AlertSettings {
   master_enabled: boolean;
@@ -10,10 +19,18 @@ export interface AlertSettings {
     break_alert: boolean;
     offline_alert: boolean;
     cycle_time_alert: boolean;
-    help_request_enabled: boolean;
   };
+  timing?: AlertTiming;
   require_explanation_on_dismiss: boolean;
 }
+
+const DEFAULT_ALERT_TIMING: AlertTiming = {
+  pending_timeout_minutes: 5,
+  stat_timeout_minutes: 2,
+  acceptance_timeout_minutes: 5,
+  break_alert_minutes: 30,
+  offline_alert_minutes: 2,
+};
 
 const DEFAULT_ALERT_SETTINGS: AlertSettings = {
   master_enabled: true,
@@ -24,8 +41,8 @@ const DEFAULT_ALERT_SETTINGS: AlertSettings = {
     break_alert: true,
     offline_alert: true,
     cycle_time_alert: true,
-    help_request_enabled: true,
   },
+  timing: DEFAULT_ALERT_TIMING,
   require_explanation_on_dismiss: true,
 };
 
@@ -144,5 +161,14 @@ export const getAlertSettings = async (): Promise<AlertSettings> => {
       ...DEFAULT_ALERT_SETTINGS.alerts,
       ...(value.alerts || {}),
     },
+    timing: {
+      ...DEFAULT_ALERT_TIMING,
+      ...(value.timing || {}),
+    },
   };
+};
+
+export const getAlertTiming = async (): Promise<AlertTiming> => {
+  const settings = await getAlertSettings();
+  return settings.timing || DEFAULT_ALERT_TIMING;
 };

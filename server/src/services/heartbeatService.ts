@@ -1,6 +1,6 @@
 import { query } from '../config/database.js';
 import { getIO } from '../socket/index.js';
-import { getHeartbeatTimeoutMs, getBreakAlertMinutes, getAlertSettings } from './configService.js';
+import { getAlertSettings, getAlertTiming } from './configService.js';
 import { logStatusChange } from './auditService.js';
 import logger from '../utils/logger.js';
 
@@ -64,7 +64,8 @@ const checkHeartbeats = async () => {
   const io = getIO();
   if (!io) return;
 
-  const timeoutMs = await getHeartbeatTimeoutMs();
+  const timing = await getAlertTiming();
+  const timeoutMs = timing.offline_alert_minutes * 60 * 1000;
   const cutoffTime = new Date(Date.now() - timeoutMs).toISOString();
 
   // Find users with stale heartbeats who are not already offline
@@ -154,9 +155,9 @@ const checkBreakDurations = async () => {
     return;
   }
 
-  const breakAlertMinutes = await getBreakAlertMinutes();
+  const timing = await getAlertTiming();
   const cutoffTime = new Date(
-    Date.now() - breakAlertMinutes * 60 * 1000
+    Date.now() - timing.break_alert_minutes * 60 * 1000
   ).toISOString();
 
   // Find users on break for too long
@@ -188,7 +189,8 @@ const checkBreakDurations = async () => {
 };
 
 export const isUserOnline = async (userId: number): Promise<boolean> => {
-  const timeoutMs = await getHeartbeatTimeoutMs();
+  const timing = await getAlertTiming();
+  const timeoutMs = timing.offline_alert_minutes * 60 * 1000;
   const cutoffTime = new Date(Date.now() - timeoutMs).toISOString();
 
   const result = await query(
@@ -200,7 +202,8 @@ export const isUserOnline = async (userId: number): Promise<boolean> => {
 };
 
 export const getOnlineUsers = async (): Promise<number[]> => {
-  const timeoutMs = await getHeartbeatTimeoutMs();
+  const timing = await getAlertTiming();
+  const timeoutMs = timing.offline_alert_minutes * 60 * 1000;
   const cutoffTime = new Date(Date.now() - timeoutMs).toISOString();
 
   const result = await query(

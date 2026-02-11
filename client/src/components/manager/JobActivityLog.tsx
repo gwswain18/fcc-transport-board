@@ -2,21 +2,27 @@ import { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
 import { Floor } from '../../types';
 
-interface ActivityEntry {
+interface CompletedJob {
   id: number;
-  action: string;
-  timestamp: string;
-  old_values: Record<string, unknown> | null;
-  new_values: Record<string, unknown> | null;
-  actor: { first_name: string; last_name: string } | null;
-  request: {
-    id: number;
-    origin_floor: string;
-    room_number: string;
-    destination: string;
-    priority: string;
-    status: string;
-  } | null;
+  origin_floor: string;
+  room_number: string;
+  destination: string;
+  priority: string;
+  notes: string | null;
+  status: string;
+  delay_reason: string | null;
+  assignment_method: string | null;
+  created_at: string;
+  assigned_at: string | null;
+  accepted_at: string | null;
+  en_route_at: string | null;
+  with_patient_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  creator: { first_name: string; last_name: string } | null;
+  assignee: { first_name: string; last_name: string } | null;
+  reassignments: Array<{ from_name: string; to_name: string; timestamp: string }>;
+  delays: Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>;
 }
 
 interface Pagination {
@@ -27,25 +33,275 @@ interface Pagination {
 }
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
-const STATUSES = ['pending', 'assigned', 'accepted', 'en_route', 'with_patient', 'complete', 'cancelled'];
 
-const ACTION_LABELS: Record<string, string> = {
-  create: 'Created',
-  status_change: 'Status Changed',
-  update: 'Updated',
-  assign: 'Assigned',
-  cancel: 'Cancelled',
+const STATUS_BADGES: Record<string, { label: string; className: string }> = {
+  complete: { label: 'Complete', className: 'bg-green-100 text-green-700' },
+  cancelled: { label: 'Cancelled', className: 'bg-red-100 text-red-700' },
+  transferred_to_pct: { label: 'PCT', className: 'bg-purple-100 text-purple-700' },
 };
 
+const PRIORITY_BADGES: Record<string, { label: string; className: string }> = {
+  stat: { label: 'STAT', className: 'bg-red-100 text-red-700 font-bold' },
+  urgent: { label: 'Urgent', className: 'bg-orange-100 text-orange-700' },
+  routine: { label: 'Routine', className: 'bg-gray-100 text-gray-600' },
+};
+
+function formatDateTime(ts: string | null): string {
+  if (!ts) return '-';
+  const d = new Date(ts);
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatTime(ts: string | null): string {
+  if (!ts) return '-';
+  const d = new Date(ts);
+  return d.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function formatDuration(startTs: string | null, endTs: string | null): string {
+  if (!startTs || !endTs) return '-';
+  const diffMs = new Date(endTs).getTime() - new Date(startTs).getTime();
+  const totalSeconds = Math.round(diffMs / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes < 60) return `${minutes}m ${seconds}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMins = minutes % 60;
+  return `${hours}h ${remainingMins}m`;
+}
+
+function PersonName({ person }: { person: { first_name: string; last_name: string } | null }) {
+  if (!person) return <span className="text-gray-400">Unassigned</span>;
+  return <span>{person.first_name} {person.last_name}</span>;
+}
+
+interface TimelineStepProps {
+  label: string;
+  time: string | null;
+  duration?: string;
+  isLast?: boolean;
+  isCancelled?: boolean;
+}
+
+function TimelineStep({ label, time, duration, isLast, isCancelled }: TimelineStepProps) {
+  const hasTime = !!time;
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex flex-col items-center">
+        <div className={`w-3 h-3 rounded-full mt-1 ${
+          isCancelled ? 'bg-red-400' : hasTime ? 'bg-blue-500' : 'bg-gray-300'
+        }`} />
+        {!isLast && <div className={`w-0.5 h-8 ${hasTime ? 'bg-blue-200' : 'bg-gray-200'}`} />}
+      </div>
+      <div className="flex-1 pb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-700">{label}</span>
+          {duration && duration !== '-' && (
+            <span className="text-xs text-gray-400">({duration})</span>
+          )}
+        </div>
+        <span className={`text-xs ${hasTime ? 'text-gray-500' : 'text-gray-300'}`}>
+          {hasTime ? formatTime(time) : 'N/A'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function JobCard({ job, expanded, onToggle }: { job: CompletedJob; expanded: boolean; onToggle: () => void }) {
+  const statusBadge = STATUS_BADGES[job.status] || { label: job.status, className: 'bg-gray-100 text-gray-600' };
+  const priorityBadge = PRIORITY_BADGES[job.priority] || { label: job.priority, className: 'bg-gray-100 text-gray-600' };
+
+  const totalDuration = job.status === 'cancelled'
+    ? formatDuration(job.created_at, job.cancelled_at)
+    : formatDuration(job.created_at, job.completed_at);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:border-gray-300 transition-colors">
+      {/* Card header - always visible */}
+      <button
+        onClick={onToggle}
+        className="w-full text-left px-4 py-3 flex items-center gap-4 hover:bg-gray-50 transition-colors"
+      >
+        {/* Location */}
+        <div className="flex-shrink-0 w-24">
+          <span className="text-lg font-bold text-gray-900">
+            {job.origin_floor}-{job.room_number}
+          </span>
+        </div>
+
+        {/* Status & Priority */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={`px-2 py-0.5 text-xs rounded-full ${statusBadge.className}`}>
+            {statusBadge.label}
+          </span>
+          <span className={`px-2 py-0.5 text-xs rounded-full ${priorityBadge.className}`}>
+            {priorityBadge.label}
+          </span>
+        </div>
+
+        {/* Destination */}
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-gray-600 truncate block">
+            &rarr; {job.destination}
+          </span>
+        </div>
+
+        {/* Assignee */}
+        <div className="flex-shrink-0 text-sm text-gray-600 hidden sm:block">
+          <PersonName person={job.assignee} />
+        </div>
+
+        {/* Duration */}
+        <div className="flex-shrink-0 text-sm text-gray-500 hidden md:block w-20 text-right">
+          {totalDuration}
+        </div>
+
+        {/* Date */}
+        <div className="flex-shrink-0 text-xs text-gray-400 w-28 text-right hidden lg:block">
+          {formatDateTime(job.created_at)}
+        </div>
+
+        {/* Expand icon */}
+        <div className="flex-shrink-0 text-gray-400">
+          <svg className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="px-4 pb-4 pt-2 border-t border-gray-100 bg-gray-50">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Left column: Job info */}
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Job Details</h4>
+              <div className="space-y-1 text-sm">
+                <div><span className="text-gray-500">Job ID:</span> <span className="font-medium">#{job.id}</span></div>
+                <div><span className="text-gray-500">Created by:</span> <span className="font-medium"><PersonName person={job.creator} /></span></div>
+                <div><span className="text-gray-500">Assigned to:</span> <span className="font-medium"><PersonName person={job.assignee} /></span></div>
+                {job.assignment_method && (
+                  <div><span className="text-gray-500">Assignment:</span> <span className="font-medium capitalize">{job.assignment_method.replace('_', ' ')}</span></div>
+                )}
+                {job.notes && (
+                  <div className="mt-2 p-2 bg-yellow-50 rounded text-xs text-gray-600">
+                    <span className="font-medium">Notes:</span> {job.notes}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Middle column: Timeline */}
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Timeline</h4>
+              <div>
+                <TimelineStep
+                  label="Created"
+                  time={job.created_at}
+                  duration={formatDuration(job.created_at, job.assigned_at)}
+                />
+                <TimelineStep
+                  label="Assigned"
+                  time={job.assigned_at}
+                  duration={formatDuration(job.assigned_at, job.accepted_at)}
+                />
+                <TimelineStep
+                  label="Accepted"
+                  time={job.accepted_at}
+                  duration={formatDuration(job.accepted_at, job.en_route_at)}
+                />
+                <TimelineStep
+                  label="En Route"
+                  time={job.en_route_at}
+                  duration={formatDuration(job.en_route_at, job.with_patient_at)}
+                />
+                <TimelineStep
+                  label="With Patient"
+                  time={job.with_patient_at}
+                  duration={formatDuration(job.with_patient_at, job.completed_at)}
+                />
+                {job.status === 'cancelled' ? (
+                  <TimelineStep
+                    label="Cancelled"
+                    time={job.cancelled_at}
+                    isLast
+                    isCancelled
+                  />
+                ) : (
+                  <TimelineStep
+                    label="Completed"
+                    time={job.completed_at}
+                    isLast
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Right column: Reassignments & Delays */}
+            <div>
+              {job.reassignments.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Reassignments</h4>
+                  <div className="space-y-2">
+                    {job.reassignments.map((r, i) => (
+                      <div key={i} className="text-sm p-2 bg-orange-50 rounded">
+                        <span className="text-gray-600">{r.from_name}</span>
+                        <span className="text-gray-400 mx-1">&rarr;</span>
+                        <span className="text-gray-600">{r.to_name}</span>
+                        <div className="text-xs text-gray-400 mt-0.5">{formatDateTime(r.timestamp)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {job.delays.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Delays</h4>
+                  <div className="space-y-2">
+                    {job.delays.map((d, i) => (
+                      <div key={i} className="text-sm p-2 bg-red-50 rounded">
+                        <div className="font-medium text-gray-700">{d.reason}</div>
+                        {d.phase && <div className="text-xs text-gray-500">Phase: {d.phase}</div>}
+                        {d.custom_note && <div className="text-xs text-gray-500 mt-0.5">{d.custom_note}</div>}
+                        <div className="text-xs text-gray-400 mt-0.5">{formatDateTime(d.created_at)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {job.reassignments.length === 0 && job.delays.length === 0 && (
+                <div className="text-sm text-gray-400 italic">No reassignments or delays</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function JobActivityLog() {
-  const [entries, setEntries] = useState<ActivityEntry[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, pages: 0 });
+  const [jobs, setJobs] = useState<CompletedJob[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, pages: 0 });
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [filters, setFilters] = useState({
     start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end_date: new Date().toISOString().split('T')[0],
     floor: '',
-    status: '',
     search: '',
   });
 
@@ -55,43 +311,24 @@ export default function JobActivityLog() {
 
   const loadData = async (page: number) => {
     setLoading(true);
-    const response = await api.getActivityLog({
+    const response = await api.getCompletedJobs({
       start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : undefined,
       end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : undefined,
       floor: filters.floor || undefined,
-      status: filters.status || undefined,
       search: filters.search || undefined,
       page,
-      limit: 50,
+      limit: 20,
     });
 
     if (response.data) {
-      setEntries(response.data.entries);
+      setJobs(response.data.jobs);
       setPagination(response.data.pagination);
     }
     setLoading(false);
   };
 
-  const formatTime = (ts: string) => {
-    const d = new Date(ts);
-    return d.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const getActionDescription = (entry: ActivityEntry): string => {
-    if (entry.action === 'status_change' && entry.old_values && entry.new_values) {
-      const from = (entry.old_values as Record<string, string>).status || '?';
-      const to = (entry.new_values as Record<string, string>).status || '?';
-      return `${from} → ${to}`;
-    }
-    if (entry.action === 'create') {
-      return 'Request created';
-    }
-    return ACTION_LABELS[entry.action] || entry.action;
+  const toggleExpand = (id: number) => {
+    setExpandedId((prev) => (prev === id ? null : id));
   };
 
   return (
@@ -131,19 +368,6 @@ export default function JobActivityLog() {
             </select>
           </div>
           <div>
-            <label className="label">Status</label>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-              className="input"
-            >
-              <option value="">All Statuses</option>
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>{s.replace('_', ' ')}</option>
-              ))}
-            </select>
-          </div>
-          <div>
             <label className="label">Search</label>
             <input
               type="text"
@@ -156,14 +380,14 @@ export default function JobActivityLog() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
+      {/* Job Cards */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-semibold text-gray-900">
-            Activity Log
+            Completed Jobs
             {pagination.total > 0 && (
               <span className="text-sm font-normal text-gray-500 ml-2">
-                ({pagination.total} entries)
+                ({pagination.total} jobs)
               </span>
             )}
           </h3>
@@ -173,53 +397,19 @@ export default function JobActivityLog() {
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
           </div>
-        ) : entries.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No activity found</p>
+        ) : jobs.length === 0 ? (
+          <p className="text-gray-500 text-center py-8">No completed jobs found</p>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">Time</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">Action</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">Job</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">Actor</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600 text-sm">Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map((entry) => (
-                    <tr key={entry.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-3 px-4 text-sm text-gray-600 whitespace-nowrap">
-                        {formatTime(entry.timestamp)}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="text-sm font-medium text-gray-900">
-                          {ACTION_LABELS[entry.action] || entry.action}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm">
-                        {entry.request ? (
-                          <span className="font-medium text-gray-900">
-                            {entry.request.origin_floor}-{entry.request.room_number}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-600">
-                        {entry.actor
-                          ? `${entry.actor.first_name} ${entry.actor.last_name}`
-                          : '-'}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-500">
-                        {getActionDescription(entry)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-2">
+              {jobs.map((job) => (
+                <JobCard
+                  key={job.id}
+                  job={job}
+                  expanded={expandedId === job.id}
+                  onToggle={() => toggleExpand(job.id)}
+                />
+              ))}
             </div>
 
             {/* Pagination */}

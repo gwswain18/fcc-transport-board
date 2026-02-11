@@ -18,7 +18,7 @@ import { Floor } from '../types';
 
 export default function TransporterView() {
   const { user, activeShift, setActiveShift, logout } = useAuth();
-  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, refreshData, requestHelp, alertSettings } = useSocket();
+  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, refreshData } = useSocket();
   const navigate = useNavigate();
   const [queueOpen, setQueueOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -199,10 +199,6 @@ export default function TransporterView() {
     await logout();
     setShiftLoading(false);
     navigate('/login');
-  };
-
-  const handleRequestHelp = () => {
-    requestHelp(currentJob?.id, 'Transporter needs assistance');
   };
 
   const getActionButtonText = (): string => {
@@ -430,22 +426,12 @@ export default function TransporterView() {
               </button>
 
               {/* Add Note Button (always visible) */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowDelayModal(true)}
-                  className="flex-1 py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg"
-                >
-                  + Add Note
-                </button>
-                {alertSettings?.alerts?.help_request_enabled !== false && (
-                  <button
-                    onClick={handleRequestHelp}
-                    className="flex-1 py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg"
-                  >
-                    Request Help
-                  </button>
-                )}
-              </div>
+              <button
+                onClick={() => setShowDelayModal(true)}
+                className="w-full py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg"
+              >
+                + Add Note
+              </button>
             </div>
           </div>
         ) : (

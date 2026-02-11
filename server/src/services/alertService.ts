@@ -1,11 +1,8 @@
 import { query } from '../config/database.js';
 import { getIO } from '../socket/index.js';
-import { getAlertSettings } from './configService.js';
+import { getAlertSettings, getAlertTiming } from './configService.js';
 import logger from '../utils/logger.js';
 
-const PENDING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-const STAT_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
-const ACCEPTANCE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
 
 interface AlertRequest {
@@ -40,7 +37,12 @@ const checkForAlerts = async () => {
     return; // All alerts disabled
   }
 
+  const timing = await getAlertTiming();
   const now = new Date();
+
+  const pendingTimeoutMs = timing.pending_timeout_minutes * 60 * 1000;
+  const statTimeoutMs = timing.stat_timeout_minutes * 60 * 1000;
+  const acceptanceTimeoutMs = timing.acceptance_timeout_minutes * 60 * 1000;
 
   // Check pending requests that have timed out
   if (alertSettings.alerts.pending_timeout) {
@@ -50,13 +52,13 @@ const checkForAlerts = async () => {
        WHERE status = 'pending'
        AND priority != 'stat'
        AND created_at < $1`,
-      [new Date(now.getTime() - PENDING_TIMEOUT_MS).toISOString()]
+      [new Date(now.getTime() - pendingTimeoutMs).toISOString()]
     );
 
     for (const request of pendingResult.rows as AlertRequest[]) {
       const createdAt = new Date(request.created_at);
 
-      if (now.getTime() - createdAt.getTime() > PENDING_TIMEOUT_MS) {
+      if (now.getTime() - createdAt.getTime() > pendingTimeoutMs) {
         io.emit('alert_triggered', {
           request_id: request.id,
           type: 'pending_timeout',
@@ -74,7 +76,7 @@ const checkForAlerts = async () => {
        WHERE status = 'pending'
        AND priority = 'stat'
        AND created_at < $1`,
-      [new Date(now.getTime() - STAT_TIMEOUT_MS).toISOString()]
+      [new Date(now.getTime() - statTimeoutMs).toISOString()]
     );
 
     for (const request of statResult.rows as AlertRequest[]) {
@@ -93,7 +95,7 @@ const checkForAlerts = async () => {
        FROM transport_requests
        WHERE status = 'assigned'
        AND assigned_at < $1`,
-      [new Date(now.getTime() - ACCEPTANCE_TIMEOUT_MS).toISOString()]
+      [new Date(now.getTime() - acceptanceTimeoutMs).toISOString()]
     );
 
     for (const request of assignedResult.rows as AlertRequest[]) {

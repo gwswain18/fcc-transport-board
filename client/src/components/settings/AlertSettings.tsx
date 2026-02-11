@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
-import { AlertSettings as AlertSettingsType } from '../../types';
+import { AlertSettings as AlertSettingsType, AlertTiming } from '../../types';
+
+const DEFAULT_TIMING: AlertTiming = {
+  pending_timeout_minutes: 5,
+  stat_timeout_minutes: 2,
+  acceptance_timeout_minutes: 5,
+  break_alert_minutes: 30,
+  offline_alert_minutes: 2,
+};
 
 const DEFAULT_SETTINGS: AlertSettingsType = {
   master_enabled: true,
@@ -11,8 +19,8 @@ const DEFAULT_SETTINGS: AlertSettingsType = {
     break_alert: true,
     offline_alert: true,
     cycle_time_alert: true,
-    help_request_enabled: true,
   },
+  timing: DEFAULT_TIMING,
   require_explanation_on_dismiss: true,
 };
 
@@ -37,6 +45,10 @@ export default function AlertSettings() {
         alerts: {
           ...DEFAULT_SETTINGS.alerts,
           ...(value.alerts || {}),
+        },
+        timing: {
+          ...DEFAULT_TIMING,
+          ...(value.timing || {}),
         },
       });
     }
@@ -63,6 +75,13 @@ export default function AlertSettings() {
     setSettings((prev) => ({
       ...prev,
       alerts: { ...prev.alerts, [alertKey]: enabled },
+    }));
+  };
+
+  const handleTimingChange = (key: keyof AlertTiming, value: number) => {
+    setSettings((prev) => ({
+      ...prev,
+      timing: { ...(prev.timing || DEFAULT_TIMING), [key]: value },
     }));
   };
 
@@ -120,6 +139,8 @@ export default function AlertSettings() {
           description="Alert when routine requests wait too long without assignment"
           enabled={settings.alerts.pending_timeout}
           onChange={(v) => handleAlertToggle('pending_timeout', v)}
+          timingMinutes={settings.timing?.pending_timeout_minutes ?? DEFAULT_TIMING.pending_timeout_minutes}
+          onTimingChange={(v) => handleTimingChange('pending_timeout_minutes', v)}
         />
 
         <ToggleRow
@@ -127,6 +148,8 @@ export default function AlertSettings() {
           description="Alert when STAT priority requests wait too long"
           enabled={settings.alerts.stat_timeout}
           onChange={(v) => handleAlertToggle('stat_timeout', v)}
+          timingMinutes={settings.timing?.stat_timeout_minutes ?? DEFAULT_TIMING.stat_timeout_minutes}
+          onTimingChange={(v) => handleTimingChange('stat_timeout_minutes', v)}
         />
 
         <ToggleRow
@@ -134,6 +157,8 @@ export default function AlertSettings() {
           description="Alert when assigned requests aren't accepted in time"
           enabled={settings.alerts.acceptance_timeout}
           onChange={(v) => handleAlertToggle('acceptance_timeout', v)}
+          timingMinutes={settings.timing?.acceptance_timeout_minutes ?? DEFAULT_TIMING.acceptance_timeout_minutes}
+          onTimingChange={(v) => handleTimingChange('acceptance_timeout_minutes', v)}
         />
 
         <ToggleRow
@@ -141,6 +166,8 @@ export default function AlertSettings() {
           description="Alert when transporters exceed break time limit"
           enabled={settings.alerts.break_alert}
           onChange={(v) => handleAlertToggle('break_alert', v)}
+          timingMinutes={settings.timing?.break_alert_minutes ?? DEFAULT_TIMING.break_alert_minutes}
+          onTimingChange={(v) => handleTimingChange('break_alert_minutes', v)}
         />
 
         <ToggleRow
@@ -148,6 +175,8 @@ export default function AlertSettings() {
           description="Alert when transporters go offline unexpectedly"
           enabled={settings.alerts.offline_alert}
           onChange={(v) => handleAlertToggle('offline_alert', v)}
+          timingMinutes={settings.timing?.offline_alert_minutes ?? DEFAULT_TIMING.offline_alert_minutes}
+          onTimingChange={(v) => handleTimingChange('offline_alert_minutes', v)}
         />
 
         <ToggleRow
@@ -157,12 +186,6 @@ export default function AlertSettings() {
           onChange={(v) => handleAlertToggle('cycle_time_alert', v)}
         />
 
-        <ToggleRow
-          label="Help Request Button"
-          description="Allow transporters to request help from dispatchers"
-          enabled={settings.alerts.help_request_enabled}
-          onChange={(v) => handleAlertToggle('help_request_enabled', v)}
-        />
       </div>
 
       {/* Explanation Requirement */}
@@ -230,19 +253,40 @@ function ToggleRow({
   description,
   enabled,
   onChange,
+  timingMinutes,
+  onTimingChange,
 }: {
   label: string;
   description: string;
   enabled: boolean;
   onChange: (enabled: boolean) => void;
+  timingMinutes?: number;
+  onTimingChange?: (minutes: number) => void;
 }) {
   return (
     <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-      <div>
+      <div className="flex-1">
         <p className="text-sm font-medium text-gray-700">{label}</p>
         <p className="text-xs text-gray-500">{description}</p>
       </div>
-      <Toggle enabled={enabled} onChange={onChange} />
+      <div className="flex items-center gap-3">
+        {timingMinutes !== undefined && onTimingChange && (
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min={1}
+              value={timingMinutes}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10);
+                if (val > 0) onTimingChange(val);
+              }}
+              className="w-16 text-center text-sm border border-gray-300 rounded px-1 py-1"
+            />
+            <span className="text-xs text-gray-400">min</span>
+          </div>
+        )}
+        <Toggle enabled={enabled} onChange={onChange} />
+      </div>
     </div>
   );
 }

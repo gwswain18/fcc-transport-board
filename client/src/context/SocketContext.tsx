@@ -14,21 +14,8 @@ import {
 import {
   playJobAssignmentBeep,
   playCycleTimeAlertBeep,
-  playHelpRequestBeep,
   initAudioContext,
 } from '../utils/audioNotifications';
-
-export interface HelpAlert {
-  id?: number;
-  user_id: number;
-  request_id?: number;
-  message?: string;
-  first_name?: string;
-  last_name?: string;
-  origin_floor?: string;
-  room_number?: string;
-  created_at?: string;
-}
 
 interface SocketContextType {
   socket: Socket | null;
@@ -39,7 +26,6 @@ interface SocketContextType {
   cycleTimeAlerts: CycleTimeAlert[];
   breakAlerts: BreakAlert[];
   offlineAlerts: TransporterOffline[];
-  helpAlerts: HelpAlert[];
   activeDispatchers: ActiveDispatcher[];
   alertSettings: AlertSettings | null;
   requireExplanation: boolean;
@@ -47,9 +33,7 @@ interface SocketContextType {
   dismissCycleAlert: (requestId: number, explanation?: string) => void;
   dismissBreakAlert: (userId: number, explanation?: string) => void;
   dismissOfflineAlert: (userId: number, explanation?: string) => void;
-  dismissHelpAlert: (alertId: number) => void;
   refreshData: () => void;
-  requestHelp: (requestId?: number, message?: string) => void;
 }
 
 const SocketContext = createContext<SocketContextType | null>(null);
@@ -66,7 +50,6 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [cycleTimeAlerts, setCycleTimeAlerts] = useState<CycleTimeAlert[]>([]);
   const [breakAlerts, setBreakAlerts] = useState<BreakAlert[]>([]);
   const [offlineAlerts, setOfflineAlerts] = useState<TransporterOffline[]>([]);
-  const [helpAlerts, setHelpAlerts] = useState<HelpAlert[]>([]);
   const [activeDispatchers, setActiveDispatchers] = useState<ActiveDispatcher[]>([]);
   const [alertSettings, setAlertSettings] = useState<AlertSettings | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
@@ -264,22 +247,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       });
     });
 
-    // Help requested alerts
-    newSocket.on('help_requested', (alert: HelpAlert) => {
-      setHelpAlerts((prev) => {
-        const exists = prev.some((a) =>
-          (a.id && alert.id && a.id === alert.id) ||
-          (a.user_id === alert.user_id && a.request_id === alert.request_id && a.created_at === alert.created_at)
-        );
-        if (exists) return prev;
-        return [...prev, alert];
-      });
-      playHelpRequestBeep();
-    });
-
-    // Help resolved — remove from all clients
-    newSocket.on('help_resolved', (data: { help_request_id: number }) => {
-      setHelpAlerts((prev) => prev.filter((a) => a.id !== data.help_request_id));
+    // Delay note added — clear cycle time alert for this request
+    newSocket.on('delay_note_added', (data: { request_id: number; phase?: string }) => {
+      setCycleTimeAlerts((prev) => prev.filter((a) => a.request_id !== data.request_id));
+      setCompletedAlerts((prev) => prev.filter((a) => a.request_id !== data.request_id));
     });
 
     // Dispatcher changes
@@ -340,19 +311,6 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     setOfflineAlerts((prev) => prev.filter((a) => a.user_id !== userId));
     if (socket) {
       socket.emit('offline_alert_dismissed', { user_id: userId, explanation });
-    }
-  }, [socket]);
-
-  const dismissHelpAlert = useCallback((alertId: number) => {
-    setHelpAlerts((prev) => prev.filter((a) => (a.id || a.user_id) !== alertId));
-    if (socket) {
-      socket.emit('help_resolved', { help_request_id: alertId });
-    }
-  }, [socket]);
-
-  const requestHelp = useCallback((requestId?: number, message?: string) => {
-    if (socket) {
-      socket.emit('help_requested', { request_id: requestId, message });
     }
   }, [socket]);
 
@@ -427,7 +385,6 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         cycleTimeAlerts: visibleCycleAlerts,
         breakAlerts,
         offlineAlerts,
-        helpAlerts,
         activeDispatchers,
         alertSettings,
         requireExplanation,
@@ -435,9 +392,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         dismissCycleAlert,
         dismissBreakAlert,
         dismissOfflineAlert,
-        dismissHelpAlert,
         refreshData,
-        requestHelp,
       }}
     >
       {children}

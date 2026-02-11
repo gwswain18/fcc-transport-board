@@ -107,23 +107,6 @@ export function playJobAssignmentBeep(): void {
 }
 
 /**
- * Play help request notification - four rapid high-pitched beeps (urgent)
- */
-export function playHelpRequestBeep(): void {
-  if (isMuted()) return;
-
-  const frequency = 1200;
-  const beepDuration = 0.1;
-  const pauseDuration = 0.08;
-
-  for (let i = 0; i < 4; i++) {
-    setTimeout(() => {
-      playBeep(frequency, beepDuration, 0.5);
-    }, i * (beepDuration + pauseDuration) * 1000);
-  }
-}
-
-/**
  * Play cycle time alert notification - three ascending beeps (more urgent)
  */
 export function playCycleTimeAlertBeep(): void {

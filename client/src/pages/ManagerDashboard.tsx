@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../utils/api';
 import { Floor, ReportSummary, TransporterStats } from '../types';
 import Header from '../components/common/Header';
+import AlertBanners from '../components/common/AlertBanners';
 import { formatMinutes, formatSecondsAsHoursMinutes } from '../utils/formatters';
 import FloorAnalysis from '../components/analytics/FloorAnalysis';
 import DelayReport from '../components/analytics/DelayReport';
@@ -122,6 +123,7 @@ export default function ManagerDashboard() {
   return (
     <div className="min-h-screen bg-gray-100">
       <Header />
+      <AlertBanners />
 
       <main className="max-w-7xl mx-auto p-4">
         {/* Tab Navigation */}
