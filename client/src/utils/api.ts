@@ -222,6 +222,35 @@ export const api = {
       { method: 'PUT' }
     ),
 
+  getRequestHistory: (id: number) =>
+    request<{
+      request: import('../types').TransportRequest;
+      status_history: Array<{
+        id: number;
+        request_id: number;
+        from_status: string | null;
+        to_status: string;
+        changed_at: string;
+        user: { first_name: string; last_name: string } | null;
+      }>;
+      audit_logs: Array<{
+        id: number;
+        action: string;
+        old_values: Record<string, unknown> | null;
+        new_values: Record<string, unknown> | null;
+        timestamp: string;
+        user: { first_name: string; last_name: string } | null;
+      }>;
+      delays: Array<{
+        id: number;
+        reason: string;
+        custom_note?: string;
+        phase?: string;
+        created_at: string;
+        user: { first_name: string; last_name: string } | null;
+      }>;
+    }>(`/requests/${id}/history`),
+
   addDelays: (requestId: number, data: { reasons: string[]; custom_note?: string; phase?: string }) =>
     request<{ delays: unknown[]; message: string }>(`/requests/${requestId}/delays`, {
       method: 'POST',
@@ -452,6 +481,63 @@ export const api = {
       }>;
     }>(`/reports/delays${query ? `?${query}` : ''}`);
   },
+
+  getActivityLog: (params?: {
+    start_date?: string;
+    end_date?: string;
+    transporter_id?: number;
+    status?: string;
+    floor?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
+    return request<{
+      entries: Array<{
+        id: number;
+        action: string;
+        timestamp: string;
+        old_values: Record<string, unknown> | null;
+        new_values: Record<string, unknown> | null;
+        actor: { first_name: string; last_name: string } | null;
+        request: {
+          id: number;
+          origin_floor: string;
+          room_number: string;
+          destination: string;
+          priority: string;
+          status: string;
+        } | null;
+      }>;
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        pages: number;
+      };
+    }>(`/reports/activity-log${query ? `?${query}` : ''}`);
+  },
+
+  getCycleTimeAverages: () =>
+    request<{
+      averages: Array<{
+        phase: string;
+        average_minutes: number;
+        alert_threshold_minutes: number;
+        sample_count: number;
+        updated_at: string;
+      }>;
+      threshold_percentage: number;
+    }>('/reports/cycle-time-averages'),
 
   getTimeMetrics: (params?: {
     start_date?: string;

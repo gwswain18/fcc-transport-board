@@ -95,10 +95,22 @@ export const getRequests = async (
               creator.first_name as creator_first_name,
               creator.last_name as creator_last_name,
               assignee.first_name as assignee_first_name,
-              assignee.last_name as assignee_last_name
+              assignee.last_name as assignee_last_name,
+              last_mod.first_name as last_modifier_first_name,
+              last_mod.last_name as last_modifier_last_name,
+              last_mod.id as last_modifier_id
        FROM transport_requests tr
        LEFT JOIN users creator ON tr.created_by = creator.id
        LEFT JOIN users assignee ON tr.assigned_to = assignee.id
+       LEFT JOIN LATERAL (
+         SELECT al.user_id
+         FROM audit_logs al
+         WHERE al.entity_type = 'transport_request'
+           AND al.entity_id = tr.id
+         ORDER BY al.timestamp DESC
+         LIMIT 1
+       ) last_audit ON true
+       LEFT JOIN users last_mod ON last_audit.user_id = last_mod.id
        ${whereClause}
        ORDER BY
          CASE WHEN tr.priority = 'stat' THEN 0 ELSE 1 END,
@@ -118,6 +130,13 @@ export const getRequests = async (
             id: row.assigned_to,
             first_name: row.assignee_first_name,
             last_name: row.assignee_last_name,
+          }
+        : null,
+      last_modifier: row.last_modifier_id && row.last_modifier_id !== row.created_by
+        ? {
+            id: row.last_modifier_id,
+            first_name: row.last_modifier_first_name,
+            last_name: row.last_modifier_last_name,
           }
         : null,
     }));

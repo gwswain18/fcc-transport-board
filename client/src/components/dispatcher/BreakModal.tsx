@@ -8,6 +8,7 @@ interface DispatcherOption {
   last_name: string;
   dispatcher_id?: number;
   is_primary?: boolean;
+  on_break?: boolean;
 }
 
 interface BreakModalProps {
@@ -63,7 +64,7 @@ export default function BreakModal({
     }
   };
 
-  const availableDispatchers = dispatchers.filter((d) => !d.is_primary);
+  const availableDispatchers = dispatchers.filter((d) => !d.is_primary && !d.on_break);
   const needsRelief = isPrimary;
   const canSubmit = !needsRelief || selectedDispatcher || freeText.trim();
 

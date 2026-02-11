@@ -628,14 +628,18 @@ export const getTimeMetrics = async (
         u.last_name,
         COALESCE(SUM(
           CASE
-            WHEN op.duration_seconds IS NOT NULL THEN op.duration_seconds
-            WHEN op.online_at IS NULL THEN EXTRACT(EPOCH FROM (NOW() - op.offline_at))::int
-            ELSE EXTRACT(EPOCH FROM (op.online_at - op.offline_at))::int
+            WHEN op.duration_seconds IS NOT NULL THEN LEAST(op.duration_seconds, 28800)
+            WHEN op.online_at IS NULL THEN LEAST(28800, EXTRACT(EPOCH FROM (NOW() - op.offline_at))::int)
+            ELSE LEAST(28800, EXTRACT(EPOCH FROM (op.online_at - op.offline_at))::int)
           END
         ), 0) as offline_time_seconds
       FROM offline_periods op
       JOIN users u ON op.user_id = u.id
-      WHERE 1=1 ${offlineDateFilter} ${offlineUserFilter}
+      LEFT JOIN shift_logs sl ON op.user_id = sl.user_id
+        AND op.offline_at >= sl.shift_start
+        AND op.offline_at <= COALESCE(sl.shift_end, NOW())
+      WHERE (sl.shift_end IS NOT NULL OR sl.id IS NULL)
+        ${offlineDateFilter} ${offlineUserFilter}
       GROUP BY op.user_id, u.first_name, u.last_name`,
       offlineParams
     );
@@ -725,6 +729,40 @@ export const getTimeMetrics = async (
     });
   } catch (error) {
     logger.error('Get time metrics error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get cycle time rolling averages
+export const getCycleTimeAverages = async (
+  _req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const result = await query(
+      `SELECT phase, average_minutes, sample_count, updated_at
+       FROM cycle_time_averages
+       ORDER BY phase`
+    );
+
+    const thresholdPct = await query(
+      "SELECT value FROM system_config WHERE key = 'cycle_time_threshold_percentage'"
+    );
+    const pct = thresholdPct.rows.length > 0
+      ? parseInt(typeof thresholdPct.rows[0].value === 'string' ? JSON.parse(thresholdPct.rows[0].value) : thresholdPct.rows[0].value, 10) || 30
+      : 30;
+
+    const averages = result.rows.map((row: { phase: string; average_minutes: string; sample_count: string; updated_at: string }) => ({
+      phase: row.phase,
+      average_minutes: parseFloat(row.average_minutes) || 0,
+      alert_threshold_minutes: (parseFloat(row.average_minutes) || 0) * (1 + pct / 100),
+      sample_count: parseInt(row.sample_count) || 0,
+      updated_at: row.updated_at,
+    }));
+
+    res.json({ averages, threshold_percentage: pct });
+  } catch (error) {
+    logger.error('Get cycle time averages error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -946,6 +984,115 @@ export const getFloorAnalysis = async (
     res.json({ floors: floorData });
   } catch (error) {
     logger.error('Get floor analysis error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get activity log (audit_logs for transport_requests)
+export const getActivityLog = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { start_date, end_date, transporter_id, status, floor, search, page = '1', limit = '50' } = req.query;
+
+    let whereClause = "WHERE al.entity_type = 'transport_request'";
+    const params: unknown[] = [];
+    let paramIndex = 1;
+
+    if (start_date) {
+      whereClause += ` AND al.timestamp >= $${paramIndex++}`;
+      params.push(start_date);
+    }
+    if (end_date) {
+      whereClause += ` AND al.timestamp <= $${paramIndex++}`;
+      params.push(end_date);
+    }
+    if (transporter_id) {
+      whereClause += ` AND al.user_id = $${paramIndex++}`;
+      params.push(transporter_id);
+    }
+    if (status) {
+      whereClause += ` AND al.new_values->>'status' = $${paramIndex++}`;
+      params.push(status);
+    }
+    if (floor) {
+      whereClause += ` AND tr.origin_floor = $${paramIndex++}`;
+      params.push(floor);
+    }
+    if (search) {
+      whereClause += ` AND (tr.room_number ILIKE $${paramIndex} OR u.first_name ILIKE $${paramIndex} OR u.last_name ILIKE $${paramIndex})`;
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    // Get total count
+    const countResult = await query(
+      `SELECT COUNT(*) as total
+       FROM audit_logs al
+       LEFT JOIN transport_requests tr ON al.entity_id = tr.id
+       LEFT JOIN users u ON al.user_id = u.id
+       ${whereClause}`,
+      params
+    );
+
+    const total = parseInt(countResult.rows[0].total) || 0;
+
+    // Get paginated results
+    const result = await query(
+      `SELECT al.*,
+              u.first_name as actor_first_name,
+              u.last_name as actor_last_name,
+              tr.origin_floor,
+              tr.room_number,
+              tr.destination,
+              tr.priority,
+              tr.status as request_status
+       FROM audit_logs al
+       LEFT JOIN transport_requests tr ON al.entity_id = tr.id
+       LEFT JOIN users u ON al.user_id = u.id
+       ${whereClause}
+       ORDER BY al.timestamp DESC
+       LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+      [...params, limitNum, offset]
+    );
+
+    const entries = result.rows.map((row: Record<string, unknown>) => ({
+      id: row.id,
+      action: row.action,
+      timestamp: row.timestamp,
+      old_values: row.old_values,
+      new_values: row.new_values,
+      actor: row.actor_first_name
+        ? { first_name: row.actor_first_name, last_name: row.actor_last_name }
+        : null,
+      request: row.origin_floor
+        ? {
+            id: row.entity_id,
+            origin_floor: row.origin_floor,
+            room_number: row.room_number,
+            destination: row.destination,
+            priority: row.priority,
+            status: row.request_status,
+          }
+        : null,
+    }));
+
+    res.json({
+      entries,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum),
+      },
+    });
+  } catch (error) {
+    logger.error('Get activity log error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

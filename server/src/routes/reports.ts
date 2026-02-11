@@ -10,6 +10,8 @@ import {
   getFloorAnalysis,
   getTimeMetrics,
   getDelayReport,
+  getCycleTimeAverages,
+  getActivityLog,
 } from '../controllers/reportController.js';
 import { authenticate } from '../middleware/auth.js';
 import { canViewReports } from '../middleware/roleAuth.js';
@@ -28,6 +30,8 @@ router.get('/staffing-by-floor', getStaffingByFloor);
 router.get('/floor-analysis', getFloorAnalysis);
 router.get('/time-metrics', getTimeMetrics);
 router.get('/delays', getDelayReport);
+router.get('/cycle-time-averages', getCycleTimeAverages);
+router.get('/activity-log', getActivityLog);
 router.get('/export', exportData);
 
 export default router;

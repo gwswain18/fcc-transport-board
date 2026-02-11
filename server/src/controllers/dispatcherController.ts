@@ -52,10 +52,11 @@ export const setPrimaryDispatcher = async (req: AuthenticatedRequest, res: Respo
     const userId = req.user!.id;
     const { contact_info } = req.body;
 
-    // End any existing primary dispatcher role
+    // Demote any existing primary dispatcher to assistant (don't end their session)
     await query(
-      `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
-       WHERE is_primary = true AND ended_at IS NULL`
+      `UPDATE active_dispatchers SET is_primary = false, replaced_by = $1
+       WHERE is_primary = true AND ended_at IS NULL AND user_id != $1`,
+      [userId]
     );
 
     // Check if this user already has an active non-primary role
@@ -152,25 +153,48 @@ export const takeBreak = async (req: AuthenticatedRequest, res: Response) => {
       [currentResult.rows[0].id, replacement_user_id || null, relief_info || null]
     );
 
-    // If was primary and replacement specified, make replacement primary
-    if (wasPrimary && replacement_user_id) {
-      // Check if replacement is already a dispatcher
-      const replacementResult = await query(
-        `SELECT id FROM active_dispatchers
-         WHERE user_id = $1 AND ended_at IS NULL`,
-        [replacement_user_id]
-      );
-
-      if (replacementResult.rows.length > 0) {
-        await query(
-          `UPDATE active_dispatchers SET is_primary = true WHERE id = $1`,
-          [replacementResult.rows[0].id]
-        );
-      } else {
-        await query(
-          `INSERT INTO active_dispatchers (user_id, is_primary)
-           VALUES ($1, true)`,
+    // If was primary, ensure someone takes over the primary role
+    if (wasPrimary) {
+      if (replacement_user_id) {
+        // Validate replacement is an active user with dispatcher/supervisor/manager role
+        const validUser = await query(
+          `SELECT id FROM users
+           WHERE id = $1 AND is_active = true AND role IN ('dispatcher', 'supervisor', 'manager')`,
           [replacement_user_id]
+        );
+        if (validUser.rows.length === 0) {
+          return res.status(400).json({ error: 'Invalid replacement user' });
+        }
+
+        // Check if replacement is already a dispatcher
+        const replacementResult = await query(
+          `SELECT id FROM active_dispatchers
+           WHERE user_id = $1 AND ended_at IS NULL`,
+          [replacement_user_id]
+        );
+
+        if (replacementResult.rows.length > 0) {
+          await query(
+            `UPDATE active_dispatchers SET is_primary = true WHERE id = $1`,
+            [replacementResult.rows[0].id]
+          );
+        } else {
+          await query(
+            `INSERT INTO active_dispatchers (user_id, is_primary)
+             VALUES ($1, true)`,
+            [replacement_user_id]
+          );
+        }
+      } else {
+        // No replacement specified — auto-promote the oldest active non-break assistant
+        await query(
+          `UPDATE active_dispatchers SET is_primary = true
+           WHERE id = (
+             SELECT id FROM active_dispatchers
+             WHERE ended_at IS NULL AND on_break = false AND is_primary = false
+             ORDER BY started_at ASC
+             LIMIT 1
+           )`
         );
       }
     }
@@ -253,11 +277,33 @@ export const endDispatcherSession = async (req: AuthenticatedRequest, res: Respo
   try {
     const userId = req.user!.id;
 
+    // Check if departing dispatcher is the primary
+    const departingResult = await query(
+      `SELECT id, is_primary FROM active_dispatchers
+       WHERE user_id = $1 AND ended_at IS NULL`,
+      [userId]
+    );
+
+    const wasPrimary = departingResult.rows.length > 0 && departingResult.rows[0].is_primary;
+
     await query(
       `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
        WHERE user_id = $1 AND ended_at IS NULL`,
       [userId]
     );
+
+    // If was primary, auto-promote the oldest active non-break assistant
+    if (wasPrimary) {
+      await query(
+        `UPDATE active_dispatchers SET is_primary = true
+         WHERE id = (
+           SELECT id FROM active_dispatchers
+           WHERE ended_at IS NULL AND on_break = false AND is_primary = false
+           ORDER BY started_at ASC
+           LIMIT 1
+         )`
+      );
+    }
 
     await emitDispatcherChange();
 
@@ -290,10 +336,10 @@ export const getAvailableDispatchers = async (_req: Request, res: Response) => {
   try {
     const result = await query(
       `SELECT u.id, u.first_name, u.last_name, u.email, u.phone_number,
-              ad.id as dispatcher_id, ad.is_primary
+              ad.id as dispatcher_id, ad.is_primary, ad.on_break
        FROM users u
        LEFT JOIN active_dispatchers ad ON u.id = ad.user_id AND ad.ended_at IS NULL
-       WHERE u.role IN ('dispatcher', 'supervisor')
+       WHERE u.role IN ('dispatcher', 'supervisor', 'manager')
        AND u.is_active = true
        ORDER BY u.first_name, u.last_name`
     );

@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: AlertSettingsType = {
     break_alert: true,
     offline_alert: true,
     cycle_time_alert: true,
+    help_request_enabled: true,
   },
   require_explanation_on_dismiss: true,
 };
@@ -154,6 +155,13 @@ export default function AlertSettings() {
           description="Alert when transport phases exceed thresholds"
           enabled={settings.alerts.cycle_time_alert}
           onChange={(v) => handleAlertToggle('cycle_time_alert', v)}
+        />
+
+        <ToggleRow
+          label="Help Request Button"
+          description="Allow transporters to request help from dispatchers"
+          enabled={settings.alerts.help_request_enabled}
+          onChange={(v) => handleAlertToggle('help_request_enabled', v)}
         />
       </div>
 

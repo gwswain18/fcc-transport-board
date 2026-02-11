@@ -18,7 +18,7 @@ import { Floor } from '../types';
 
 export default function TransporterView() {
   const { user, activeShift, setActiveShift, logout } = useAuth();
-  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, refreshData, requestHelp } = useSocket();
+  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, refreshData, requestHelp, alertSettings } = useSocket();
   const navigate = useNavigate();
   const [queueOpen, setQueueOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -437,12 +437,14 @@ export default function TransporterView() {
                 >
                   + Add Note
                 </button>
-                <button
-                  onClick={handleRequestHelp}
-                  className="flex-1 py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg"
-                >
-                  Request Help
-                </button>
+                {alertSettings?.alerts?.help_request_enabled !== false && (
+                  <button
+                    onClick={handleRequestHelp}
+                    className="flex-1 py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg"
+                  >
+                    Request Help
+                  </button>
+                )}
               </div>
             </div>
           </div>

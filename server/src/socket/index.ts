@@ -234,6 +234,24 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
       logger.info(`Timeout alert dismissed for request ${data.request_id}: ${data.explanation || 'no explanation'}`);
     });
 
+    // Help request resolved by dispatcher
+    socket.on('help_resolved', async (data: { help_request_id: number }) => {
+      if (userId && data.help_request_id) {
+        try {
+          await query(
+            `UPDATE help_requests SET resolved_at = CURRENT_TIMESTAMP, resolved_by = $1
+             WHERE id = $2 AND resolved_at IS NULL`,
+            [userId, data.help_request_id]
+          );
+          // Broadcast to all clients so everyone removes the alert
+          io?.emit('help_resolved', { help_request_id: data.help_request_id });
+          logger.info(`Help request ${data.help_request_id} resolved by user ${userId}`);
+        } catch (error) {
+          logger.error('Error resolving help request:', error);
+        }
+      }
+    });
+
     // Transporter requests help
     socket.on('help_requested', async (data: { request_id?: number; message?: string }) => {
       if (userId) {

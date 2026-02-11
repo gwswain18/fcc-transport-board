@@ -8,6 +8,7 @@ import {
   autoAssign,
   assignToPCT,
 } from '../controllers/requestController.js';
+import { getRequestHistory } from '../controllers/requestHistoryController.js';
 import { addDelays, getDelays } from '../controllers/delayController.js';
 import { authenticate } from '../middleware/auth.js';
 import { canDispatch } from '../middleware/roleAuth.js';
@@ -23,6 +24,7 @@ router.put('/:id/cancel', canDispatch, cancelRequest);
 router.put('/:id/claim', claimRequest);
 router.post('/:id/auto-assign', canDispatch, autoAssign);
 router.put('/:id/assign-pct', canDispatch, assignToPCT);
+router.get('/:id/history', getRequestHistory);
 router.post('/:id/delays', addDelays);
 router.get('/:id/delays', getDelays);
 

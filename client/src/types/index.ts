@@ -103,6 +103,11 @@ export interface TransportRequest {
     first_name: string;
     last_name: string;
   } | null;
+  last_modifier?: {
+    id: number;
+    first_name: string;
+    last_name: string;
+  } | null;
 }
 
 export interface CreateTransportRequestData {
@@ -198,6 +203,7 @@ export interface AlertSettings {
     break_alert: boolean;
     offline_alert: boolean;
     cycle_time_alert: boolean;
+    help_request_enabled: boolean;
   };
   require_explanation_on_dismiss: boolean;
 }

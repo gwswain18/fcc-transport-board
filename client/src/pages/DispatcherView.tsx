@@ -19,6 +19,7 @@ import ActiveDispatcherCard from '../components/dispatcher/ActiveDispatcherCard'
 import BreakModal from '../components/dispatcher/BreakModal';
 import CycleTimeAlert from '../components/common/CycleTimeAlert';
 import AlertDismissalModal from '../components/common/AlertDismissalModal';
+import JobHistoryModal from '../components/dispatcher/JobHistoryModal';
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 const DESTINATIONS = ['Atrium', 'Radiology', 'Lab', 'OR', 'NICU', 'Other'];
@@ -65,6 +66,7 @@ export default function DispatcherView() {
   const [showBreakModal, setShowBreakModal] = useState(false);
   const [breakLoading, setBreakLoading] = useState(false);
   const [dismissalModal, setDismissalModal] = useState<PendingDismissal | null>(null);
+  const [historyRequestId, setHistoryRequestId] = useState<number | null>(null);
 
   // Find current user's dispatcher status
   const myDispatcherStatus = activeDispatchers.find((d) => d.user_id === user?.id);
@@ -450,6 +452,7 @@ export default function DispatcherView() {
                         showAutoAssign
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
+                        onClickCard={() => setHistoryRequestId(request.id)}
                       />
                     ))}
                   </div>
@@ -471,6 +474,7 @@ export default function DispatcherView() {
                         onCancel={() => handleCancelRequest(request.id)}
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
+                        onClickCard={() => setHistoryRequestId(request.id)}
                       />
                     ))}
                   </div>
@@ -492,6 +496,7 @@ export default function DispatcherView() {
                         onCancel={() => handleCancelRequest(request.id)}
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
+                        onClickCard={() => setHistoryRequestId(request.id)}
                       />
                     ))}
                   </div>
@@ -748,6 +753,13 @@ export default function DispatcherView() {
         alertType={dismissalModal?.type}
         alertDetails={dismissalModal?.details}
       />
+
+      {/* Job History Modal */}
+      <JobHistoryModal
+        isOpen={historyRequestId !== null}
+        onClose={() => setHistoryRequestId(null)}
+        requestId={historyRequestId}
+      />
     </div>
   );
 }
@@ -829,6 +841,7 @@ function RequestCard({
   showAutoAssign,
   cycleTimeAlert,
   onDismissAlert,
+  onClickCard,
 }: {
   request: TransportRequest;
   onAssign?: () => void;
@@ -836,18 +849,26 @@ function RequestCard({
   showAutoAssign?: boolean;
   cycleTimeAlert?: CycleTimeAlertType;
   onDismissAlert?: (requestId: number, reason?: string) => void;
+  onClickCard?: () => void;
 }) {
   const isPCTTransfer = request.status === 'transferred_to_pct';
   const hasAlert = !!cycleTimeAlert;
 
   return (
-    <div className={`rounded-lg p-3 ${
-      isPCTTransfer
-        ? 'bg-orange-50 border border-orange-200'
-        : hasAlert
-          ? 'bg-yellow-50 border-2 border-yellow-400 animate-pulse-subtle'
-          : 'bg-gray-50'
-    }`}>
+    <div
+      className={`rounded-lg p-3 ${
+        isPCTTransfer
+          ? 'bg-orange-50 border border-orange-200'
+          : hasAlert
+            ? 'bg-yellow-50 border-2 border-yellow-400 animate-pulse-subtle'
+            : 'bg-gray-50'
+      } ${onClickCard ? 'cursor-pointer hover:ring-2 hover:ring-primary-200' : ''}`}
+      onClick={(e) => {
+        // Only trigger if not clicking a button
+        if ((e.target as HTMLElement).closest('button')) return;
+        onClickCard?.();
+      }}
+    >
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
           <PriorityBadge priority={request.priority} size="sm" />
@@ -863,10 +884,22 @@ function RequestCard({
         <ElapsedTimer startTime={request.created_at} />
       </div>
 
-      <p className="text-sm text-gray-600 mb-2">{request.destination}</p>
+      <p className="text-sm text-gray-600 mb-1">{request.destination}</p>
+
+      {request.creator && (
+        <p className="text-xs text-gray-400">
+          Created by: {request.creator.first_name} {request.creator.last_name}
+        </p>
+      )}
+
+      {request.last_modifier && (
+        <p className="text-xs text-gray-400">
+          Last update by: {request.last_modifier.first_name} {request.last_modifier.last_name}
+        </p>
+      )}
 
       {request.assignee && (
-        <p className="text-sm text-primary mb-2">
+        <p className="text-sm text-primary mt-1 mb-2">
           Assigned to: {request.assignee.first_name} {request.assignee.last_name}
         </p>
       )}

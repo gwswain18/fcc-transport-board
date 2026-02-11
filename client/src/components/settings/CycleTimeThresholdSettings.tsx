@@ -32,9 +32,27 @@ const PHASE_LABELS: Record<string, string> = {
 
 type AlertMode = 'rolling_average' | 'manual_threshold';
 
+interface CycleTimeAverage {
+  phase: string;
+  average_minutes: number;
+  alert_threshold_minutes: number;
+  sample_count: number;
+  updated_at: string;
+}
+
+const PHASE_DISPLAY_NAMES: Record<string, string> = {
+  response: 'Response (pending to assigned)',
+  acceptance: 'Acceptance (assigned to accepted)',
+  pickup: 'Pickup (accepted to en_route)',
+  en_route: 'En Route (en_route to with_patient)',
+  transport: 'Transport (with_patient to complete)',
+};
+
 export default function CycleTimeThresholdSettings() {
-  const [alertMode, setAlertMode] = useState<AlertMode>('rolling_average');
+  const [alertMode, setAlertMode] = useState<AlertMode>('manual_threshold');
   const [thresholds, setThresholds] = useState<ThresholdConfig>(DEFAULT_THRESHOLDS);
+  const [rollingAverages, setRollingAverages] = useState<CycleTimeAverage[]>([]);
+  const [thresholdPct, setThresholdPct] = useState(30);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +61,20 @@ export default function CycleTimeThresholdSettings() {
   useEffect(() => {
     loadThresholds();
   }, []);
+
+  useEffect(() => {
+    if (alertMode === 'rolling_average') {
+      loadRollingAverages();
+    }
+  }, [alertMode]);
+
+  const loadRollingAverages = async () => {
+    const response = await api.getCycleTimeAverages();
+    if (response.data) {
+      setRollingAverages(response.data.averages);
+      setThresholdPct(response.data.threshold_percentage);
+    }
+  };
 
   const loadThresholds = async () => {
     setLoading(true);
@@ -183,46 +215,86 @@ export default function CycleTimeThresholdSettings() {
         </div>
       )}
 
-      <div className={`space-y-4 ${alertMode === 'rolling_average' ? 'opacity-50 pointer-events-none' : ''}`}>
-        <p className="text-sm text-gray-600">
-          {alertMode === 'rolling_average'
-            ? 'Per-phase thresholds are disabled in Rolling Average mode.'
-            : 'Set alert thresholds per phase (alerts fire when phase exceeds configured minutes).'}
-        </p>
-        {(Object.keys(thresholds) as (keyof ThresholdConfig)[]).map((key) => (
-          <div
-            key={key}
-            className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-          >
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2">
+      {alertMode === 'rolling_average' ? (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Alerts fire when a phase exceeds average + {thresholdPct}%. Current rolling averages:
+          </p>
+          {rollingAverages.length > 0 ? (
+            rollingAverages.map((avg) => (
+              <div
+                key={avg.phase}
+                className="p-4 bg-blue-50 rounded-lg border border-blue-100"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">
+                    {PHASE_DISPLAY_NAMES[avg.phase] || avg.phase}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {avg.sample_count} samples
+                  </span>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div>
+                    <p className="text-xs text-gray-500">Average</p>
+                    <p className="text-lg font-semibold text-gray-900">
+                      {avg.average_minutes.toFixed(1)} min
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Alert Threshold (+{thresholdPct}%)</p>
+                    <p className="text-lg font-semibold text-orange-600">
+                      {avg.alert_threshold_minutes.toFixed(1)} min
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-gray-400 italic">
+              No rolling average data available yet. Averages are calculated as jobs complete.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Set alert thresholds per phase (alerts fire when phase exceeds configured minutes).
+          </p>
+          {(Object.keys(thresholds) as (keyof ThresholdConfig)[]).map((key) => (
+            <div
+              key={key}
+              className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+            >
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={thresholds[key].enabled}
+                    onChange={(e) => handleThresholdChange(key, 'enabled', e.target.checked)}
+                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <span className="text-sm font-medium text-gray-700">
+                    {PHASE_LABELS[key]}
+                  </span>
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
                 <input
-                  type="checkbox"
-                  checked={thresholds[key].enabled}
-                  onChange={(e) => handleThresholdChange(key, 'enabled', e.target.checked)}
-                  className="rounded border-gray-300 text-primary focus:ring-primary"
-                  disabled={alertMode === 'rolling_average'}
+                  type="number"
+                  value={thresholds[key].minutes}
+                  onChange={(e) => handleThresholdChange(key, 'minutes', parseInt(e.target.value) || 0)}
+                  disabled={!thresholds[key].enabled}
+                  className="w-20 px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100 disabled:text-gray-400"
+                  min={1}
+                  max={60}
                 />
-                <span className="text-sm font-medium text-gray-700">
-                  {PHASE_LABELS[key]}
-                </span>
-              </label>
+                <span className="text-sm text-gray-500">minutes</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                value={thresholds[key].minutes}
-                onChange={(e) => handleThresholdChange(key, 'minutes', parseInt(e.target.value) || 0)}
-                disabled={!thresholds[key].enabled || alertMode === 'rolling_average'}
-                className="w-20 px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100 disabled:text-gray-400"
-                min={1}
-                max={60}
-              />
-              <span className="text-sm text-gray-500">minutes</span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <div className="mt-6 flex justify-end">
         <button

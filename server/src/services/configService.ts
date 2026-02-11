@@ -10,6 +10,7 @@ export interface AlertSettings {
     break_alert: boolean;
     offline_alert: boolean;
     cycle_time_alert: boolean;
+    help_request_enabled: boolean;
   };
   require_explanation_on_dismiss: boolean;
 }
@@ -23,6 +24,7 @@ const DEFAULT_ALERT_SETTINGS: AlertSettings = {
     break_alert: true,
     offline_alert: true,
     cycle_time_alert: true,
+    help_request_enabled: true,
   },
   require_explanation_on_dismiss: true,
 };
@@ -110,8 +112,8 @@ export const getBreakAlertMinutes = async (): Promise<number> => {
 
 export const getCycleTimeAlertMode = async (): Promise<'rolling_average' | 'manual_threshold'> => {
   const value = await getConfig<string>('cycle_time_alert_mode');
-  if (value === 'manual_threshold') return 'manual_threshold';
-  return 'rolling_average';
+  if (value === 'rolling_average') return 'rolling_average';
+  return 'manual_threshold';
 };
 
 export const getPhaseThreshold = async (phase: string): Promise<{ minutes: number; enabled: boolean } | null> => {

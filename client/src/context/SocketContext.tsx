@@ -14,6 +14,7 @@ import {
 import {
   playJobAssignmentBeep,
   playCycleTimeAlertBeep,
+  playHelpRequestBeep,
   initAudioContext,
 } from '../utils/audioNotifications';
 
@@ -266,10 +267,19 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     // Help requested alerts
     newSocket.on('help_requested', (alert: HelpAlert) => {
       setHelpAlerts((prev) => {
-        const exists = prev.some((a) => a.id === alert.id && alert.id);
+        const exists = prev.some((a) =>
+          (a.id && alert.id && a.id === alert.id) ||
+          (a.user_id === alert.user_id && a.request_id === alert.request_id && a.created_at === alert.created_at)
+        );
         if (exists) return prev;
         return [...prev, alert];
       });
+      playHelpRequestBeep();
+    });
+
+    // Help resolved — remove from all clients
+    newSocket.on('help_resolved', (data: { help_request_id: number }) => {
+      setHelpAlerts((prev) => prev.filter((a) => a.id !== data.help_request_id));
     });
 
     // Dispatcher changes
@@ -335,7 +345,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
   const dismissHelpAlert = useCallback((alertId: number) => {
     setHelpAlerts((prev) => prev.filter((a) => (a.id || a.user_id) !== alertId));
-  }, []);
+    if (socket) {
+      socket.emit('help_resolved', { help_request_id: alertId });
+    }
+  }, [socket]);
 
   const requestHelp = useCallback((requestId?: number, message?: string) => {
     if (socket) {
