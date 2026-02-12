@@ -101,6 +101,15 @@ export const endShift = async (req: AuthenticatedRequest, res: Response) => {
 
     const shift = result.rows[0];
 
+    // Close any open offline_periods
+    await query(
+      `UPDATE offline_periods
+       SET online_at = CURRENT_TIMESTAMP,
+           duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - offline_at))::int
+       WHERE user_id = $1 AND online_at IS NULL`,
+      [userId]
+    );
+
     // Update user status to offline
     await query(
       `UPDATE transporter_status SET status = 'offline', updated_at = CURRENT_TIMESTAMP
@@ -136,6 +145,97 @@ export const endShift = async (req: AuthenticatedRequest, res: Response) => {
     res.json({ shift, message: 'Shift ended successfully' });
   } catch (error) {
     logger.error('End shift error:', error);
+    res.status(500).json({ error: 'Failed to end shift' });
+  }
+};
+
+// Force end another user's shift (primary dispatcher / supervisor / manager)
+export const forceEndShift = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const requestingUser = req.user!;
+    const targetUserId = parseInt(req.params.userId, 10);
+
+    if (isNaN(targetUserId)) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+
+    // Authorization: dispatchers must be the primary dispatcher
+    if (requestingUser.role === 'dispatcher') {
+      const primaryCheck = await query(
+        `SELECT id FROM active_dispatchers
+         WHERE user_id = $1 AND is_primary = true AND ended_at IS NULL`,
+        [requestingUser.id]
+      );
+      if (primaryCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'Only the primary dispatcher can end shifts' });
+      }
+    }
+    // supervisors and managers are always allowed (canDispatch middleware already checked role)
+
+    // Find target user's active shift
+    const existingShift = await query(
+      'SELECT * FROM shift_logs WHERE user_id = $1 AND shift_end IS NULL',
+      [targetUserId]
+    );
+
+    if (existingShift.rows.length === 0) {
+      return res.status(400).json({ error: 'No active shift found for this user' });
+    }
+
+    // End the shift
+    const result = await query(
+      `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING *`,
+      [existingShift.rows[0].id]
+    );
+
+    const shift = result.rows[0];
+
+    // Close any open offline_periods
+    await query(
+      `UPDATE offline_periods
+       SET online_at = CURRENT_TIMESTAMP,
+           duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - offline_at))::int
+       WHERE user_id = $1 AND online_at IS NULL`,
+      [targetUserId]
+    );
+
+    // Update user status to offline
+    await query(
+      `UPDATE transporter_status SET status = 'offline', updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1`,
+      [targetUserId]
+    );
+
+    // Log the shift end
+    const { ipAddress } = getAuditContext(req);
+    await logShiftEnd(targetUserId, shift.id, {
+      shift_start: shift.shift_start,
+      shift_end: shift.shift_end,
+      ended_by: requestingUser.id,
+    }, ipAddress);
+
+    // Emit socket events
+    const io = getIO();
+    if (io) {
+      io.emit('shift_ended', shift);
+
+      const statusResult = await query(
+        `SELECT ts.*, u.first_name, u.last_name, u.email, u.role
+         FROM transporter_status ts
+         JOIN users u ON ts.user_id = u.id
+         WHERE ts.user_id = $1`,
+        [targetUserId]
+      );
+      if (statusResult.rows[0]) {
+        io.emit('transporter_status_changed', statusResult.rows[0]);
+      }
+    }
+
+    res.json({ shift, message: 'Shift ended successfully' });
+  } catch (error) {
+    logger.error('Force end shift error:', error);
     res.status(500).json({ error: 'Failed to end shift' });
   }
 };

@@ -53,6 +53,15 @@ export default function DispatcherView() {
   // Find current user's dispatcher status
   const myDispatcherStatus = activeDispatchers.find((d) => d.user_id === user?.id);
   const isPrimaryDispatcher = myDispatcherStatus?.is_primary || false;
+  const canEndShift = isPrimaryDispatcher || user?.role === 'supervisor' || user?.role === 'manager';
+
+  const handleForceEndShift = async (userId: number, userName: string) => {
+    if (!confirm(`End ${userName}'s shift? They will be set to offline.`)) return;
+    setLoading(true);
+    await api.forceEndShift(userId);
+    await refreshData();
+    setLoading(false);
+  };
 
   const [formData, setFormData] = useState<CreateTransportRequestData>({
     origin_floor: 'FCC4',
@@ -236,6 +245,13 @@ export default function DispatcherView() {
                         handleCreateRequest(transporter.user_id);
                       }
                     }}
+                    canEndShift={canEndShift}
+                    onEndShift={() =>
+                      handleForceEndShift(
+                        transporter.user_id,
+                        `${transporter.user?.first_name} ${transporter.user?.last_name}`
+                      )
+                    }
                   />
                 ))}
                 {transporterStatuses.length === 0 && (
@@ -572,9 +588,13 @@ export default function DispatcherView() {
 function TransporterCard({
   transporter,
   onClick,
+  canEndShift,
+  onEndShift,
 }: {
   transporter: TransporterStatusRecord;
   onClick?: () => void;
+  canEndShift?: boolean;
+  onEndShift?: () => void;
 }) {
   // Determine elapsed timer start time and label
   const getTimerInfo = (): { startTime: string; label: string } | null => {
@@ -634,6 +654,17 @@ function TransporterCard({
           <span className="text-xs text-gray-400">{timerInfo.label}:</span>
           <ElapsedTimer startTime={timerInfo.startTime} className="text-xs" />
         </div>
+      )}
+      {canEndShift && onEndShift && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onEndShift();
+          }}
+          className="text-xs text-red-600 hover:text-red-800 mt-1"
+        >
+          End Shift
+        </button>
       )}
     </div>
   );

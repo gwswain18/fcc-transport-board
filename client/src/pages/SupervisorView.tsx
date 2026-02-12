@@ -52,6 +52,14 @@ export default function SupervisorView() {
     }
   };
 
+  const handleForceEndShift = async (userId: number, userName: string) => {
+    if (!confirm(`End ${userName}'s shift? They will be set to offline.`)) return;
+    setLoading(true);
+    await api.forceEndShift(userId);
+    await refreshData();
+    setLoading(false);
+  };
+
   const availableTransporters = transporterStatuses.filter(
     (t) => t.status === 'available'
   );
@@ -168,6 +176,12 @@ export default function SupervisorView() {
                         handleCreateRequest(transporter.user_id);
                       }
                     }}
+                    onEndShift={() =>
+                      handleForceEndShift(
+                        transporter.user_id,
+                        `${transporter.user?.first_name} ${transporter.user?.last_name}`
+                      )
+                    }
                   />
                 ))}
                 {transporterStatuses.length === 0 && (
@@ -442,9 +456,11 @@ export default function SupervisorView() {
 function TransporterCard({
   transporter,
   onClick,
+  onEndShift,
 }: {
   transporter: TransporterStatusRecord;
   onClick?: () => void;
+  onEndShift?: () => void;
 }) {
   return (
     <div
@@ -465,6 +481,17 @@ function TransporterCard({
         <p className="text-sm text-gray-600 mt-1">
           {transporter.current_job.origin_floor}-{transporter.current_job.room_number}
         </p>
+      )}
+      {onEndShift && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onEndShift();
+          }}
+          className="text-xs text-red-600 hover:text-red-800 mt-1"
+        >
+          End Shift
+        </button>
       )}
     </div>
   );

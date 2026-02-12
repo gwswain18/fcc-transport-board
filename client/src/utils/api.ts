@@ -275,6 +275,11 @@ export const api = {
       method: 'PUT',
     }),
 
+  forceEndShift: (userId: number) =>
+    request<{ shift: import('../types').ShiftLog; message: string }>(`/shifts/${userId}/end`, {
+      method: 'PUT',
+    }),
+
   updateExtension: (extension: string) =>
     request<{ shift: import('../types').ShiftLog; message: string }>('/shifts/extension', {
       method: 'PUT',

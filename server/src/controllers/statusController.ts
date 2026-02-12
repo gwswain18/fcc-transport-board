@@ -28,7 +28,7 @@ export const getAllStatuses = async (
        LEFT JOIN transport_requests tr ON tr.assigned_to = ts.user_id
          AND tr.status NOT IN ('complete', 'cancelled', 'pending')
        LEFT JOIN shift_logs sl ON sl.user_id = ts.user_id AND sl.shift_end IS NULL
-       WHERE u.is_active = true
+       WHERE u.is_active = true AND sl.id IS NOT NULL
        ORDER BY u.last_name, u.first_name`
     );
 

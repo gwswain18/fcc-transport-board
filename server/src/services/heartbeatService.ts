@@ -124,7 +124,9 @@ const checkHeartbeats = async () => {
     );
     const shiftId = shiftResult.rows[0]?.id || null;
     await query(
-      `INSERT INTO offline_periods (user_id, shift_id, offline_at) VALUES ($1, $2, CURRENT_TIMESTAMP)`,
+      `INSERT INTO offline_periods (user_id, shift_id, offline_at)
+       VALUES ($1, $2, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id) WHERE online_at IS NULL DO NOTHING`,
       [row.user_id, shiftId]
     );
 

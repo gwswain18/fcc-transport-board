@@ -3,6 +3,11 @@ import { query } from '../config/database.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import logger from '../utils/logger.js';
 
+// Reusable filter for queries that don't JOIN users — excludes jobs assigned to users with include_in_analytics = false
+const ANALYTICS_FILTER = `AND (assigned_to IS NULL OR assigned_to NOT IN (
+  SELECT id FROM users WHERE include_in_analytics = false
+))`;
+
 export const getSummary = async (
   req: AuthenticatedRequest,
   res: Response
@@ -40,6 +45,8 @@ export const getSummary = async (
       whereClause += ` AND assigned_to = $${paramIndex++}`;
       params.push(transporter_id);
     }
+
+    whereClause += ` ${ANALYTICS_FILTER}`;
 
     const result = await query(
       `SELECT
@@ -126,6 +133,8 @@ export const getByTransporter = async (
       params.push(floor);
     }
 
+    whereClause += ' AND u.include_in_analytics = true';
+
     const result = await query(
       `SELECT
         tr.assigned_to as user_id,
@@ -190,6 +199,8 @@ export const getJobsByHour = async (
       params.push(transporter_id);
     }
 
+    whereClause += ` ${ANALYTICS_FILTER}`;
+
     const result = await query(
       `SELECT
         EXTRACT(HOUR FROM created_at) as hour,
@@ -239,6 +250,8 @@ export const getJobsByFloor = async (
       params.push(transporter_id);
     }
 
+    whereClause += ` ${ANALYTICS_FILTER}`;
+
     const result = await query(
       `SELECT
         origin_floor as floor,
@@ -287,6 +300,8 @@ export const exportData = async (
       whereClause += ` AND tr.assigned_to = $${paramIndex++}`;
       params.push(transporter_id);
     }
+
+    whereClause += ' AND (assignee.id IS NULL OR assignee.include_in_analytics = true)';
 
     const result = await query(
       `SELECT
@@ -374,6 +389,7 @@ export const getStaffingByFloor = async (
          JOIN users u ON ts.user_id = u.id
          WHERE u.role = 'transporter'
            AND u.is_active = true
+           AND u.include_in_analytics = true
            AND (u.primary_floor = $1 OR $1 = '')
            AND ts.status != 'offline'
          GROUP BY ts.status`,
@@ -446,6 +462,8 @@ export const getTimeMetrics = async (
       params.push(transporter_id);
     }
 
+    whereClause += ' AND u.include_in_analytics = true';
+
     // Get job time per transporter
     const jobTimeResult = await query(
       `SELECT
@@ -479,6 +497,8 @@ export const getTimeMetrics = async (
       shiftWhereClause += ` AND sl.user_id = $${shiftParamIndex++}`;
       shiftParams.push(transporter_id);
     }
+
+    shiftWhereClause += ' AND u.include_in_analytics = true';
 
     // Get total shift duration per transporter
     const shiftTimeResult = await query(
@@ -549,6 +569,7 @@ export const getTimeMetrics = async (
         ), 0) as break_time_seconds
       FROM break_periods bp
       JOIN users u ON bp.user_id = u.id
+      WHERE u.include_in_analytics = true
       GROUP BY bp.user_id, u.first_name, u.last_name`,
       breakParams
     );
@@ -607,6 +628,7 @@ export const getTimeMetrics = async (
         ), 0) as other_time_seconds
       FROM other_periods op
       JOIN users u ON op.user_id = u.id
+      WHERE u.include_in_analytics = true
       GROUP BY op.user_id, u.first_name, u.last_name`,
       otherParams
     );
@@ -646,7 +668,7 @@ export const getTimeMetrics = async (
       LEFT JOIN shift_logs sl ON op.user_id = sl.user_id
         AND op.offline_at >= sl.shift_start
         AND op.offline_at <= COALESCE(sl.shift_end, NOW())
-      WHERE (sl.shift_end IS NOT NULL OR sl.id IS NULL)
+      WHERE u.include_in_analytics = true
         ${offlineDateFilter} ${offlineUserFilter}
       GROUP BY op.user_id, u.first_name, u.last_name`,
       offlineParams
@@ -807,6 +829,8 @@ export const getJobsByDay = async (
       params.push(transporter_id);
     }
 
+    whereClause += ` ${ANALYTICS_FILTER}`;
+
     // Aggregate jobs by day of week (0=Sun, 1=Mon, ..., 6=Sat in PostgreSQL)
     const result = await query(
       `WITH days_of_week AS (
@@ -863,11 +887,13 @@ export const getDelayReport = async (
       params.push(end_date);
     }
 
-    // By reason
+    // By reason (filter out delays from excluded users)
     const byReasonResult = await query(
       `SELECT rd.reason, COUNT(*) as count
        FROM request_delays rd
-       ${whereClause}
+       ${whereClause} AND (rd.user_id IS NULL OR rd.user_id NOT IN (
+         SELECT id FROM users WHERE include_in_analytics = false
+       ))
        GROUP BY rd.reason
        ORDER BY count DESC`,
       params
@@ -878,7 +904,7 @@ export const getDelayReport = async (
       `SELECT rd.user_id, u.first_name, u.last_name, rd.reason, COUNT(*) as count
        FROM request_delays rd
        LEFT JOIN users u ON rd.user_id = u.id
-       ${whereClause}
+       ${whereClause} AND u.include_in_analytics = true
        GROUP BY rd.user_id, u.first_name, u.last_name, rd.reason
        ORDER BY u.last_name, u.first_name`,
       params
@@ -946,6 +972,8 @@ export const getFloorAnalysis = async (
       whereClause += ` AND created_at <= $${paramIndex++}`;
       params.push(end_date);
     }
+
+    whereClause += ` ${ANALYTICS_FILTER}`;
 
     const floors = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
     const floorData = [];
@@ -1025,6 +1053,8 @@ export const getCompletedJobs = async (
       params.push(`%${search}%`);
       paramIndex++;
     }
+
+    whereClause += ' AND (assignee.id IS NULL OR assignee.include_in_analytics = true)';
 
     const pageNum = Math.max(1, parseInt(page as string) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
@@ -1204,6 +1234,8 @@ export const getActivityLog = async (
       params.push(`%${search}%`);
       paramIndex++;
     }
+
+    whereClause += ' AND (u.id IS NULL OR u.include_in_analytics = true)';
 
     const pageNum = Math.max(1, parseInt(page as string) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 50));

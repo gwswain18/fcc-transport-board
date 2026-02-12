@@ -17,7 +17,7 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
       credentials: true,
       methods: ['GET', 'POST'],
     },
-    pingTimeout: 120000,
+    pingTimeout: 60000,
     pingInterval: 30000,
     transports: ['websocket', 'polling'],
     allowUpgrades: true,
@@ -91,6 +91,15 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
         logger.error('Error sending initial dispatcher data:', error);
       }
 
+      // Close any open offline_periods on reconnection (always, regardless of shift/job)
+      await query(
+        `UPDATE offline_periods
+         SET online_at = CURRENT_TIMESTAMP,
+             duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - offline_at))::int
+         WHERE user_id = $1 AND online_at IS NULL`,
+        [userId]
+      );
+
       // Update user status to available if they're a transporter with an active shift
       const shiftResult = await query(
         `SELECT sl.id FROM shift_logs sl
@@ -114,15 +123,6 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
             [userId]
           );
         }
-
-        // Close any open offline_periods records
-        await query(
-          `UPDATE offline_periods
-           SET online_at = CURRENT_TIMESTAMP,
-               duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - offline_at))::int
-           WHERE user_id = $1 AND online_at IS NULL`,
-          [userId]
-        );
       }
     }
 
@@ -167,7 +167,9 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
             );
             const shiftId = shiftResult2.rows[0]?.id || null;
             await query(
-              `INSERT INTO offline_periods (user_id, shift_id, offline_at) VALUES ($1, $2, CURRENT_TIMESTAMP)`,
+              `INSERT INTO offline_periods (user_id, shift_id, offline_at)
+               VALUES ($1, $2, CURRENT_TIMESTAMP)
+               ON CONFLICT (user_id) WHERE online_at IS NULL DO NOTHING`,
               [disconnectedUserId, shiftId]
             );
 
