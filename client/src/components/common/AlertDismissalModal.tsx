@@ -1,13 +1,30 @@
 import { useState } from 'react';
 import Modal from './Modal';
 
-const PREDEFINED_REASONS = [
-  { value: 'patient_not_ready', label: 'Patient not ready' },
-  { value: 'staffing_issue', label: 'Staffing issue' },
-  { value: 'equipment_delay', label: 'Equipment delay' },
-  { value: 'high_volume', label: 'High volume' },
-  { value: 'other', label: 'Other' },
-];
+const REASONS_BY_TYPE: Record<string, Array<{ value: string; label: string }>> = {
+  break: [
+    { value: 'forgot_to_click_available', label: 'Forgot to Click Available' },
+    { value: 'other', label: 'Other' },
+  ],
+  offline: [
+    { value: 'screen_lock', label: 'Screen Lock' },
+    { value: 'other', label: 'Other' },
+  ],
+  timeout: [
+    { value: 'patient_not_ready', label: 'Patient not ready' },
+    { value: 'staffing_issue', label: 'Staffing issue' },
+    { value: 'equipment_delay', label: 'Equipment delay' },
+    { value: 'high_volume', label: 'High volume' },
+    { value: 'other', label: 'Other' },
+  ],
+  cycle: [
+    { value: 'patient_not_ready', label: 'Patient not ready' },
+    { value: 'staffing_issue', label: 'Staffing issue' },
+    { value: 'equipment_delay', label: 'Equipment delay' },
+    { value: 'high_volume', label: 'High volume' },
+    { value: 'other', label: 'Other' },
+  ],
+};
 
 interface AlertDismissalModalProps {
   isOpen: boolean;
@@ -75,7 +92,7 @@ export default function AlertDismissalModal({
             className="input"
           >
             <option value="">Select a reason...</option>
-            {PREDEFINED_REASONS.map((reason) => (
+            {(REASONS_BY_TYPE[alertType] || REASONS_BY_TYPE.timeout).map((reason) => (
               <option key={reason.value} value={reason.value}>
                 {reason.label}
               </option>

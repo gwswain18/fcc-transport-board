@@ -22,6 +22,8 @@ export interface AlertSettings {
   };
   timing?: AlertTiming;
   require_explanation_on_dismiss: boolean;
+  auto_logout_enabled?: boolean;
+  auto_logout_time?: string; // HH:MM format
 }
 
 const DEFAULT_ALERT_TIMING: AlertTiming = {

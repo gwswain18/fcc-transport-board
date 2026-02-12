@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { useNavigate, Link } from 'react-router-dom';
+import { api } from '../../utils/api';
 import DateTimeDisplay from './DateTimeDisplay';
 import PasswordChangeModal from './PasswordChangeModal';
 import MuteToggle from './MuteToggle';
@@ -25,6 +26,10 @@ export default function Header() {
   };
 
   const handleLogout = async () => {
+    // End dispatcher session before logging out so they don't appear as a ghost
+    if (user && (user.role === 'dispatcher' || user.role === 'supervisor')) {
+      await api.endDispatcherSession();
+    }
     await logout();
     navigate('/login');
   };

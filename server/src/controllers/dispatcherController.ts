@@ -337,13 +337,13 @@ export const getAvailableDispatchers = async (req: AuthenticatedRequest, res: Re
     const currentUserId = req.user?.id;
     const result = await query(
       `SELECT u.id, u.first_name, u.last_name, u.email, u.phone_number,
-              ad.id as dispatcher_id, ad.is_primary, ad.on_break
+              ad.id as dispatcher_id, ad.is_primary,
+              COALESCE(ad.on_break, false) as on_break
        FROM users u
-       JOIN active_dispatchers ad ON u.id = ad.user_id AND ad.ended_at IS NULL
+       LEFT JOIN active_dispatchers ad ON u.id = ad.user_id AND ad.ended_at IS NULL
        WHERE u.role IN ('dispatcher', 'supervisor', 'manager')
-       AND u.is_active = true
-       AND ad.on_break = false
-       AND u.id != $1
+         AND u.is_active = true
+         AND u.id != $1
        ORDER BY u.first_name, u.last_name`,
       [currentUserId]
     );

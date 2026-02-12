@@ -285,11 +285,23 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       newSocket.emit('heartbeat');
     }, HEARTBEAT_INTERVAL);
 
+    // Reconnect and heartbeat immediately when device wakes from sleep/screen lock
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        newSocket.emit('heartbeat');
+        if (!newSocket.connected) {
+          newSocket.connect();
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       newSocket.disconnect();
       if (heartbeatInterval.current) {
         clearInterval(heartbeatInterval.current);
       }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [user]);
 

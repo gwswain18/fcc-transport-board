@@ -320,6 +320,9 @@ export const api = {
   getAvailableDispatchers: () =>
     request<{ dispatchers: Array<{ id: number; first_name: string; last_name: string; dispatcher_id?: number; is_primary?: boolean }> }>('/dispatchers/available'),
 
+  endDispatcherSession: () =>
+    request<{ message: string }>('/dispatchers/end-session', { method: 'POST' }),
+
   // Config
   getConfig: () =>
     request<{ config: Record<string, unknown> }>('/config'),

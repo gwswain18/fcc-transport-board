@@ -8,6 +8,7 @@ const CHECK_INTERVAL_MS = 30000; // 30 seconds
 
 let intervalId: NodeJS.Timeout | null = null;
 let heartbeatCheckCount = 0;
+let lastAutoLogoutDate: string | null = null;
 
 export const startHeartbeatService = async () => {
   logger.info('Starting heartbeat service...');
@@ -30,6 +31,7 @@ export const startHeartbeatService = async () => {
     try {
       await checkHeartbeats();
       await checkBreakDurations();
+      await checkAutoLogout();
     } catch (error) {
       logger.error('Heartbeat service error:', error);
     }
@@ -230,6 +232,69 @@ const checkBreakDurations = async () => {
     logger.info(
       `Break alert: User ${row.user_id} (${row.first_name} ${row.last_name}) on break for ${minutesOnBreak} minutes`
     );
+  }
+};
+
+const checkAutoLogout = async () => {
+  const io = getIO();
+  if (!io) return;
+
+  const alertSettings = await getAlertSettings();
+  if (!alertSettings.auto_logout_enabled || !alertSettings.auto_logout_time) {
+    return;
+  }
+
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+
+  // Don't run more than once per day
+  if (lastAutoLogoutDate === todayStr) return;
+
+  const [targetHour, targetMinute] = alertSettings.auto_logout_time.split(':').map(Number);
+  const currentHour = now.getHours();
+  const currentMinute = now.getMinutes();
+  const currentSeconds = currentHour * 3600 + currentMinute * 60 + now.getSeconds();
+  const targetSeconds = targetHour * 3600 + targetMinute * 60;
+
+  // Check if we're within 30 seconds of the target time
+  if (Math.abs(currentSeconds - targetSeconds) <= 30) {
+    lastAutoLogoutDate = todayStr;
+    logger.info(`[AutoLogout] Auto-logout triggered at ${alertSettings.auto_logout_time}`);
+
+    // End all active dispatcher sessions
+    await query(
+      `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
+       WHERE ended_at IS NULL`
+    );
+
+    // Emit updated dispatcher list
+    const result = await query(
+      `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
+       FROM active_dispatchers ad
+       JOIN users u ON ad.user_id = u.id
+       WHERE ad.ended_at IS NULL
+       ORDER BY ad.is_primary DESC, ad.started_at ASC`
+    );
+
+    const dispatchers = result.rows.map((row: any) => ({
+      id: row.id,
+      user_id: row.user_id,
+      is_primary: row.is_primary,
+      on_break: row.on_break,
+      contact_info: row.contact_info,
+      started_at: row.started_at,
+      ended_at: row.ended_at,
+      user: {
+        id: row.user_id,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        email: row.email,
+        phone_number: row.phone_number,
+      },
+    }));
+
+    io.emit('dispatcher_changed', { dispatchers });
+    logger.info(`[AutoLogout] All dispatcher sessions ended`);
   }
 };
 

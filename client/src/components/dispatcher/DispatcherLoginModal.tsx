@@ -37,7 +37,7 @@ export default function DispatcherLoginModal({
                 </p>
               </div>
               <p className="text-gray-600">
-                Would you like to take over as primary or join as a secondary dispatcher?
+                Would you like to take over as primary or join as an assistant dispatcher?
               </p>
             </div>
 
@@ -68,7 +68,7 @@ export default function DispatcherLoginModal({
                 disabled={loading}
                 className="w-full bg-gray-600 hover:bg-gray-700 text-white py-3 rounded-lg font-medium transition-colors"
               >
-                {loading ? 'Setting up...' : 'Join as Secondary'}
+                {loading ? 'Setting up...' : 'Join as Assistant'}
               </button>
               <button
                 onClick={onClose}

@@ -66,8 +66,10 @@ export default function Login() {
       // Transporter needs to start shift
       setLoading(false);
       setShowShiftModal(true);
+    } else {
+      // Dispatcher/supervisor/manager — let useEffect handle navigation
+      setLoading(false);
     }
-    // Otherwise, the useEffect will handle navigation (including dispatcher modal)
   };
 
   const handleStartShift = async (data: { extension?: string; floor_assignment?: Floor }) => {

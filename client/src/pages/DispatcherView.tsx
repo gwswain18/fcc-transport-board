@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
@@ -17,6 +17,7 @@ import Modal from '../components/common/Modal';
 import AutoAssignButton from '../components/dispatcher/AutoAssignButton';
 import ActiveDispatcherCard from '../components/dispatcher/ActiveDispatcherCard';
 import BreakModal from '../components/dispatcher/BreakModal';
+import DispatcherLoginModal from '../components/dispatcher/DispatcherLoginModal';
 import AlertBanners from '../components/common/AlertBanners';
 import JobHistoryModal from '../components/dispatcher/JobHistoryModal';
 
@@ -49,11 +50,63 @@ export default function DispatcherView() {
   const [showBreakModal, setShowBreakModal] = useState(false);
   const [breakLoading, setBreakLoading] = useState(false);
   const [historyRequestId, setHistoryRequestId] = useState<number | null>(null);
+  const [showDispatcherModal, setShowDispatcherModal] = useState(false);
+  const [hasDismissedModal, setHasDismissedModal] = useState(false);
+  const [dispatcherLoading, setDispatcherLoading] = useState(false);
+  const [hasPrimaryDispatcher, setHasPrimaryDispatcher] = useState(false);
+  const [primaryDispatcherName, setPrimaryDispatcherName] = useState<string | undefined>();
 
   // Find current user's dispatcher status
   const myDispatcherStatus = activeDispatchers.find((d) => d.user_id === user?.id);
   const isPrimaryDispatcher = myDispatcherStatus?.is_primary || false;
   const canEndShift = isPrimaryDispatcher || user?.role === 'supervisor' || user?.role === 'manager';
+
+  // Show dispatcher login modal if user is dispatcher/supervisor but not registered
+  useEffect(() => {
+    if (
+      user &&
+      (user.role === 'dispatcher' || user.role === 'supervisor') &&
+      !myDispatcherStatus &&
+      !hasDismissedModal
+    ) {
+      // Derive primary dispatcher info from activeDispatchers
+      const primary = activeDispatchers.find((d) => d.is_primary);
+      setHasPrimaryDispatcher(!!primary);
+      if (primary) {
+        setPrimaryDispatcherName(`${primary.user?.first_name} ${primary.user?.last_name}`);
+      } else {
+        setPrimaryDispatcherName(undefined);
+      }
+      setShowDispatcherModal(true);
+    } else if (myDispatcherStatus) {
+      setShowDispatcherModal(false);
+    }
+  }, [user, myDispatcherStatus, activeDispatchers, hasDismissedModal]);
+
+  const handleDispatcherBecomePrimary = async (contactInfo?: string) => {
+    setDispatcherLoading(true);
+    const response = await api.setPrimaryDispatcher(contactInfo);
+    setDispatcherLoading(false);
+    if (!response.error) {
+      setShowDispatcherModal(false);
+      await refreshData();
+    }
+  };
+
+  const handleDispatcherJoinAsSecondary = async (contactInfo?: string) => {
+    setDispatcherLoading(true);
+    const response = await api.registerAsDispatcher(contactInfo);
+    setDispatcherLoading(false);
+    if (!response.error) {
+      setShowDispatcherModal(false);
+      await refreshData();
+    }
+  };
+
+  const handleSkipDispatcherSetup = () => {
+    setHasDismissedModal(true);
+    setShowDispatcherModal(false);
+  };
 
   const handleForceEndShift = async (userId: number, userName: string) => {
     if (!confirm(`End ${userName}'s shift? They will be set to offline.`)) return;
@@ -580,6 +633,17 @@ export default function DispatcherView() {
         isOpen={historyRequestId !== null}
         onClose={() => setHistoryRequestId(null)}
         requestId={historyRequestId}
+      />
+
+      {/* Dispatcher Login Modal (for unregistered dispatchers) */}
+      <DispatcherLoginModal
+        isOpen={showDispatcherModal}
+        hasPrimaryDispatcher={hasPrimaryDispatcher}
+        primaryDispatcherName={primaryDispatcherName}
+        onBecomePrimary={handleDispatcherBecomePrimary}
+        onJoinAsSecondary={handleDispatcherJoinAsSecondary}
+        onClose={handleSkipDispatcherSetup}
+        loading={dispatcherLoading}
       />
     </div>
   );

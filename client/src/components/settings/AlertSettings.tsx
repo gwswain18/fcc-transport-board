@@ -22,6 +22,8 @@ const DEFAULT_SETTINGS: AlertSettingsType = {
   },
   timing: DEFAULT_TIMING,
   require_explanation_on_dismiss: true,
+  auto_logout_enabled: false,
+  auto_logout_time: '19:00',
 };
 
 export default function AlertSettings() {
@@ -218,6 +220,33 @@ export default function AlertSettings() {
             onChange={handleExplanationToggle}
           />
         </div>
+      </div>
+
+      {/* Auto-Logout */}
+      <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h4 className="font-medium text-gray-900">Auto-Logout Dispatchers</h4>
+            <p className="text-sm text-gray-500">
+              Automatically end all dispatcher sessions at a specified time each day
+            </p>
+          </div>
+          <Toggle
+            enabled={settings.auto_logout_enabled ?? false}
+            onChange={(v) => setSettings((prev) => ({ ...prev, auto_logout_enabled: v }))}
+          />
+        </div>
+        {settings.auto_logout_enabled && (
+          <div className="flex items-center gap-2 mt-2">
+            <label className="text-sm text-gray-700">Logout time:</label>
+            <input
+              type="time"
+              value={settings.auto_logout_time ?? '19:00'}
+              onChange={(e) => setSettings((prev) => ({ ...prev, auto_logout_time: e.target.value }))}
+              className="text-sm border border-gray-300 rounded px-2 py-1"
+            />
+          </div>
+        )}
       </div>
 
       {/* Save Button */}
