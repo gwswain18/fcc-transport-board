@@ -355,7 +355,7 @@ export const getAvailableDispatchers = async (req: AuthenticatedRequest, res: Re
               ad.id as dispatcher_id, ad.is_primary,
               COALESCE(ad.on_break, false) as on_break
        FROM users u
-       LEFT JOIN active_dispatchers ad ON u.id = ad.user_id AND ad.ended_at IS NULL
+       JOIN active_dispatchers ad ON u.id = ad.user_id AND ad.ended_at IS NULL
        WHERE u.role IN ('dispatcher', 'supervisor', 'manager')
          AND u.is_active = true
          AND u.id != $1
