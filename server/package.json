@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "migrate": "tsx src/config/migrate.ts",
     "seed": "cd .. && npx tsx database/seeds/seed.ts",
-    "add-managers": "cd .. && npx tsx database/seeds/add-managers.ts"
+    "add-managers": "cd .. && npx tsx database/seeds/add-managers.ts",
+    "import-users": "npx tsx src/scripts/import-users.ts"
   },
   "dependencies": {
     "@types/bcrypt": "^5.0.2",
@@ -34,7 +35,8 @@
     "socket.io": "^4.7.5",
     "twilio": "^5.11.2",
     "typescript": "^5.5.4",
-    "winston": "^3.19.0"
+    "winston": "^3.19.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "tsx": "^4.19.0"
