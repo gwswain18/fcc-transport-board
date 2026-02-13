@@ -8,6 +8,7 @@ import shiftRoutes from './shifts.js';
 import dispatcherRoutes from './dispatchers.js';
 import configRoutes from './config.js';
 import offlineRoutes from './offline.js';
+import { query } from '../config/database.js';
 
 const router = Router();
 
@@ -21,9 +22,14 @@ router.use('/dispatchers', dispatcherRoutes);
 router.use('/config', configRoutes);
 router.use('/offline', offlineRoutes);
 
-// Health check
-router.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check with database connectivity
+router.get('/health', async (_req, res) => {
+  try {
+    await query('SELECT 1');
+    res.json({ status: 'ok', database: 'connected', timestamp: new Date().toISOString() });
+  } catch {
+    res.status(503).json({ status: 'degraded', database: 'disconnected', timestamp: new Date().toISOString() });
+  }
 });
 
 export default router;
