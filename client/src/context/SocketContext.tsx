@@ -86,7 +86,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         const url = new URL(apiUrl);
         socketUrl = url.origin;
       } catch {
-        console.error('Invalid VITE_API_URL:', import.meta.env.VITE_API_URL);
+        // Invalid VITE_API_URL, falling back to default
       }
     }
     const newSocket = io(socketUrl, {
@@ -100,12 +100,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     });
 
     newSocket.on('connect', () => {
-      console.log('Socket connected');
       setConnected(true);
     });
 
     newSocket.on('disconnect', () => {
-      console.log('Socket disconnected');
       setConnected(false);
     });
 
@@ -273,9 +271,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     });
 
     // Auto-assign timeout
-    newSocket.on('auto_assign_timeout', (data: { request_id: number; old_assignee: number; new_assignee?: number }) => {
-      console.log('Auto-assign timeout:', data);
-      // Could show a notification here
+    newSocket.on('auto_assign_timeout', (_data: { request_id: number; old_assignee: number; new_assignee?: number }) => {
+      // Auto-assign timeout received — could show a notification here
     });
 
     setSocket(newSocket);

@@ -25,7 +25,7 @@ router.put('/:id/claim', claimRequest);
 router.post('/:id/auto-assign', canDispatch, autoAssign);
 router.put('/:id/assign-pct', canDispatch, assignToPCT);
 router.get('/:id/history', getRequestHistory);
-router.post('/:id/delays', addDelays);
+router.post('/:id/delays', canDispatch, addDelays);
 router.get('/:id/delays', getDelays);
 
 export default router;

@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticate } from '../middleware/auth.js';
-import { canDispatch } from '../middleware/roleAuth.js';
+import { canDispatch, canManageUsers } from '../middleware/roleAuth.js';
 import {
   getActiveDispatchers,
   setPrimaryDispatcher,
@@ -27,6 +27,6 @@ router.post('/register', canDispatch, registerAsDispatcher);
 router.post('/take-break', canDispatch, takeBreak);
 router.post('/return', canDispatch, returnFromBreak);
 router.post('/end-session', canDispatch, endDispatcherSession);
-router.post('/force-logout-all', canDispatch, forceLogoutAll);
+router.post('/force-logout-all', canManageUsers, forceLogoutAll);
 
 export default router;

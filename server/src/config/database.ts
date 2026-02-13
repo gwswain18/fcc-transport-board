@@ -6,6 +6,7 @@ dotenv.config();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // Supabase pooler (PgBouncer) requires rejectUnauthorized: false — this is a known Supabase limitation
   ssl: { rejectUnauthorized: false },
   max: 20,
   idleTimeoutMillis: 30000,

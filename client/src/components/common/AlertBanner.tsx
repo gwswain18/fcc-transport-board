@@ -41,8 +41,8 @@ export default function AlertBanner({
       .then(() => {
         setIsAudioPlaying(true);
       })
-      .catch((err) => {
-        console.log('Audio playback failed:', err);
+      .catch(() => {
+        // Audio playback failed (likely blocked by browser autoplay policy)
       });
   };
 

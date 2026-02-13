@@ -11,7 +11,7 @@ services:
   - key: DATABASE_URL
     value: ""
   - key: JWT_SECRET
-    value: aR7QGPCw2XgvnZppCtLZOISTnU1vgEmh5Nixt8tNG9Y=
+    value: ""
   - key: CLIENT_URL
     value: https://fcc-transport-client.onrender.com
   - key: LOG_LEVEL

@@ -163,6 +163,12 @@ const processRequestStatusChange = async (
 ): Promise<void> => {
   const { request_id, new_status } = payload;
 
+  // Validate status before interpolating into SQL
+  const validStatuses = ['accepted', 'en_route', 'with_patient', 'complete', 'cancelled'];
+  if (!validStatuses.includes(new_status as string)) {
+    throw new Error(`Invalid status: ${new_status}`);
+  }
+
   // Map status to timestamp field
   const timestampField = getTimestampField(new_status as string);
 

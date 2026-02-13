@@ -43,7 +43,6 @@ export default function AlertSettings() {
     try {
       const response = await api.getConfigByKey('alert_settings');
       if (response.error && response.error !== 'Config key not found') {
-        console.error('[AlertSettings] Failed to load settings:', response.error);
         setMessage({ type: 'error', text: 'Failed to load alert settings. Using defaults.' });
       } else if (!response.error) {
         const value = response.data?.value as AlertSettingsType | undefined;
@@ -62,8 +61,7 @@ export default function AlertSettings() {
           });
         }
       }
-    } catch (error) {
-      console.error('[AlertSettings] Exception loading settings:', error);
+    } catch {
       setMessage({ type: 'error', text: 'Failed to load alert settings. Using defaults.' });
     }
     setLoading(false);
@@ -75,13 +73,11 @@ export default function AlertSettings() {
     try {
       const response = await api.updateConfig('alert_settings', settings);
       if (response.error) {
-        console.error('[AlertSettings] Failed to save settings:', response.error);
         setMessage({ type: 'error', text: 'Failed to save settings' });
       } else {
         setMessage({ type: 'success', text: 'Settings saved successfully' });
       }
-    } catch (error) {
-      console.error('[AlertSettings] Exception saving settings:', error);
+    } catch {
       setMessage({ type: 'error', text: 'Failed to save settings' });
     }
     setSaving(false);

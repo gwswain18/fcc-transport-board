@@ -311,6 +311,13 @@ export const updateRequest = async (
     }
 
     const currentRequest = existing.rows[0];
+
+    // Transporters can only update their own assigned requests
+    if (req.user.role === 'transporter' && currentRequest.assigned_to !== req.user.id) {
+      res.status(403).json({ error: 'You can only update requests assigned to you' });
+      return;
+    }
+
     const updates: string[] = [];
     const params: unknown[] = [];
     let paramIndex = 1;
