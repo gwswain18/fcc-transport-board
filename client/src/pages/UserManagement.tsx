@@ -218,6 +218,7 @@ export default function UserManagement() {
 
   const openDeleteModal = (user: User) => {
     setDeletingUser(user);
+    setError('');
     setDeleteModalOpen(true);
   };
 
@@ -536,6 +537,11 @@ export default function UserManagement() {
               </button>
               <p className="text-xs text-red-500 text-center">This cannot be undone</p>
             </div>
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">
+                {error}
+              </div>
+            )}
             <button
               onClick={() => { setDeleteModalOpen(false); setDeletingUser(null); }}
               className="w-full btn-secondary mt-2"
