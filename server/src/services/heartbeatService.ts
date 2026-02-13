@@ -294,8 +294,107 @@ const checkAutoLogout = async () => {
     }));
 
     io.emit('dispatcher_changed', { dispatchers });
-    logger.info(`[AutoLogout] All dispatcher sessions ended`);
+    // End all active transporter shifts
+    await query(
+      `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP WHERE shift_end IS NULL`
+    );
+
+    // Close open offline periods
+    await query(
+      `UPDATE offline_periods
+       SET online_at = CURRENT_TIMESTAMP,
+           duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - offline_at))::int
+       WHERE online_at IS NULL`
+    );
+
+    // Set all transporters to offline
+    const affectedTransporters = await query(
+      `UPDATE transporter_status SET status = 'offline', updated_at = CURRENT_TIMESTAMP
+       WHERE status != 'offline'
+       RETURNING user_id`
+    );
+
+    // Emit status change for each affected transporter
+    for (const row of affectedTransporters.rows) {
+      const statusResult = await query(
+        `SELECT ts.*, u.first_name, u.last_name, u.email, u.role
+         FROM transporter_status ts
+         JOIN users u ON ts.user_id = u.id
+         WHERE ts.user_id = $1`,
+        [row.user_id]
+      );
+      if (statusResult.rows[0]) {
+        io.emit('transporter_status_changed', statusResult.rows[0]);
+      }
+    }
+
+    // Remove all heartbeat records
+    await query('DELETE FROM user_heartbeats');
+
+    logger.info(`[AutoLogout] All dispatcher sessions ended, ${affectedTransporters.rows.length} transporters set offline, all shifts ended`);
   }
+};
+
+export const performFullLogout = async (): Promise<{ dispatchers_ended: number; transporters_offlined: number }> => {
+  const io = getIO();
+
+  // End all active dispatcher sessions
+  const dispatcherResult = await query(
+    `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
+     WHERE ended_at IS NULL
+     RETURNING id`
+  );
+
+  // Emit updated (empty) dispatcher list
+  if (io) {
+    io.emit('dispatcher_changed', { dispatchers: [] });
+  }
+
+  // End all active transporter shifts
+  await query(
+    `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP WHERE shift_end IS NULL`
+  );
+
+  // Close open offline periods
+  await query(
+    `UPDATE offline_periods
+     SET online_at = CURRENT_TIMESTAMP,
+         duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - offline_at))::int
+     WHERE online_at IS NULL`
+  );
+
+  // Set all transporters to offline
+  const affectedTransporters = await query(
+    `UPDATE transporter_status SET status = 'offline', updated_at = CURRENT_TIMESTAMP
+     WHERE status != 'offline'
+     RETURNING user_id`
+  );
+
+  // Emit status change for each affected transporter
+  if (io) {
+    for (const row of affectedTransporters.rows) {
+      const statusResult = await query(
+        `SELECT ts.*, u.first_name, u.last_name, u.email, u.role
+         FROM transporter_status ts
+         JOIN users u ON ts.user_id = u.id
+         WHERE ts.user_id = $1`,
+        [row.user_id]
+      );
+      if (statusResult.rows[0]) {
+        io.emit('transporter_status_changed', statusResult.rows[0]);
+      }
+    }
+  }
+
+  // Remove all heartbeat records
+  await query('DELETE FROM user_heartbeats');
+
+  logger.info(`[ForceLogout] ${dispatcherResult.rows.length} dispatcher sessions ended, ${affectedTransporters.rows.length} transporters set offline`);
+
+  return {
+    dispatchers_ended: dispatcherResult.rows.length,
+    transporters_offlined: affectedTransporters.rows.length,
+  };
 };
 
 export const isUserOnline = async (userId: number): Promise<boolean> => {

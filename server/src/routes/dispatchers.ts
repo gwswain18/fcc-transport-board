@@ -9,6 +9,7 @@ import {
   returnFromBreak,
   endDispatcherSession,
   getAvailableDispatchers,
+  forceLogoutAll,
 } from '../controllers/dispatcherController.js';
 
 const router = express.Router();
@@ -26,5 +27,6 @@ router.post('/register', canDispatch, registerAsDispatcher);
 router.post('/take-break', canDispatch, takeBreak);
 router.post('/return', canDispatch, returnFromBreak);
 router.post('/end-session', canDispatch, endDispatcherSession);
+router.post('/force-logout-all', canDispatch, forceLogoutAll);
 
 export default router;

@@ -31,6 +31,8 @@ export default function AlertSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [forceLogoutConfirm, setForceLogoutConfirm] = useState(false);
+  const [forceLogoutLoading, setForceLogoutLoading] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -105,6 +107,26 @@ export default function AlertSettings() {
 
   const handleExplanationToggle = (required: boolean) => {
     setSettings((prev) => ({ ...prev, require_explanation_on_dismiss: required }));
+  };
+
+  const handleForceLogoutAll = async () => {
+    if (!forceLogoutConfirm) {
+      setForceLogoutConfirm(true);
+      return;
+    }
+    setForceLogoutLoading(true);
+    setForceLogoutConfirm(false);
+    try {
+      const response = await api.forceLogoutAll();
+      if (response.error) {
+        setMessage({ type: 'error', text: response.error });
+      } else {
+        setMessage({ type: 'success', text: response.data?.message || 'All users logged out successfully' });
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to force logout all users' });
+    }
+    setForceLogoutLoading(false);
   };
 
   if (loading) {
@@ -226,9 +248,9 @@ export default function AlertSettings() {
       <div className="mb-6 p-4 bg-gray-50 rounded-lg">
         <div className="flex items-center justify-between mb-3">
           <div>
-            <h4 className="font-medium text-gray-900">Auto-Logout Dispatchers</h4>
+            <h4 className="font-medium text-gray-900">Auto-Logout All Users</h4>
             <p className="text-sm text-gray-500">
-              Automatically end all dispatcher sessions at a specified time each day
+              Automatically end all dispatcher sessions and transporter shifts at a specified time each day
             </p>
           </div>
           <Toggle
@@ -247,6 +269,43 @@ export default function AlertSettings() {
             />
           </div>
         )}
+
+        {/* Force Logout All Button */}
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Log Off All Users Now</p>
+              <p className="text-xs text-gray-500">
+                Immediately end all dispatcher sessions, transporter shifts, and set everyone offline
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {forceLogoutConfirm && (
+                <button
+                  onClick={() => setForceLogoutConfirm(false)}
+                  className="text-sm px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                onClick={handleForceLogoutAll}
+                disabled={forceLogoutLoading}
+                className={`text-sm px-3 py-1.5 rounded font-medium ${
+                  forceLogoutConfirm
+                    ? 'bg-red-600 text-white hover:bg-red-700'
+                    : 'bg-red-100 text-red-700 hover:bg-red-200'
+                }`}
+              >
+                {forceLogoutLoading
+                  ? 'Logging out...'
+                  : forceLogoutConfirm
+                    ? 'Confirm Log Off All'
+                    : 'Log Off All Users'}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Save Button */}

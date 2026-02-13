@@ -323,6 +323,9 @@ export const api = {
   endDispatcherSession: () =>
     request<{ message: string }>('/dispatchers/end-session', { method: 'POST' }),
 
+  forceLogoutAll: () =>
+    request<{ message: string }>('/dispatchers/force-logout-all', { method: 'POST' }),
+
   // Config
   getConfig: () =>
     request<{ config: Record<string, unknown> }>('/config'),

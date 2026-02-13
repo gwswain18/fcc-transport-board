@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../config/database.js';
 import { getIO } from '../socket/index.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import { performFullLogout } from '../services/heartbeatService.js';
 import logger from '../utils/logger.js';
 
 // Helper to transform flat dispatcher rows to nested structure
@@ -329,6 +330,20 @@ const emitDispatcherChange = async () => {
 
   const dispatchers = transformDispatcherRows(result.rows);
   io.emit('dispatcher_changed', { dispatchers });
+};
+
+// Force logout all users (dispatchers + transporters)
+export const forceLogoutAll = async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await performFullLogout();
+    logger.info(`[ForceLogoutAll] Force logout triggered: ${result.dispatchers_ended} dispatchers, ${result.transporters_offlined} transporters`);
+    res.json({
+      message: `All users logged out. ${result.dispatchers_ended} dispatcher sessions ended, ${result.transporters_offlined} transporters set offline.`,
+    });
+  } catch (error) {
+    logger.error('Force logout all error:', error);
+    res.status(500).json({ error: 'Failed to force logout all users' });
+  }
 };
 
 // Get available dispatchers (for replacement selection)
