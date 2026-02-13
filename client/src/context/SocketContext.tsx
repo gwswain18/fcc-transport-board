@@ -17,6 +17,7 @@ import {
   playCycleTimeAlertBeep,
   initAudioContext,
 } from '../utils/audioNotifications';
+import { flushQueue } from '../utils/offlineQueue';
 
 interface SocketContextType {
   socket: Socket | null;
@@ -101,6 +102,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     newSocket.on('connect', () => {
       setConnected(true);
+      flushQueue();
     });
 
     newSocket.on('disconnect', () => {

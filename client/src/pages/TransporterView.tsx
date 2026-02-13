@@ -9,12 +9,14 @@ import PriorityBadge from '../components/common/PriorityBadge';
 import ElapsedTimer from '../components/common/ElapsedTimer';
 import Modal from '../components/common/Modal';
 import Header from '../components/common/Header';
+import OfflineBanner from '../components/common/OfflineBanner';
 import OtherStatusModal from '../components/common/OtherStatusModal';
 import ShiftStartModal from '../components/transporter/ShiftStartModal';
 import ShiftEndModal from '../components/transporter/ShiftEndModal';
 import CycleTimeAlert from '../components/common/CycleTimeAlert';
 import MuteToggle from '../components/common/MuteToggle';
 import { Floor } from '../types';
+import { enqueue } from '../utils/offlineQueue';
 
 export default function TransporterView() {
   const { user, activeShift, setActiveShift, logout } = useAuth();
@@ -65,7 +67,11 @@ export default function TransporterView() {
     setError(null);
     const response = await api.updateStatus(status, explanation);
     if (response.error) {
-      setError(response.error);
+      if (response.error === 'Network error') {
+        enqueue({ action_type: 'status_update', payload: { status, explanation } });
+      } else {
+        setError(response.error);
+      }
       setLoading(false);
       return;
     }
@@ -106,7 +112,12 @@ export default function TransporterView() {
     }
 
     setLoading(true);
-    await api.updateRequest(currentJob.id, { status: targetStatus });
+    const result = await api.updateRequest(currentJob.id, { status: targetStatus });
+    if (result.error === 'Network error') {
+      enqueue({ action_type: 'request_status_change', payload: { request_id: currentJob.id, status: targetStatus } });
+      setLoading(false);
+      return;
+    }
     await refreshData();
     setLoading(false);
   };
@@ -176,7 +187,13 @@ export default function TransporterView() {
 
   const handleClaimJob = async (jobId: number) => {
     setLoading(true);
-    await api.claimRequest(jobId);
+    const result = await api.claimRequest(jobId);
+    if (result.error === 'Network error') {
+      enqueue({ action_type: 'request_accept', payload: { request_id: jobId } });
+      setQueueOpen(false);
+      setLoading(false);
+      return;
+    }
     await refreshData();
     setQueueOpen(false);
     setLoading(false);
@@ -247,6 +264,7 @@ export default function TransporterView() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
+      <OfflineBanner />
 
       <main className="max-w-lg mx-auto p-4 space-y-6">
         {/* Shift Info */}
