@@ -203,11 +203,11 @@ export const getJobsByHour = async (
 
     const result = await query(
       `SELECT
-        EXTRACT(HOUR FROM created_at) as hour,
+        EXTRACT(HOUR FROM created_at AT TIME ZONE 'America/New_York') as hour,
         COUNT(*) as count
        FROM transport_requests
        ${whereClause}
-       GROUP BY EXTRACT(HOUR FROM created_at)
+       GROUP BY EXTRACT(HOUR FROM created_at AT TIME ZONE 'America/New_York')
        ORDER BY hour`,
       params
     );
@@ -837,10 +837,10 @@ export const getJobsByDay = async (
         SELECT unnest(ARRAY[0, 1, 2, 3, 4, 5, 6]) AS dow
       ),
       job_counts AS (
-        SELECT EXTRACT(DOW FROM created_at)::int AS dow, COUNT(*) as count
+        SELECT EXTRACT(DOW FROM created_at AT TIME ZONE 'America/New_York')::int AS dow, COUNT(*) as count
         FROM transport_requests
         ${whereClause}
-        GROUP BY EXTRACT(DOW FROM created_at)
+        GROUP BY EXTRACT(DOW FROM created_at AT TIME ZONE 'America/New_York')
       )
       SELECT
         dw.dow,
