@@ -14,6 +14,7 @@ export default function Header() {
   const navigate = useNavigate();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -57,6 +58,22 @@ export default function Header() {
             />
           </div>
 
+          <button
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className="md:hidden p-2 rounded-lg hover:bg-white/10 text-secondary-200 hover:text-white"
+            aria-label="Toggle menu"
+          >
+            {showMobileMenu ? (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
+          </button>
+
           <nav className="hidden md:flex items-center space-x-4">
             {(user.role === 'dispatcher' ||
               user.role === 'supervisor' ||
@@ -97,7 +114,7 @@ export default function Header() {
           <div className="flex items-center space-x-6">
             <MuteToggle className="text-secondary-200 hover:text-white" />
             <DarkModeToggle className="text-secondary-200 hover:text-white" />
-            <DateTimeDisplay className="text-secondary-200" />
+            <DateTimeDisplay className="hidden md:block text-secondary-200" />
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
@@ -175,6 +192,52 @@ export default function Header() {
           </div>
         </div>
       </header>
+
+      {showMobileMenu && (
+        <nav className="md:hidden bg-primary-700 border-b border-primary-600">
+          <div className="max-w-7xl mx-auto px-4 py-2 flex flex-col space-y-1">
+            {(user.role === 'dispatcher' ||
+              user.role === 'supervisor' ||
+              user.role === 'manager') && (
+              <Link
+                to="/dashboard"
+                onClick={() => setShowMobileMenu(false)}
+                className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
+              >
+                Dashboard
+              </Link>
+            )}
+            {(user.role === 'supervisor' || user.role === 'manager') && (
+              <Link
+                to="/supervisor"
+                onClick={() => setShowMobileMenu(false)}
+                className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
+              >
+                Reports
+              </Link>
+            )}
+            {user.role === 'manager' && (
+              <>
+                <Link
+                  to="/analytics"
+                  onClick={() => setShowMobileMenu(false)}
+                  className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
+                >
+                  Analytics
+                </Link>
+                <Link
+                  to="/manager/users"
+                  onClick={() => setShowMobileMenu(false)}
+                  className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
+                >
+                  Users
+                </Link>
+              </>
+            )}
+          </div>
+        </nav>
+      )}
+
       <PasswordChangeModal
         isOpen={showPasswordModal}
         onClose={() => setShowPasswordModal(false)}
