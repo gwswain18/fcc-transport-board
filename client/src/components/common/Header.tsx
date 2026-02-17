@@ -111,7 +111,7 @@ export default function Header() {
             )}
           </nav>
 
-          <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-3 md:space-x-6">
             <MuteToggle className="text-secondary-200 hover:text-white" />
             <DarkModeToggle className="text-secondary-200 hover:text-white" />
             <DateTimeDisplay className="hidden md:block text-secondary-200" />
