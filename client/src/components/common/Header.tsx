@@ -194,7 +194,12 @@ export default function Header() {
       </header>
 
       {showMobileMenu && (
-        <nav className="md:hidden bg-primary-700 border-b border-primary-600">
+        <>
+        <div
+          className="fixed inset-0 z-10 md:hidden"
+          onClick={() => setShowMobileMenu(false)}
+        />
+        <nav className="relative z-20 md:hidden bg-primary-700 border-b border-primary-600">
           <div className="max-w-7xl mx-auto px-4 py-2 flex flex-col space-y-1">
             {(user.role === 'dispatcher' ||
               user.role === 'supervisor' ||
@@ -236,6 +241,7 @@ export default function Header() {
             )}
           </div>
         </nav>
+        </>
       )}
 
       <PasswordChangeModal
