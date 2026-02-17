@@ -107,6 +107,12 @@ export default function Header() {
                 >
                   Users
                 </Link>
+                <Link
+                  to="/manager/settings"
+                  className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
+                >
+                  Settings
+                </Link>
               </>
             )}
           </nav>
@@ -236,6 +242,13 @@ export default function Header() {
                   className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
                 >
                   Users
+                </Link>
+                <Link
+                  to="/manager/settings"
+                  onClick={() => setShowMobileMenu(false)}
+                  className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
+                >
+                  Settings
                 </Link>
               </>
             )}

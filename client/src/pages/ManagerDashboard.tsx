@@ -6,8 +6,6 @@ import AlertBanners from '../components/common/AlertBanners';
 import { formatMinutes, formatSecondsAsHoursMinutes } from '../utils/formatters';
 import FloorAnalysis from '../components/analytics/FloorAnalysis';
 import DelayReport from '../components/analytics/DelayReport';
-import CycleTimeThresholdSettings from '../components/settings/CycleTimeThresholdSettings';
-import AlertSettings from '../components/settings/AlertSettings';
 import JobActivityLog from '../components/manager/JobActivityLog';
 import {
   BarChart,
@@ -21,7 +19,7 @@ import {
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 
-type TabType = 'overview' | 'floors' | 'delays' | 'activity' | 'settings';
+type TabType = 'overview' | 'floors' | 'delays' | 'activity';
 
 export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -168,16 +166,6 @@ export default function ManagerDashboard() {
           >
             Activity Log
           </button>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`px-6 py-3 font-medium text-sm ${
-              activeTab === 'settings'
-                ? 'border-b-2 border-primary text-primary'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Settings
-          </button>
         </div>
 
         {/* Floor Analysis Tab */}
@@ -202,14 +190,6 @@ export default function ManagerDashboard() {
 
         {/* Activity Log Tab */}
         {activeTab === 'activity' && <JobActivityLog />}
-
-        {/* Settings Tab */}
-        {activeTab === 'settings' && (
-          <div className="space-y-6">
-            <AlertSettings />
-            <CycleTimeThresholdSettings />
-          </div>
-        )}
 
         {/* Overview Tab */}
         {activeTab === 'overview' && (

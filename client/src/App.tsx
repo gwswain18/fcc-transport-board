@@ -8,6 +8,7 @@ import DispatcherView from './pages/DispatcherView';
 import SupervisorView from './pages/SupervisorView';
 import ManagerDashboard from './pages/ManagerDashboard';
 import UserManagement from './pages/UserManagement';
+import Settings from './pages/Settings';
 
 function ProtectedRoute({
   children,
@@ -132,6 +133,15 @@ export default function App() {
         element={
           <ProtectedRoute allowedRoles={['manager']}>
             <UserManagement />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/manager/settings"
+        element={
+          <ProtectedRoute allowedRoles={['manager']}>
+            <Settings />
           </ProtectedRoute>
         }
       />
