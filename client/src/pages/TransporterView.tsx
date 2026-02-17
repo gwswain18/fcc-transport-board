@@ -20,7 +20,7 @@ import { enqueue } from '../utils/offlineQueue';
 
 export default function TransporterView() {
   const { user, activeShift, setActiveShift, logout } = useAuth();
-  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, jobRemovedNotification, clearJobRemovedNotification, refreshData } = useSocket();
+  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, jobRemovedNotification, clearJobRemovedNotification, refreshData, requireTransporterExplanation } = useSocket();
   const navigate = useNavigate();
   const [queueOpen, setQueueOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -342,6 +342,7 @@ export default function TransporterView() {
               alert={alert}
               request={currentJob}
               onDismiss={dismissCycleAlert}
+              requireReason={requireTransporterExplanation}
             />
           ))}
 

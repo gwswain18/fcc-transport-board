@@ -31,6 +31,7 @@ interface SocketContextType {
   activeDispatchers: ActiveDispatcher[];
   alertSettings: AlertSettings | null;
   requireExplanation: boolean;
+  requireTransporterExplanation: boolean;
   jobRemovedNotification: JobRemovedNotification | null;
   dismissAlert: (requestId: number, explanation?: string) => void;
   dismissCycleAlert: (requestId: number, explanation?: string) => void;
@@ -63,6 +64,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const heartbeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const requireExplanation = alertSettings?.require_explanation_on_dismiss ?? false;
+  const requireTransporterExplanation = alertSettings?.require_transporter_explanation_on_dismiss ?? true;
 
   useEffect(() => {
     if (!user) {
@@ -412,6 +414,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         activeDispatchers,
         alertSettings,
         requireExplanation,
+        requireTransporterExplanation,
         jobRemovedNotification,
         dismissAlert,
         dismissCycleAlert,

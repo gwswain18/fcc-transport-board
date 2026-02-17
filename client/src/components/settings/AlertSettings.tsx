@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS: AlertSettingsType = {
   },
   timing: DEFAULT_TIMING,
   require_explanation_on_dismiss: true,
+  require_transporter_explanation_on_dismiss: true,
   auto_logout_enabled: false,
   auto_logout_time: '19:00',
 };
@@ -103,6 +104,10 @@ export default function AlertSettings() {
 
   const handleExplanationToggle = (required: boolean) => {
     setSettings((prev) => ({ ...prev, require_explanation_on_dismiss: required }));
+  };
+
+  const handleTransporterExplanationToggle = (required: boolean) => {
+    setSettings((prev) => ({ ...prev, require_transporter_explanation_on_dismiss: required }));
   };
 
   const handleForceLogoutAll = async () => {
@@ -236,6 +241,22 @@ export default function AlertSettings() {
           <Toggle
             enabled={settings.require_explanation_on_dismiss}
             onChange={handleExplanationToggle}
+          />
+        </div>
+      </div>
+
+      {/* Transporter Explanation Requirement */}
+      <div className="mb-6 p-4 bg-primary-50 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="font-medium text-gray-900">Require Transporter Dismissal Explanation</h4>
+            <p className="text-sm text-gray-500">
+              When enabled, transporters must provide a reason when dismissing cycle time alerts
+            </p>
+          </div>
+          <Toggle
+            enabled={settings.require_transporter_explanation_on_dismiss}
+            onChange={handleTransporterExplanationToggle}
           />
         </div>
       </div>

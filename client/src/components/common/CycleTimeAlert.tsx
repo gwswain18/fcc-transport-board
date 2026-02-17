@@ -5,9 +5,10 @@ interface CycleTimeAlertProps {
   alert: CycleTimeAlertType;
   request?: TransportRequest;
   onDismiss: (requestId: number, reason?: string) => void;
+  requireReason?: boolean;
 }
 
-export default function CycleTimeAlert({ alert, request, onDismiss }: CycleTimeAlertProps) {
+export default function CycleTimeAlert({ alert, request, onDismiss, requireReason = true }: CycleTimeAlertProps) {
   const [showReasonInput, setShowReasonInput] = useState(false);
   const [reason, setReason] = useState('');
 
@@ -33,6 +34,8 @@ export default function CycleTimeAlert({ alert, request, onDismiss }: CycleTimeA
     // If transporter already provided a reason, allow quick acknowledge
     if (request?.delay_reason) {
       onDismiss(alert.request_id, `Transporter provided: ${request.delay_reason}`);
+    } else if (!requireReason) {
+      onDismiss(alert.request_id);
     } else {
       setShowReasonInput(true);
     }

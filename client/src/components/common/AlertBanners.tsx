@@ -173,6 +173,7 @@ export default function AlertBanners() {
               alert={alert}
               request={requests.find(r => r.id === alert.request_id)}
               onDismiss={dismissCycleAlert}
+              requireReason={requireExplanation}
             />
           ))}
         </div>
