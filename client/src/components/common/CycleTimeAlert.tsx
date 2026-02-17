@@ -4,7 +4,7 @@ import { CycleTimeAlert as CycleTimeAlertType, TransportRequest } from '../../ty
 interface CycleTimeAlertProps {
   alert: CycleTimeAlertType;
   request?: TransportRequest;
-  onDismiss: (requestId: number, reason?: string) => void;
+  onDismiss: (requestId: number, reason?: string, phase?: string) => void;
   requireReason?: boolean;
 }
 
@@ -33,9 +33,9 @@ export default function CycleTimeAlert({ alert, request, onDismiss, requireReaso
   const handleDismissClick = () => {
     // If transporter already provided a reason, allow quick acknowledge
     if (request?.delay_reason) {
-      onDismiss(alert.request_id, `Transporter provided: ${request.delay_reason}`);
+      onDismiss(alert.request_id, `Transporter provided: ${request.delay_reason}`, alert.phase);
     } else if (!requireReason) {
-      onDismiss(alert.request_id);
+      onDismiss(alert.request_id, undefined, alert.phase);
     } else {
       setShowReasonInput(true);
     }
@@ -43,7 +43,7 @@ export default function CycleTimeAlert({ alert, request, onDismiss, requireReaso
 
   const handleConfirmDismiss = () => {
     if (!reason.trim()) return;
-    onDismiss(alert.request_id, reason.trim());
+    onDismiss(alert.request_id, reason.trim(), alert.phase);
     setShowReasonInput(false);
     setReason('');
   };

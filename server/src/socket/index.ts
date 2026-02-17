@@ -3,6 +3,7 @@ import { Server, Socket } from 'socket.io';
 import { verifyToken } from '../utils/jwt.js';
 import { recordHeartbeat, removeHeartbeat } from '../services/heartbeatService.js';
 import { query } from '../config/database.js';
+import { acknowledgeDelay } from '../services/cycleTimeService.js';
 import logger from '../utils/logger.js';
 
 let io: Server | null = null;
@@ -217,8 +218,11 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     });
 
     // Cycle time alert dismissed
-    socket.on('cycle_alert_dismissed', async (data: { request_id: number; explanation?: string }) => {
+    socket.on('cycle_alert_dismissed', async (data: { request_id: number; explanation?: string; phase?: string }) => {
       logger.info(`Cycle alert dismissed for request ${data.request_id}: ${data.explanation || 'no explanation'}`);
+      if (data.phase) {
+        acknowledgeDelay(data.request_id, data.phase);
+      }
     });
 
     // Break alert dismissed

@@ -54,14 +54,6 @@ export default function TransporterView() {
     ? cycleTimeAlerts.find((a) => a.request_id === currentJob.id)
     : null;
 
-  const phaseLabels: Record<string, string> = {
-    pending: 'Pending',
-    assigned: 'Response',
-    accepted: 'En Route',
-    en_route: 'Pickup',
-    with_patient: 'Transport',
-  };
-
   const handleStatusChange = async (status: TransporterStatus, explanation?: string) => {
     setLoading(true);
     setError(null);
@@ -318,22 +310,7 @@ export default function TransporterView() {
           </div>
         </div>
 
-        {/* Cycle Time Alert Indicator for Current Job */}
-        {currentJobAlert && (
-          <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-3 animate-pulse-subtle">
-            <p className="text-yellow-800 font-medium text-sm">
-              This job is taking longer than usual ({phaseLabels[currentJobAlert.phase]} phase)
-            </p>
-            <button
-              onClick={() => setShowDelayModal(true)}
-              className="mt-2 text-sm bg-yellow-200 hover:bg-yellow-300 text-yellow-800 px-3 py-1 rounded"
-            >
-              Add Delay Note
-            </button>
-          </div>
-        )}
-
-        {/* Cycle Time Alerts (for dismissed alerts visibility) */}
+        {/* Cycle Time Alerts */}
         {cycleTimeAlerts
           .filter((a) => currentJob && a.request_id === currentJob.id)
           .map((alert) => (

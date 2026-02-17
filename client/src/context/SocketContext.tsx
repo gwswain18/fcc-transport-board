@@ -34,7 +34,7 @@ interface SocketContextType {
   requireTransporterExplanation: boolean;
   jobRemovedNotification: JobRemovedNotification | null;
   dismissAlert: (requestId: number, explanation?: string) => void;
-  dismissCycleAlert: (requestId: number, explanation?: string) => void;
+  dismissCycleAlert: (requestId: number, explanation?: string, phase?: string) => void;
   dismissBreakAlert: (userId: number, explanation?: string) => void;
   dismissOfflineAlert: (userId: number, explanation?: string) => void;
   clearJobRemovedNotification: () => void;
@@ -314,11 +314,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
   }, [socket]);
 
-  const dismissCycleAlert = useCallback((requestId: number, explanation?: string) => {
+  const dismissCycleAlert = useCallback((requestId: number, explanation?: string, phase?: string) => {
     setCycleTimeAlerts((prev) => prev.filter((a) => a.request_id !== requestId));
     setCompletedAlerts((prev) => prev.filter((a) => a.request_id !== requestId));
     if (socket) {
-      socket.emit('cycle_alert_dismissed', { request_id: requestId, explanation });
+      socket.emit('cycle_alert_dismissed', { request_id: requestId, explanation, phase });
     }
   }, [socket]);
 
