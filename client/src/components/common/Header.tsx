@@ -90,7 +90,7 @@ export default function Header() {
                 to="/supervisor"
                 className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
               >
-                Reports
+                Summary
               </Link>
             )}
             {user.role === 'manager' && (
@@ -218,7 +218,7 @@ export default function Header() {
                 onClick={() => setShowMobileMenu(false)}
                 className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
               >
-                Reports
+                Summary
               </Link>
             )}
             {user.role === 'manager' && (
