@@ -13,6 +13,7 @@ import OfflineBanner from '../components/common/OfflineBanner';
 import OtherStatusModal from '../components/common/OtherStatusModal';
 import ShiftStartModal from '../components/transporter/ShiftStartModal';
 import ShiftEndModal from '../components/transporter/ShiftEndModal';
+import DispatcherInfoCard from '../components/transporter/DispatcherInfoCard';
 import CycleTimeAlert from '../components/common/CycleTimeAlert';
 import MuteToggle from '../components/common/MuteToggle';
 import { Floor } from '../types';
@@ -20,7 +21,7 @@ import { enqueue } from '../utils/offlineQueue';
 
 export default function TransporterView() {
   const { user, activeShift, setActiveShift, logout } = useAuth();
-  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, jobRemovedNotification, clearJobRemovedNotification, refreshData, requireTransporterExplanation } = useSocket();
+  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, jobRemovedNotification, clearJobRemovedNotification, refreshData, requireTransporterExplanation, activeDispatchers } = useSocket();
   const navigate = useNavigate();
   const [queueOpen, setQueueOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -301,6 +302,9 @@ export default function TransporterView() {
             </button>
           </div>
         )}
+
+        {/* Dispatcher Info */}
+        <DispatcherInfoCard dispatchers={activeDispatchers} />
 
         {/* Sound Settings */}
         <div className="card">
