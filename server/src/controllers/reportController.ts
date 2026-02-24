@@ -142,7 +142,8 @@ export const getByTransporter = async (
         u.last_name,
         COUNT(*) as jobs_completed,
         AVG(EXTRACT(EPOCH FROM (tr.with_patient_at - tr.created_at)) / 60) as avg_pickup_time,
-        AVG(EXTRACT(EPOCH FROM (tr.completed_at - tr.with_patient_at)) / 60) as avg_transport_time
+        AVG(EXTRACT(EPOCH FROM (tr.completed_at - tr.with_patient_at)) / 60) as avg_transport_time,
+        AVG(EXTRACT(EPOCH FROM (tr.completed_at - tr.created_at)) / 60) as avg_job_time
        FROM transport_requests tr
        JOIN users u ON tr.assigned_to = u.id
        ${whereClause}
@@ -151,15 +152,56 @@ export const getByTransporter = async (
       params
     );
 
-    const transporters = result.rows.map((row) => ({
-      user_id: row.user_id,
-      first_name: row.first_name,
-      last_name: row.last_name,
-      jobs_completed: parseInt(row.jobs_completed),
-      avg_pickup_time_minutes: parseFloat(row.avg_pickup_time) || 0,
-      avg_transport_time_minutes: parseFloat(row.avg_transport_time) || 0,
-      idle_time_minutes: 0, // Would need more complex calculation
-    }));
+    // Separate query for shift times (shift_logs is independent of transport_requests)
+    let shiftWhereClause = 'WHERE u.include_in_analytics = true';
+    const shiftParams: unknown[] = [];
+    let shiftParamIndex = 1;
+
+    if (start_date) {
+      shiftWhereClause += ` AND sl.shift_start >= $${shiftParamIndex++}`;
+      shiftParams.push(start_date);
+    }
+    if (end_date) {
+      shiftWhereClause += ` AND sl.shift_start < $${shiftParamIndex++}`;
+      shiftParams.push(end_date);
+    }
+
+    const shiftResult = await query(
+      `SELECT
+        sl.user_id,
+        MIN(sl.shift_start) as earliest_shift_start,
+        MAX(sl.shift_end) as latest_shift_end
+       FROM shift_logs sl
+       JOIN users u ON sl.user_id = u.id
+       ${shiftWhereClause}
+       GROUP BY sl.user_id`,
+      shiftParams
+    );
+
+    // Build a map of user_id -> shift data
+    const shiftMap = new Map<number, { earliest_shift_start: string | null; latest_shift_end: string | null }>();
+    for (const row of shiftResult.rows) {
+      shiftMap.set(row.user_id, {
+        earliest_shift_start: row.earliest_shift_start || null,
+        latest_shift_end: row.latest_shift_end || null,
+      });
+    }
+
+    const transporters = result.rows.map((row) => {
+      const shift = shiftMap.get(row.user_id);
+      return {
+        user_id: row.user_id,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        jobs_completed: parseInt(row.jobs_completed),
+        avg_pickup_time_minutes: parseFloat(row.avg_pickup_time) || 0,
+        avg_transport_time_minutes: parseFloat(row.avg_transport_time) || 0,
+        avg_job_time_minutes: parseFloat(row.avg_job_time) || 0,
+        idle_time_minutes: 0, // Would need more complex calculation
+        earliest_shift_start: shift?.earliest_shift_start || null,
+        latest_shift_end: shift?.latest_shift_end || null,
+      };
+    });
 
     res.json({ transporters });
   } catch (error) {
