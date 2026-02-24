@@ -245,6 +245,16 @@ export default function TransporterView() {
     }`;
   };
 
+  const handleCycleAlertDismiss = async (requestId: number, reason?: string, phase?: string) => {
+    if (reason && currentJob) {
+      await api.addDelays(currentJob.id, {
+        reasons: [reason],
+        phase: phase || currentJob.status,
+      });
+    }
+    dismissCycleAlert(requestId, reason, phase);
+  };
+
   const quickDelayReasons = [
     'Patient not ready',
     'Elevator delay',
@@ -322,7 +332,7 @@ export default function TransporterView() {
               key={alert.request_id}
               alert={alert}
               request={currentJob}
-              onDismiss={dismissCycleAlert}
+              onDismiss={handleCycleAlertDismiss}
               requireReason={requireTransporterExplanation}
             />
           ))}
@@ -425,13 +435,6 @@ export default function TransporterView() {
                 {loading ? 'Processing...' : getActionButtonText()}
               </button>
 
-              {/* Add Note Button (always visible) */}
-              <button
-                onClick={() => setShowDelayModal(true)}
-                className="w-full py-2 text-gray-500 hover:text-gray-700 text-sm border border-gray-200 rounded-lg"
-              >
-                + Add Note
-              </button>
             </div>
           </div>
         ) : (
