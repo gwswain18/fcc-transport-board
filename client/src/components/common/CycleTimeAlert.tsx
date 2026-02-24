@@ -4,13 +4,14 @@ import { CycleTimeAlert as CycleTimeAlertType, TransportRequest } from '../../ty
 interface CycleTimeAlertProps {
   alert: CycleTimeAlertType;
   request?: TransportRequest;
-  onDismiss: (requestId: number, reason?: string, phase?: string) => void;
+  onDismiss: (requestId: number, reason?: string, phase?: string) => void | Promise<void>;
   requireReason?: boolean;
 }
 
 export default function CycleTimeAlert({ alert, request, onDismiss, requireReason = true }: CycleTimeAlertProps) {
   const [showReasonInput, setShowReasonInput] = useState(false);
   const [reason, setReason] = useState('');
+  const [dismissing, setDismissing] = useState(false);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -30,22 +31,28 @@ export default function CycleTimeAlert({ alert, request, onDismiss, requireReaso
     ((alert.current_seconds - alert.avg_seconds) / alert.avg_seconds) * 100
   );
 
-  const handleDismissClick = () => {
+  const handleDismissClick = async () => {
     // If transporter already provided a reason, allow quick acknowledge
     if (request?.delay_reason) {
-      onDismiss(alert.request_id, `Transporter provided: ${request.delay_reason}`, alert.phase);
+      setDismissing(true);
+      await onDismiss(alert.request_id, `Transporter provided: ${request.delay_reason}`, alert.phase);
+      setDismissing(false);
     } else if (!requireReason) {
-      onDismiss(alert.request_id, undefined, alert.phase);
+      setDismissing(true);
+      await onDismiss(alert.request_id, undefined, alert.phase);
+      setDismissing(false);
     } else {
       setShowReasonInput(true);
     }
   };
 
-  const handleConfirmDismiss = () => {
+  const handleConfirmDismiss = async () => {
     if (!reason.trim()) return;
-    onDismiss(alert.request_id, reason.trim(), alert.phase);
+    setDismissing(true);
+    await onDismiss(alert.request_id, reason.trim(), alert.phase);
     setShowReasonInput(false);
     setReason('');
+    setDismissing(false);
   };
 
   const handleCancelDismiss = () => {
@@ -105,13 +112,14 @@ export default function CycleTimeAlert({ alert, request, onDismiss, requireReaso
         {!showReasonInput && (
           <button
             onClick={handleDismissClick}
-            className={`text-sm font-medium ${
+            disabled={dismissing}
+            className={`text-sm font-medium disabled:opacity-50 ${
               request?.delay_reason
                 ? 'text-green-600 hover:text-green-800'
                 : 'text-yellow-600 hover:text-yellow-800'
             }`}
           >
-            {request?.delay_reason ? 'Acknowledge' : 'Dismiss'}
+            {dismissing ? 'Saving...' : request?.delay_reason ? 'Acknowledge' : 'Dismiss'}
           </button>
         )}
       </div>
@@ -153,10 +161,10 @@ export default function CycleTimeAlert({ alert, request, onDismiss, requireReaso
             </button>
             <button
               onClick={handleConfirmDismiss}
-              disabled={!reason.trim()}
+              disabled={!reason.trim() || dismissing}
               className="px-3 py-1 bg-yellow-500 text-white rounded text-sm font-medium hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Confirm Dismiss
+              {dismissing ? 'Saving...' : 'Confirm Dismiss'}
             </button>
           </div>
         </div>
