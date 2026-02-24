@@ -57,15 +57,20 @@ export default function ActiveDispatcherCard({
       <div className="mb-4">
         <h3 className="text-sm font-medium text-gray-500 mb-2">Primary</h3>
         {primary ? (
-          <div className="flex items-center">
-            <span className="text-sm font-medium text-gray-900">
-              {primary.user?.first_name} {primary.user?.last_name}
-            </span>
-            {primary.on_break && (
-              <span className="text-sm text-gray-500 ml-1">(Unavailable)</span>
-            )}
-            {primary.user_id === currentUserId && (
-              <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">You</span>
+          <div>
+            <div className="flex items-center">
+              <span className="text-sm font-medium text-gray-900">
+                {primary.user?.first_name} {primary.user?.last_name}
+              </span>
+              {primary.on_break && (
+                <span className="text-sm text-gray-500 ml-1">(Unavailable)</span>
+              )}
+              {primary.user_id === currentUserId && (
+                <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">You</span>
+              )}
+            </div>
+            {(primary.contact_info || primary.user?.phone_number) && (
+              <p className="text-xs text-gray-500">Ext. {primary.contact_info || primary.user?.phone_number}</p>
             )}
           </div>
         ) : (
@@ -79,15 +84,20 @@ export default function ActiveDispatcherCard({
         {assistants.length > 0 ? (
           <div className="space-y-1">
             {assistants.map((assistant) => (
-              <div key={assistant.id} className="flex items-center">
-                <span className="text-sm text-gray-700">
-                  {assistant.user?.first_name} {assistant.user?.last_name}
-                </span>
-                {assistant.on_break && (
-                  <span className="text-sm text-gray-500 ml-1">(Unavailable)</span>
-                )}
-                {assistant.user_id === currentUserId && (
-                  <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">You</span>
+              <div key={assistant.id}>
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-700">
+                    {assistant.user?.first_name} {assistant.user?.last_name}
+                  </span>
+                  {assistant.on_break && (
+                    <span className="text-sm text-gray-500 ml-1">(Unavailable)</span>
+                  )}
+                  {assistant.user_id === currentUserId && (
+                    <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">You</span>
+                  )}
+                </div>
+                {(assistant.contact_info || assistant.user?.phone_number) && (
+                  <p className="text-xs text-gray-500">Ext. {assistant.contact_info || assistant.user?.phone_number}</p>
                 )}
               </div>
             ))}

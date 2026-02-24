@@ -59,17 +59,15 @@ export default function ManagerDashboard() {
     loadData();
   }, [filters]);
 
-  const fillMissingEvenHours = (data: { hour: number; count: number }[]): { hour: number; count: number }[] => {
+  const fillAllHours = (data: { hour: number; count: number }[]): { hour: number; count: number }[] => {
     const hourMap = new Map<number, number>();
     data.forEach(item => hourMap.set(Number(item.hour), Number(item.count)));
 
-    const evenHours: { hour: number; count: number }[] = [];
-    for (let h = 0; h <= 22; h += 2) {
-      const evenCount = hourMap.get(h) || 0;
-      const oddCount = hourMap.get(h + 1) || 0;
-      evenHours.push({ hour: h, count: evenCount + oddCount });
+    const allHours: { hour: number; count: number }[] = [];
+    for (let h = 9; h <= 21; h++) {
+      allHours.push({ hour: h, count: hourMap.get(h) || 0 });
     }
-    return evenHours;
+    return allHours;
   };
 
   const loadData = async () => {
@@ -97,7 +95,7 @@ export default function ManagerDashboard() {
       setTransporterStats(statsRes.data.transporters);
     }
     if (hourRes.data?.data) {
-      setJobsByHour(fillMissingEvenHours(hourRes.data.data));
+      setJobsByHour(fillAllHours(hourRes.data.data));
     }
     if (dayRes.data?.jobsByDay) {
       setJobsByDay(dayRes.data.jobsByDay);
@@ -371,16 +369,38 @@ export default function ManagerDashboard() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis
                         dataKey="hour"
-                        tickFormatter={(h) => `${h}:00`}
+                        tickFormatter={(h) => {
+                          const hour = Number(h);
+                          if (hour === 0) return '12 AM';
+                          if (hour < 12) return `${hour} AM`;
+                          if (hour === 12) return '12 PM';
+                          return `${hour - 12} PM`;
+                        }}
                       />
                       <YAxis />
                       <Tooltip
-                        labelFormatter={(h) => `${h}:00 - ${Number(h) + 1}:59`}
+                        labelFormatter={(h) => {
+                          const hour = Number(h);
+                          const fmt = (hr: number) => {
+                            if (hr === 0) return '12:00 AM';
+                            if (hr < 12) return `${hr}:00 AM`;
+                            if (hr === 12) return '12:00 PM';
+                            return `${hr - 12}:00 PM`;
+                          };
+                          const fmtEnd = (hr: number) => {
+                            if (hr === 0) return '12:59 AM';
+                            if (hr < 12) return `${hr}:59 AM`;
+                            if (hr === 12) return '12:59 PM';
+                            return `${hr - 12}:59 PM`;
+                          };
+                          return `${fmt(hour)} – ${fmtEnd(hour)}`;
+                        }}
                       />
                       <Bar dataKey="count" fill="#002952" name="Jobs" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+                <p className="text-xs text-gray-500 mt-2 text-center">Showing 9 AM – 9 PM</p>
               </div>
 
               {/* Jobs by Day */}

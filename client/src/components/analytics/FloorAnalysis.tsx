@@ -67,13 +67,15 @@ export default function FloorAnalysis({ dateRange }: FloorAnalysisProps) {
   }
 
   // Prepare data for charts
-  const volumeData = floorData.map((d) => ({
-    floor: d.floor,
-    Requests: d.total_requests,
-    Cancelled: d.cancelled_count,
-    PCT: Math.round(d.total_requests * d.pct_transferred / 100),
-    fill: FLOOR_COLORS[d.floor],
-  }));
+  const volumeData = floorData.map((d) => {
+    const pctCount = Math.round(d.total_requests * d.pct_transferred / 100);
+    return {
+      floor: d.floor,
+      Completed: d.total_requests - d.cancelled_count - pctCount,
+      PCT: pctCount,
+      Cancelled: d.cancelled_count,
+    };
+  });
 
   const timeData = floorData.map((d) => ({
     floor: d.floor,
@@ -96,9 +98,9 @@ export default function FloorAnalysis({ dateRange }: FloorAnalysisProps) {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="Requests" fill="#002952" name="Total Requests" />
-              <Bar dataKey="PCT" fill="#a36d00" name="PCT Transfers" />
-              <Bar dataKey="Cancelled" fill="#EF4444" name="Cancelled" />
+              <Bar dataKey="Completed" stackId="a" fill="#002952" name="Completed" />
+              <Bar dataKey="PCT" stackId="a" fill="#a36d00" name="PCT Transfers" />
+              <Bar dataKey="Cancelled" stackId="a" fill="#EF4444" name="Cancelled" />
             </BarChart>
           </ResponsiveContainer>
         </div>
