@@ -106,7 +106,7 @@ export default function App() {
       <Route
         path="/supervisor"
         element={
-          <ProtectedRoute allowedRoles={['supervisor', 'manager']}>
+          <ProtectedRoute allowedRoles={['dispatcher', 'supervisor', 'manager']}>
             <SupervisorView />
           </ProtectedRoute>
         }

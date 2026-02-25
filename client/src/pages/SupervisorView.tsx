@@ -133,7 +133,7 @@ export default function SupervisorView() {
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900">Shift Summary</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Shift Summary</h2>
             {shiftSummary && (
               <div className="flex gap-6 text-sm">
                 <div>
@@ -165,6 +165,53 @@ export default function SupervisorView() {
           </div>
         </div>
       </div>
+
+      {/* Transporter Performance Table */}
+      {transporterPerformance.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 pt-4">
+          <div className="card">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Transporter Performance</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 text-left text-gray-500">
+                    <th className="pb-2 font-medium">Name</th>
+                    <th className="pb-2 font-medium">Shift Start</th>
+                    <th className="pb-2 font-medium">Shift End</th>
+                    <th className="pb-2 font-medium">Jobs</th>
+                    <th className="pb-2 font-medium">Avg Pickup</th>
+                    <th className="pb-2 font-medium">Avg Transport</th>
+                    <th className="pb-2 font-medium">Avg Job Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transporterPerformance.map((t) => (
+                    <tr key={t.user_id} className="border-b border-gray-100">
+                      <td className="py-2 font-medium text-gray-900">
+                        {t.first_name} {t.last_name}
+                      </td>
+                      <td className="py-2 text-gray-600">
+                        {t.earliest_shift_start ? formatTime(t.earliest_shift_start) : '—'}
+                      </td>
+                      <td className="py-2 text-gray-600">
+                        {t.latest_shift_end
+                          ? formatTime(t.latest_shift_end)
+                          : t.earliest_shift_start
+                            ? <span className="text-green-600 font-medium">Active</span>
+                            : '—'}
+                      </td>
+                      <td className="py-2 text-gray-900 font-medium">{t.jobs_completed}</td>
+                      <td className="py-2 text-gray-600">{formatMinutes(t.avg_pickup_time_minutes)}</td>
+                      <td className="py-2 text-gray-600">{formatMinutes(t.avg_transport_time_minutes)}</td>
+                      <td className="py-2 text-gray-600">{formatMinutes(t.avg_job_time_minutes)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto p-4">
         <div className="grid grid-cols-12 gap-4">
@@ -410,53 +457,6 @@ export default function SupervisorView() {
           </div>
         </div>
       </main>
-
-      {/* Transporter Performance Table */}
-      {transporterPerformance.length > 0 && (
-        <div className="max-w-7xl mx-auto px-4 pb-6">
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Transporter Performance</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 text-left text-gray-500">
-                    <th className="pb-2 font-medium">Name</th>
-                    <th className="pb-2 font-medium">Shift Start</th>
-                    <th className="pb-2 font-medium">Shift End</th>
-                    <th className="pb-2 font-medium">Jobs</th>
-                    <th className="pb-2 font-medium">Avg Pickup</th>
-                    <th className="pb-2 font-medium">Avg Transport</th>
-                    <th className="pb-2 font-medium">Avg Job Time</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transporterPerformance.map((t) => (
-                    <tr key={t.user_id} className="border-b border-gray-100">
-                      <td className="py-2 font-medium text-gray-900">
-                        {t.first_name} {t.last_name}
-                      </td>
-                      <td className="py-2 text-gray-600">
-                        {t.earliest_shift_start ? formatTime(t.earliest_shift_start) : '—'}
-                      </td>
-                      <td className="py-2 text-gray-600">
-                        {t.latest_shift_end
-                          ? formatTime(t.latest_shift_end)
-                          : t.earliest_shift_start
-                            ? <span className="text-green-600 font-medium">Active</span>
-                            : '—'}
-                      </td>
-                      <td className="py-2 text-gray-900 font-medium">{t.jobs_completed}</td>
-                      <td className="py-2 text-gray-600">{formatMinutes(t.avg_pickup_time_minutes)}</td>
-                      <td className="py-2 text-gray-600">{formatMinutes(t.avg_transport_time_minutes)}</td>
-                      <td className="py-2 text-gray-600">{formatMinutes(t.avg_job_time_minutes)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Assign Modal */}
       <Modal

@@ -85,7 +85,7 @@ export default function Header() {
                 Dashboard
               </Link>
             )}
-            {(user.role === 'supervisor' || user.role === 'manager') && (
+            {(user.role === 'dispatcher' || user.role === 'supervisor' || user.role === 'manager') && (
               <Link
                 to="/supervisor"
                 className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
@@ -218,7 +218,7 @@ export default function Header() {
                 Dashboard
               </Link>
             )}
-            {(user.role === 'supervisor' || user.role === 'manager') && (
+            {(user.role === 'dispatcher' || user.role === 'supervisor' || user.role === 'manager') && (
               <Link
                 to="/supervisor"
                 onClick={() => setShowMobileMenu(false)}
