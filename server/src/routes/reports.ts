@@ -15,25 +15,27 @@ import {
   getCompletedJobs,
 } from '../controllers/reportController.js';
 import { authenticate } from '../middleware/auth.js';
-import { canViewReports } from '../middleware/roleAuth.js';
+import { canDispatch, canViewReports } from '../middleware/roleAuth.js';
 
 const router = Router();
 
 router.use(authenticate);
-router.use(canViewReports);
 
-router.get('/summary', getSummary);
-router.get('/by-transporter', getByTransporter);
-router.get('/by-hour', getJobsByHour);
-router.get('/by-floor', getJobsByFloor);
-router.get('/by-day', getJobsByDay);
-router.get('/staffing-by-floor', getStaffingByFloor);
-router.get('/floor-analysis', getFloorAnalysis);
-router.get('/time-metrics', getTimeMetrics);
-router.get('/delays', getDelayReport);
-router.get('/cycle-time-averages', getCycleTimeAverages);
-router.get('/activity-log', getActivityLog);
-router.get('/completed-jobs', getCompletedJobs);
-router.get('/export', exportData);
+// Dispatcher-accessible (summary page)
+router.get('/summary', canDispatch, getSummary);
+router.get('/by-transporter', canDispatch, getByTransporter);
+
+// Supervisor+ only (analytics)
+router.get('/by-hour', canViewReports, getJobsByHour);
+router.get('/by-floor', canViewReports, getJobsByFloor);
+router.get('/by-day', canViewReports, getJobsByDay);
+router.get('/staffing-by-floor', canViewReports, getStaffingByFloor);
+router.get('/floor-analysis', canViewReports, getFloorAnalysis);
+router.get('/time-metrics', canViewReports, getTimeMetrics);
+router.get('/delays', canViewReports, getDelayReport);
+router.get('/cycle-time-averages', canViewReports, getCycleTimeAverages);
+router.get('/activity-log', canViewReports, getActivityLog);
+router.get('/completed-jobs', canViewReports, getCompletedJobs);
+router.get('/export', canViewReports, exportData);
 
 export default router;
