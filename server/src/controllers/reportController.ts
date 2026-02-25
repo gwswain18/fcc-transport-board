@@ -170,7 +170,10 @@ export const getByTransporter = async (
       `SELECT
         sl.user_id,
         MIN(sl.shift_start) as earliest_shift_start,
-        MAX(sl.shift_end) as latest_shift_end
+        CASE WHEN COUNT(*) FILTER (WHERE sl.shift_end IS NULL) > 0
+             THEN NULL
+             ELSE MAX(sl.shift_end)
+        END as latest_shift_end
        FROM shift_logs sl
        JOIN users u ON sl.user_id = u.id
        ${shiftWhereClause}
