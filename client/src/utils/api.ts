@@ -584,6 +584,47 @@ export const api = {
     }>(`/reports/completed-jobs${query ? `?${query}` : ''}`);
   },
 
+  getShiftLogs: (params?: {
+    start_date?: string;
+    end_date?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
+    return request<{
+      shiftLogs: Array<{
+        user_id: number;
+        first_name: string;
+        last_name: string;
+        shift_date: string;
+        earliest_start: string;
+        latest_end: string | null;
+        is_active: boolean;
+        total_shift_seconds: number;
+        break_time_seconds: number;
+        other_time_seconds: number;
+        shift_ids: number[];
+        segment_count: number;
+        timeline: Array<{
+          type: 'shift_start' | 'shift_end' | 'status_change';
+          timestamp: string;
+          status?: string | null;
+          shift_id?: number | null;
+        }>;
+      }>;
+      pagination: { page: number; limit: number; total: number; pages: number };
+    }>(`/reports/shift-logs${query ? `?${query}` : ''}`);
+  },
+
   getCycleTimeAverages: () =>
     request<{
       averages: Array<{

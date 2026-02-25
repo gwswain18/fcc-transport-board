@@ -1352,3 +1352,229 @@ export const getActivityLog = async (
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// Get shift logs (per-user per-day shift summaries with timeline)
+export const getShiftLogs = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { start_date, end_date, search, page = '1', limit = '20' } = req.query;
+
+    let whereClause = 'WHERE u.include_in_analytics = true';
+    const params: unknown[] = [];
+    let paramIndex = 1;
+
+    if (start_date) {
+      whereClause += ` AND sl.shift_start >= $${paramIndex++}`;
+      params.push(start_date);
+    }
+    if (end_date) {
+      whereClause += ` AND sl.shift_start <= $${paramIndex++}`;
+      params.push(end_date);
+    }
+    if (search) {
+      whereClause += ` AND (u.first_name ILIKE $${paramIndex} OR u.last_name ILIKE $${paramIndex})`;
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 20));
+    const offset = (pageNum - 1) * limitNum;
+
+    // Count distinct (user_id, shift_date) groups
+    const countResult = await query(
+      `SELECT COUNT(*) as total FROM (
+        SELECT sl.user_id, DATE(sl.shift_start) as shift_date
+        FROM shift_logs sl
+        JOIN users u ON sl.user_id = u.id
+        ${whereClause}
+        GROUP BY sl.user_id, DATE(sl.shift_start)
+      ) sub`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].total) || 0;
+
+    // Paginated shift-day summaries
+    const summaryResult = await query(
+      `SELECT
+        sl.user_id, u.first_name, u.last_name,
+        DATE(sl.shift_start) as shift_date,
+        MIN(sl.shift_start) as earliest_start,
+        CASE WHEN COUNT(*) FILTER (WHERE sl.shift_end IS NULL) > 0
+             THEN NULL ELSE MAX(sl.shift_end) END as latest_end,
+        (COUNT(*) FILTER (WHERE sl.shift_end IS NULL) > 0) as is_active,
+        SUM(EXTRACT(EPOCH FROM (COALESCE(sl.shift_end, NOW()) - sl.shift_start))) as total_shift_seconds,
+        array_agg(sl.id ORDER BY sl.shift_start) as shift_ids,
+        COUNT(*) as segment_count
+      FROM shift_logs sl
+      JOIN users u ON sl.user_id = u.id
+      ${whereClause}
+      GROUP BY sl.user_id, u.first_name, u.last_name, DATE(sl.shift_start)
+      ORDER BY shift_date DESC, earliest_start DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+      [...params, limitNum, offset]
+    );
+
+    if (summaryResult.rows.length === 0) {
+      res.json({
+        shiftLogs: [],
+        pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
+      });
+      return;
+    }
+
+    // Collect user IDs and date ranges for timeline query
+    const userDatePairs = summaryResult.rows.map((row: Record<string, unknown>) => ({
+      user_id: row.user_id as number,
+      shift_date: row.shift_date as string,
+      earliest_start: row.earliest_start as string,
+      latest_end: row.latest_end as string | null,
+    }));
+
+    const userIds = [...new Set(userDatePairs.map(p => p.user_id))];
+    const minStart = userDatePairs.reduce(
+      (min: string, p) => (p.earliest_start < min ? p.earliest_start : min),
+      userDatePairs[0].earliest_start
+    );
+    const maxEnd = userDatePairs.reduce(
+      (max: string | null, p) => {
+        const end = p.latest_end || new Date().toISOString();
+        return max === null || end > max ? end : max;
+      },
+      null as string | null
+    ) || new Date().toISOString();
+
+    // Fetch timeline events: status changes + shift start/end
+    const timelineResult = await query(
+      `SELECT al.user_id, al.action, al.entity_type, al.timestamp,
+              al.new_values->>'status' as new_status,
+              al.entity_id as entity_id
+       FROM audit_logs al
+       WHERE al.user_id = ANY($1)
+         AND al.timestamp >= $2
+         AND al.timestamp <= $3
+         AND (
+           (al.action = 'status_change' AND al.entity_type = 'transporter_status')
+           OR (al.action IN ('shift_start', 'shift_end') AND al.entity_type = 'shift')
+         )
+       ORDER BY al.timestamp ASC`,
+      [userIds, minStart, maxEnd]
+    );
+
+    // Group timeline events by user_id
+    const timelineByUser = new Map<number, Array<{ action: string; entity_type: string; timestamp: string; new_status: string | null; entity_id: number | null }>>();
+    for (const row of timelineResult.rows) {
+      const uid = row.user_id as number;
+      if (!timelineByUser.has(uid)) timelineByUser.set(uid, []);
+      timelineByUser.get(uid)!.push({
+        action: row.action,
+        entity_type: row.entity_type,
+        timestamp: row.timestamp,
+        new_status: row.new_status,
+        entity_id: row.entity_id,
+      });
+    }
+
+    // Build response for each shift-day summary
+    const shiftLogs = summaryResult.rows.map((row: Record<string, unknown>) => {
+      const userId = row.user_id as number;
+      const shiftDate = row.shift_date as string;
+      const earliestStart = new Date(row.earliest_start as string).getTime();
+      const latestEnd = row.latest_end
+        ? new Date(row.latest_end as string).getTime()
+        : Date.now();
+
+      // Filter timeline events to this user's shift window for this day
+      const userEvents = timelineByUser.get(userId) || [];
+      const windowEvents = userEvents.filter(e => {
+        const t = new Date(e.timestamp).getTime();
+        return t >= earliestStart && t <= latestEnd;
+      });
+
+      // Compute break and other time from status_change events
+      let breakTimeSeconds = 0;
+      let otherTimeSeconds = 0;
+      let currentBreakStart: number | null = null;
+      let currentOtherStart: number | null = null;
+
+      for (const event of windowEvents) {
+        if (event.action !== 'status_change' || event.entity_type !== 'transporter_status') continue;
+
+        const t = new Date(event.timestamp).getTime();
+        const status = event.new_status;
+
+        // If entering on_break
+        if (status === 'on_break') {
+          currentBreakStart = t;
+          // Leaving other?
+          if (currentOtherStart !== null) {
+            otherTimeSeconds += Math.min(3600, (t - currentOtherStart) / 1000);
+            currentOtherStart = null;
+          }
+        }
+        // If entering other
+        else if (status === 'other') {
+          currentOtherStart = t;
+          // Leaving break?
+          if (currentBreakStart !== null) {
+            breakTimeSeconds += Math.min(3600, (t - currentBreakStart) / 1000);
+            currentBreakStart = null;
+          }
+        }
+        // Any other status exits both
+        else {
+          if (currentBreakStart !== null) {
+            breakTimeSeconds += Math.min(3600, (t - currentBreakStart) / 1000);
+            currentBreakStart = null;
+          }
+          if (currentOtherStart !== null) {
+            otherTimeSeconds += Math.min(3600, (t - currentOtherStart) / 1000);
+            currentOtherStart = null;
+          }
+        }
+      }
+
+      // Close any open periods at the end of the window
+      if (currentBreakStart !== null) {
+        breakTimeSeconds += Math.min(3600, (latestEnd - currentBreakStart) / 1000);
+      }
+      if (currentOtherStart !== null) {
+        otherTimeSeconds += Math.min(3600, (latestEnd - currentOtherStart) / 1000);
+      }
+
+      // Build timeline array for the client
+      const timeline = windowEvents.map(e => {
+        if (e.action === 'status_change' && e.entity_type === 'transporter_status') {
+          return { type: 'status_change' as const, timestamp: e.timestamp, status: e.new_status };
+        }
+        return { type: e.action as 'shift_start' | 'shift_end', timestamp: e.timestamp, shift_id: e.entity_id };
+      });
+
+      return {
+        user_id: row.user_id,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        shift_date: shiftDate,
+        earliest_start: row.earliest_start,
+        latest_end: row.latest_end,
+        is_active: row.is_active,
+        total_shift_seconds: parseFloat(row.total_shift_seconds as string) || 0,
+        break_time_seconds: Math.round(breakTimeSeconds),
+        other_time_seconds: Math.round(otherTimeSeconds),
+        shift_ids: row.shift_ids,
+        segment_count: parseInt(row.segment_count as string) || 1,
+        timeline,
+      };
+    });
+
+    res.json({
+      shiftLogs,
+      pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
+    });
+  } catch (error) {
+    logger.error('Get shift logs error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

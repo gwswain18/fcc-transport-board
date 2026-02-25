@@ -7,6 +7,7 @@ import { formatMinutes, formatSecondsAsHoursMinutes } from '../utils/formatters'
 import FloorAnalysis from '../components/analytics/FloorAnalysis';
 import DelayReport from '../components/analytics/DelayReport';
 import JobActivityLog from '../components/manager/JobActivityLog';
+import ShiftLogTab from '../components/manager/ShiftLogTab';
 import {
   BarChart,
   Bar,
@@ -19,7 +20,7 @@ import {
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 
-type TabType = 'overview' | 'floors' | 'delays' | 'activity';
+type TabType = 'overview' | 'floors' | 'delays' | 'activity' | 'shifts';
 
 export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -164,6 +165,16 @@ export default function ManagerDashboard() {
           >
             Activity Log
           </button>
+          <button
+            onClick={() => setActiveTab('shifts')}
+            className={`px-6 py-3 font-medium text-sm ${
+              activeTab === 'shifts'
+                ? 'border-b-2 border-primary text-primary'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Shift Logs
+          </button>
         </div>
 
         {/* Floor Analysis Tab */}
@@ -188,6 +199,9 @@ export default function ManagerDashboard() {
 
         {/* Activity Log Tab */}
         {activeTab === 'activity' && <JobActivityLog />}
+
+        {/* Shift Logs Tab */}
+        {activeTab === 'shifts' && <ShiftLogTab />}
 
         {/* Overview Tab */}
         {activeTab === 'overview' && (

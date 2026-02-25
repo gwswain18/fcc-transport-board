@@ -13,6 +13,7 @@ import {
   getCycleTimeAverages,
   getActivityLog,
   getCompletedJobs,
+  getShiftLogs,
 } from '../controllers/reportController.js';
 import { authenticate } from '../middleware/auth.js';
 import { canDispatch, canViewReports } from '../middleware/roleAuth.js';
@@ -36,6 +37,7 @@ router.get('/delays', canViewReports, getDelayReport);
 router.get('/cycle-time-averages', canViewReports, getCycleTimeAverages);
 router.get('/activity-log', canViewReports, getActivityLog);
 router.get('/completed-jobs', canViewReports, getCompletedJobs);
+router.get('/shift-logs', canViewReports, getShiftLogs);
 router.get('/export', canViewReports, exportData);
 
 export default router;
