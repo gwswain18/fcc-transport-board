@@ -8,6 +8,7 @@ import FloorAnalysis from '../components/analytics/FloorAnalysis';
 import DelayReport from '../components/analytics/DelayReport';
 import JobActivityLog from '../components/manager/JobActivityLog';
 import ShiftLogTab from '../components/manager/ShiftLogTab';
+import ReportBuilder from '../components/reports/ReportBuilder';
 import {
   BarChart,
   Bar,
@@ -20,7 +21,7 @@ import {
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 
-type TabType = 'overview' | 'floors' | 'delays' | 'activity' | 'shifts';
+type TabType = 'overview' | 'floors' | 'delays' | 'activity' | 'shifts' | 'reports';
 
 export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -175,6 +176,16 @@ export default function ManagerDashboard() {
           >
             Shift Logs
           </button>
+          <button
+            onClick={() => setActiveTab('reports')}
+            className={`px-6 py-3 font-medium text-sm ${
+              activeTab === 'reports'
+                ? 'border-b-2 border-primary text-primary'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Reports
+          </button>
         </div>
 
         {/* Floor Analysis Tab */}
@@ -202,6 +213,17 @@ export default function ManagerDashboard() {
 
         {/* Shift Logs Tab */}
         {activeTab === 'shifts' && <ShiftLogTab />}
+
+        {/* Reports Tab */}
+        {activeTab === 'reports' && (
+          <ReportBuilder
+            dateRange={{
+              start_date: filters.start_date,
+              end_date: filters.end_date,
+            }}
+            transporterStats={transporterStats}
+          />
+        )}
 
         {/* Overview Tab */}
         {activeTab === 'overview' && (
