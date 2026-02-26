@@ -28,10 +28,14 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
       <div
         ref={ref}
         style={{
-          position: 'fixed',
-          left: '-9999px',
+          position: 'absolute',
+          left: 0,
           top: 0,
           width: '794px',
+          opacity: 0,
+          pointerEvents: 'none',
+          zIndex: -1,
+          overflow: 'hidden',
           backgroundColor: '#ffffff',
           color: '#1f2937',
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -200,7 +204,7 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
               </thead>
               <tbody>
                 {data.transporterStats.map((t) => {
-                  const tm = data.timeMetrics?.transporters.find((tm) => tm.user_id === t.user_id);
+                  const tm = data.timeMetrics?.transporters.find((entry) => entry.user_id === t.user_id);
                   return (
                     <tr key={t.user_id} style={{ borderBottom: '1px solid #f3f4f6' }}>
                       <td style={{ padding: '8px', fontWeight: 500, color: '#1f2937' }}>

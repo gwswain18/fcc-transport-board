@@ -9,9 +9,13 @@ export function useReportData() {
   const fetchReportData = useCallback(async (config: ReportConfig): Promise<ReportData | null> => {
     setLoading(true);
 
-    const params = {
+    // Pass floor filter when a single floor is selected; omit for multi-floor (API returns all)
+    const floorParam = config.floors.length === 1 ? config.floors[0] : undefined;
+
+    const params: { start_date: string; end_date: string; floor?: string } = {
       start_date: `${config.startDate}T00:00:00Z`,
       end_date: `${config.endDate}T23:59:59Z`,
+      ...(floorParam && { floor: floorParam }),
     };
 
     const hasAnyMetric = Object.values(config.metrics).some(Boolean);
@@ -47,12 +51,19 @@ export function useReportData() {
       const needsDelayData = config.charts.delayReasons;
 
       const promises: Promise<void>[] = [];
+      const errors: string[] = [];
+
+      // Helper to track API errors per section
+      const tracked = <T,>(label: string, promise: Promise<{ data?: T; error?: string }>): Promise<{ data?: T; error?: string }> =>
+        promise.then((res) => {
+          if (res.error) errors.push(`${label}: ${res.error}`);
+          return res;
+        });
 
       // Global summary (always for global, or as comparison for individual)
       if (needsSummary) {
-        setProgress('Fetching summary data...');
         promises.push(
-          api.getReportSummary(params).then((res) => {
+          tracked('Summary', api.getReportSummary(params)).then((res) => {
             if (res.data?.summary) result.summary = res.data.summary;
           })
         );
@@ -61,7 +72,7 @@ export function useReportData() {
       // Individual summary (for comparison)
       if (needsSummary && config.reportType === 'individual' && config.transporterId) {
         promises.push(
-          api.getReportSummary({ ...params, transporter_id: config.transporterId }).then((res) => {
+          tracked('Individual Summary', api.getReportSummary({ ...params, transporter_id: config.transporterId })).then((res) => {
             if (res.data?.summary) result.individualSummary = res.data.summary;
           })
         );
@@ -69,9 +80,8 @@ export function useReportData() {
 
       // Time metrics (global)
       if (needsTimeMetrics) {
-        setProgress('Fetching time metrics...');
         promises.push(
-          api.getTimeMetrics(params).then((res) => {
+          tracked('Time Metrics', api.getTimeMetrics(params)).then((res) => {
             if (res.data) result.timeMetrics = res.data;
           })
         );
@@ -80,7 +90,7 @@ export function useReportData() {
       // Individual time metrics
       if (needsTimeMetrics && config.reportType === 'individual' && config.transporterId) {
         promises.push(
-          api.getTimeMetrics({ ...params, transporter_id: config.transporterId }).then((res) => {
+          tracked('Individual Time Metrics', api.getTimeMetrics({ ...params, transporter_id: config.transporterId })).then((res) => {
             if (res.data) result.individualTimeMetrics = res.data;
           })
         );
@@ -88,9 +98,8 @@ export function useReportData() {
 
       // Transporter stats
       if (needsTransporterStats) {
-        setProgress('Fetching transporter data...');
         promises.push(
-          api.getReportByTransporter(params).then((res) => {
+          tracked('Transporter Stats', api.getReportByTransporter(params)).then((res) => {
             if (res.data?.transporters) result.transporterStats = res.data.transporters;
           })
         );
@@ -98,11 +107,9 @@ export function useReportData() {
 
       // Jobs by hour
       if (needsJobsByHour) {
-        setProgress('Fetching hourly data...');
         promises.push(
-          api.getJobsByHour(params).then((res) => {
+          tracked('Jobs by Hour', api.getJobsByHour(params)).then((res) => {
             if (res.data?.data) {
-              // Fill all hours 9-21
               const hourMap = new Map<number, number>();
               res.data.data.forEach((item) => hourMap.set(Number(item.hour), Number(item.count)));
               const allHours: { hour: number; count: number }[] = [];
@@ -117,9 +124,8 @@ export function useReportData() {
 
       // Jobs by day
       if (needsJobsByDay) {
-        setProgress('Fetching daily data...');
         promises.push(
-          api.getJobsByDay(params).then((res) => {
+          tracked('Jobs by Day', api.getJobsByDay(params)).then((res) => {
             if (res.data?.jobsByDay) result.jobsByDay = res.data.jobsByDay;
           })
         );
@@ -127,9 +133,8 @@ export function useReportData() {
 
       // Floor analysis
       if (needsFloorAnalysis) {
-        setProgress('Fetching floor analysis...');
         promises.push(
-          api.getFloorAnalysis(params).then((res) => {
+          tracked('Floor Analysis', api.getFloorAnalysis(params)).then((res) => {
             if (res.data?.floors) result.floorAnalysis = res.data.floors;
           })
         );
@@ -137,17 +142,23 @@ export function useReportData() {
 
       // Delay data
       if (needsDelayData) {
-        setProgress('Fetching delay data...');
         promises.push(
-          api.getDelayReport(params).then((res) => {
+          tracked('Delay Report', api.getDelayReport(params)).then((res) => {
             if (res.data) result.delayData = res.data;
           })
         );
       }
 
+      setProgress('Fetching report data...');
       await Promise.all(promises);
 
-      setProgress('Data loaded successfully');
+      if (errors.length > 0) {
+        console.warn('Some report data failed to load:', errors);
+        setProgress(`Loaded with ${errors.length} warning(s)`);
+      } else {
+        setProgress('Data loaded successfully');
+      }
+
       setLoading(false);
       return result;
     } catch (error) {

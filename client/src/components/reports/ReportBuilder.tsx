@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, RefObject } from 'react';
 import { TransporterStats, Floor } from '../../types';
 import {
   ReportType,
@@ -59,6 +59,32 @@ function setAllCharts(val: boolean): ChartSelection {
   };
 }
 
+/**
+ * Wait for the preview container to render with content.
+ * Uses requestAnimationFrame polling with a timeout fallback.
+ */
+function waitForPreviewRender(ref: RefObject<HTMLDivElement | null>): Promise<void> {
+  return new Promise((resolve) => {
+    let attempts = 0;
+    const maxAttempts = 30; // ~500ms at 60fps
+
+    const check = () => {
+      attempts++;
+      if (ref.current && ref.current.querySelector('[data-pdf-section]')) {
+        // Content rendered — wait one more frame for layout to settle
+        requestAnimationFrame(() => resolve());
+      } else if (attempts < maxAttempts) {
+        requestAnimationFrame(check);
+      } else {
+        // Timeout fallback — proceed anyway
+        resolve();
+      }
+    };
+
+    requestAnimationFrame(check);
+  });
+}
+
 interface ReportBuilderProps {
   dateRange: { start_date: string; end_date: string };
   transporterStats: TransporterStats[];
@@ -103,6 +129,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
   const [generating, setGenerating] = useState(false);
   const [pdfProgress, setPdfProgress] = useState('');
   const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [activeConfig, setActiveConfig] = useState<ReportConfig | null>(null);
   const [error, setError] = useState('');
 
   const toggleFloor = (floor: Floor) => {
@@ -162,11 +189,12 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
         return;
       }
 
+      setActiveConfig(config);
       setReportData(data);
 
-      // Wait for React to render the preview
+      // Wait for React to render the preview reliably
       setPdfProgress('Rendering charts...');
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await waitForPreviewRender(previewRef);
 
       if (!previewRef.current) {
         setError('Preview container not ready. Please try again.');
@@ -194,6 +222,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
       console.error('PDF generation error:', err);
       setError('An error occurred while generating the PDF.');
       setGenerating(false);
+      setPdfProgress('');
     }
   };
 
@@ -374,10 +403,10 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
       </div>
 
       {/* Hidden Preview for PDF capture */}
-      {reportData && (
+      {reportData && activeConfig && (
         <ReportPreview
           ref={previewRef}
-          config={buildConfig()}
+          config={activeConfig}
           data={reportData}
         />
       )}
