@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { api } from '../../utils/api';
 import DateTimeDisplay from './DateTimeDisplay';
 import PasswordChangeModal from './PasswordChangeModal';
@@ -12,6 +12,8 @@ export default function Header() {
   const { user, logout } = useAuth();
   const { connected, refreshData } = useSocket();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -80,7 +82,7 @@ export default function Header() {
               user.role === 'manager') && (
               <Link
                 to="/dashboard"
-                className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
+                className={isActive('/dashboard') ? 'text-accent font-bold px-3 py-2 transition-colors' : 'text-secondary-200 hover:text-white px-3 py-2 transition-colors'}
               >
                 Dashboard
               </Link>
@@ -88,7 +90,7 @@ export default function Header() {
             {(user.role === 'dispatcher' || user.role === 'supervisor' || user.role === 'manager') && (
               <Link
                 to="/supervisor"
-                className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
+                className={isActive('/supervisor') ? 'text-accent font-bold px-3 py-2 transition-colors' : 'text-secondary-200 hover:text-white px-3 py-2 transition-colors'}
               >
                 Summary
               </Link>
@@ -97,19 +99,19 @@ export default function Header() {
               <>
                 <Link
                   to="/analytics"
-                  className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
+                  className={isActive('/analytics') ? 'text-accent font-bold px-3 py-2 transition-colors' : 'text-secondary-200 hover:text-white px-3 py-2 transition-colors'}
                 >
                   Analytics
                 </Link>
                 <Link
                   to="/manager/users"
-                  className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
+                  className={isActive('/manager/users') ? 'text-accent font-bold px-3 py-2 transition-colors' : 'text-secondary-200 hover:text-white px-3 py-2 transition-colors'}
                 >
                   Users
                 </Link>
                 <Link
                   to="/manager/settings"
-                  className="text-secondary-200 hover:text-white px-3 py-2 transition-colors"
+                  className={isActive('/manager/settings') ? 'text-accent font-bold px-3 py-2 transition-colors' : 'text-secondary-200 hover:text-white px-3 py-2 transition-colors'}
                 >
                   Settings
                 </Link>
@@ -213,7 +215,7 @@ export default function Header() {
               <Link
                 to="/dashboard"
                 onClick={() => setShowMobileMenu(false)}
-                className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
+                className={isActive('/dashboard') ? 'text-accent font-bold hover:bg-white/10 px-3 py-2 rounded-lg transition-colors' : 'text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors'}
               >
                 Dashboard
               </Link>
@@ -222,7 +224,7 @@ export default function Header() {
               <Link
                 to="/supervisor"
                 onClick={() => setShowMobileMenu(false)}
-                className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
+                className={isActive('/supervisor') ? 'text-accent font-bold hover:bg-white/10 px-3 py-2 rounded-lg transition-colors' : 'text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors'}
               >
                 Summary
               </Link>
@@ -232,21 +234,21 @@ export default function Header() {
                 <Link
                   to="/analytics"
                   onClick={() => setShowMobileMenu(false)}
-                  className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
+                  className={isActive('/analytics') ? 'text-accent font-bold hover:bg-white/10 px-3 py-2 rounded-lg transition-colors' : 'text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors'}
                 >
                   Analytics
                 </Link>
                 <Link
                   to="/manager/users"
                   onClick={() => setShowMobileMenu(false)}
-                  className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
+                  className={isActive('/manager/users') ? 'text-accent font-bold hover:bg-white/10 px-3 py-2 rounded-lg transition-colors' : 'text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors'}
                 >
                   Users
                 </Link>
                 <Link
                   to="/manager/settings"
                   onClick={() => setShowMobileMenu(false)}
-                  className="text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
+                  className={isActive('/manager/settings') ? 'text-accent font-bold hover:bg-white/10 px-3 py-2 rounded-lg transition-colors' : 'text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors'}
                 >
                   Settings
                 </Link>
