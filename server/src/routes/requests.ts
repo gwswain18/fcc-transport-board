@@ -10,12 +10,13 @@ import {
 } from '../controllers/requestController.js';
 import { getRequestHistory } from '../controllers/requestHistoryController.js';
 import { addDelays, getDelays } from '../controllers/delayController.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireApproved } from '../middleware/auth.js';
 import { canDispatch, canCreateRequest } from '../middleware/roleAuth.js';
 
 const router = Router();
 
 router.use(authenticate);
+router.use(requireApproved);
 
 router.get('/', getRequests);
 router.post('/', canCreateRequest, createRequest);

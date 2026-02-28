@@ -4,6 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 import ShiftStartModal from '../components/transporter/ShiftStartModal';
 import DispatcherLoginModal from '../components/dispatcher/DispatcherLoginModal';
+import { GoogleLogin } from '@react-oauth/google';
+import { useMsal } from '@azure/msal-react';
+import { loginRequest } from '../config/msalConfig';
 import { Floor } from '../types';
 
 export default function Login() {
@@ -17,7 +20,9 @@ export default function Login() {
   const [dispatcherLoading, setDispatcherLoading] = useState(false);
   const [hasPrimaryDispatcher, setHasPrimaryDispatcher] = useState(false);
   const [primaryDispatcherName, setPrimaryDispatcherName] = useState<string | undefined>();
-  const { login, user, setActiveShift } = useAuth();
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const { login, oauthLogin, user, setActiveShift } = useAuth();
+  const { instance: msalInstance } = useMsal();
   const navigate = useNavigate();
 
   // Redirect if already logged in or handle post-login flow
@@ -62,13 +67,54 @@ export default function Login() {
     if (!result.success) {
       setError(result.error || 'Login failed');
       setLoading(false);
+    } else if (result.isPending) {
+      setLoading(false);
+      navigate('/pending');
     } else if (result.needsShiftStart) {
-      // Transporter needs to start shift
       setLoading(false);
       setShowShiftModal(true);
     } else {
-      // Dispatcher/supervisor/manager — let useEffect handle navigation
       setLoading(false);
+    }
+  };
+
+  const handleOAuthResult = (result: { success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean }) => {
+    if (!result.success) {
+      setError(result.error || 'Sign-in failed');
+    } else if (result.isPending) {
+      navigate('/pending');
+    } else if (result.needsShiftStart) {
+      setShowShiftModal(true);
+    }
+    // Otherwise let useEffect handle navigation
+  };
+
+  const handleGoogleLogin = async (credentialResponse: { credential?: string }) => {
+    if (!credentialResponse.credential) return;
+    setError('');
+    setOauthLoading(true);
+    const result = await oauthLogin('google', credentialResponse.credential);
+    setOauthLoading(false);
+    handleOAuthResult(result);
+  };
+
+  const handleMicrosoftLogin = async () => {
+    setError('');
+    setOauthLoading(true);
+    try {
+      const result = await msalInstance.loginPopup(loginRequest);
+      if (result.idToken) {
+        const loginResult = await oauthLogin('microsoft', result.idToken);
+        setOauthLoading(false);
+        handleOAuthResult(loginResult);
+      } else {
+        setOauthLoading(false);
+      }
+    } catch (err: any) {
+      setOauthLoading(false);
+      if (err.errorCode !== 'user_cancelled') {
+        setError('Microsoft sign-in failed');
+      }
     }
   };
 
@@ -225,7 +271,54 @@ export default function Login() {
           </Link>
         </div>
 
-        <div className="mt-8 pt-6 border-t border-gray-200">
+        {/* OAuth Divider */}
+        <div className="mt-6 flex items-center">
+          <div className="flex-1 border-t border-gray-300"></div>
+          <span className="px-3 text-sm text-gray-500">Or continue with</span>
+          <div className="flex-1 border-t border-gray-300"></div>
+        </div>
+
+        {/* OAuth Buttons */}
+        <div className="mt-4 flex flex-col items-center gap-3">
+          {oauthLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <svg
+                className="animate-spin h-6 w-6 text-primary"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+            </div>
+          ) : (
+            <>
+              <GoogleLogin
+                onSuccess={handleGoogleLogin}
+                onError={() => setError('Google sign-in failed')}
+                text="signin_with"
+                shape="rectangular"
+                width="300"
+              />
+              <button
+                onClick={handleMicrosoftLogin}
+                disabled={loading}
+                className="w-[300px] inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 21 21">
+                  <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+                  <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+                  <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+                  <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+                </svg>
+                Sign in with Microsoft
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="mt-6 pt-6 border-t border-gray-200">
           <p className="text-sm text-gray-500 text-center">
             Mother-Baby Unit Patient Transport System
           </p>

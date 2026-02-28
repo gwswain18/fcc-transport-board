@@ -15,12 +15,13 @@ import {
   getCompletedJobs,
   getShiftLogs,
 } from '../controllers/reportController.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireApproved } from '../middleware/auth.js';
 import { canDispatch, canViewReports } from '../middleware/roleAuth.js';
 
 const router = Router();
 
 router.use(authenticate);
+router.use(requireApproved);
 
 // Dispatcher-accessible (summary page)
 router.get('/summary', canDispatch, getSummary);

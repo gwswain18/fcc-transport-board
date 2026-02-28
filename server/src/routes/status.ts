@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireApproved } from '../middleware/auth.js';
 import { canViewReports } from '../middleware/roleAuth.js';
 import {
   getAllStatuses,
@@ -10,8 +10,9 @@ import {
 
 const router = Router();
 
-// All routes require authentication
+// All routes require authentication and approval
 router.use(authenticate);
+router.use(requireApproved);
 
 // Get all transporter statuses
 router.get('/', getAllStatuses);

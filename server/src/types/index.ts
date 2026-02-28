@@ -1,6 +1,10 @@
 // Re-export shared types
 export type UserRole = 'transporter' | 'secretary' | 'dispatcher' | 'supervisor' | 'manager';
 
+export type AuthProvider = 'local' | 'google' | 'microsoft';
+
+export type ApprovalStatus = 'approved' | 'pending' | 'rejected';
+
 // Changed 'off_unit' to 'other' per feature #4
 export type TransporterStatus =
   | 'available'
@@ -40,8 +44,19 @@ export interface User {
   phone_number?: string;
   include_in_analytics: boolean;
   is_temp_account: boolean;
+  auth_provider: AuthProvider;
+  provider_id?: string;
+  approval_status: ApprovalStatus;
   created_at: string;
   updated_at: string;
+}
+
+export interface OAuthProfile {
+  email: string;
+  first_name: string;
+  last_name: string;
+  provider_id: string;
+  provider: AuthProvider;
 }
 
 export interface TransporterStatusRecord {

@@ -27,6 +27,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const result = await query(
       `SELECT id, email, password_hash, first_name, last_name, role, is_active,
               primary_floor, phone_number, include_in_analytics, is_temp_account,
+              auth_provider, provider_id, approval_status,
               created_at, updated_at
        FROM users WHERE email = $1`,
       [email.toLowerCase()]
@@ -41,6 +42,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     if (!user.is_active) {
       res.status(401).json({ error: 'Account is deactivated' });
+      return;
+    }
+
+    // OAuth-only user trying to use password login
+    if (!user.password_hash) {
+      const providerName = user.auth_provider === 'google' ? 'Google' : 'Microsoft';
+      res.status(401).json({ error: `Please sign in with ${providerName}` });
       return;
     }
 
@@ -68,7 +76,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // Check if user has an active shift (for transporters)
     let activeShift = null;
-    if (user.role === 'transporter') {
+    if (user.role === 'transporter' && user.approval_status === 'approved') {
       const shiftResult = await query(
         'SELECT * FROM shift_logs WHERE user_id = $1 AND shift_end IS NULL',
         [user.id]
@@ -81,7 +89,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     res.json({
       user: safeUser,
       activeShift,
-      message: 'Login successful',
+      isPending: user.approval_status === 'pending',
+      message: user.approval_status === 'pending' ? 'Account pending approval' : 'Login successful',
     });
   } catch (error) {
     logger.error('Login error:', error);
@@ -155,6 +164,7 @@ export const me = async (req: AuthenticatedRequest, res: Response): Promise<void
     const result = await query(
       `SELECT id, email, first_name, last_name, role, is_active,
               primary_floor, phone_number, include_in_analytics, is_temp_account,
+              auth_provider, approval_status,
               created_at, updated_at
        FROM users WHERE id = $1`,
       [req.user.id]
@@ -206,9 +216,14 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response): 
 
     // Verify current password
     const userResult = await query(
-      'SELECT password_hash FROM users WHERE id = $1',
+      'SELECT password_hash, auth_provider FROM users WHERE id = $1',
       [req.user.id]
     );
+
+    if (!userResult.rows[0].password_hash) {
+      res.status(400).json({ error: 'OAuth users cannot change password. Use your OAuth provider instead.' });
+      return;
+    }
 
     const isValidPassword = await comparePassword(
       current_password,

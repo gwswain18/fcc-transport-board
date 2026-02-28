@@ -17,8 +17,10 @@ export const getAllUsers = async (
     const result = await query(
       `SELECT id, email, first_name, last_name, role, is_active,
               primary_floor, phone_number, include_in_analytics, is_temp_account,
+              auth_provider, approval_status,
               created_at, updated_at
        FROM users
+       WHERE approval_status = 'approved'
        ORDER BY last_name, first_name`
     );
 
@@ -380,6 +382,7 @@ export const getUserById = async (
     const result = await query(
       `SELECT id, email, first_name, last_name, role, is_active,
               primary_floor, phone_number, include_in_analytics, is_temp_account,
+              auth_provider, approval_status,
               created_at, updated_at
        FROM users WHERE id = $1`,
       [id]
@@ -393,6 +396,170 @@ export const getUserById = async (
     res.json({ user: result.rows[0] });
   } catch (error) {
     logger.error('Get user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get pending users
+export const getPendingUsers = async (
+  _req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const result = await query(
+      `SELECT id, email, first_name, last_name, role, is_active,
+              primary_floor, phone_number, auth_provider, approval_status,
+              created_at, updated_at
+       FROM users
+       WHERE approval_status = 'pending'
+       ORDER BY created_at ASC`
+    );
+
+    res.json({ users: result.rows });
+  } catch (error) {
+    logger.error('Get pending users error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get count of pending users
+export const getPendingCount = async (
+  _req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const result = await query(
+      `SELECT COUNT(*) as count FROM users WHERE approval_status = 'pending'`
+    );
+
+    res.json({ count: parseInt(result.rows[0].count) });
+  } catch (error) {
+    logger.error('Get pending count error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Approve a pending user
+export const approveUser = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { role, primary_floor } = req.body;
+
+    if (!role) {
+      res.status(400).json({ error: 'Role is required for approval' });
+      return;
+    }
+
+    const validRoles: UserRole[] = ['transporter', 'secretary', 'dispatcher', 'supervisor', 'manager'];
+    if (!validRoles.includes(role)) {
+      res.status(400).json({ error: 'Invalid role' });
+      return;
+    }
+
+    if (role === 'transporter' && !primary_floor) {
+      res.status(400).json({ error: 'Primary floor is required for transporters' });
+      return;
+    }
+
+    if (primary_floor && !validFloors.includes(primary_floor)) {
+      res.status(400).json({ error: 'Invalid primary floor' });
+      return;
+    }
+
+    const existing = await query(
+      'SELECT id, approval_status FROM users WHERE id = $1',
+      [id]
+    );
+
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    if (existing.rows[0].approval_status !== 'pending') {
+      res.status(400).json({ error: 'User is not pending approval' });
+      return;
+    }
+
+    const result = await query(
+      `UPDATE users
+       SET approval_status = 'approved', role = $1, primary_floor = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+       RETURNING id, email, first_name, last_name, role, is_active,
+                 primary_floor, phone_number, auth_provider, approval_status,
+                 created_at, updated_at`,
+      [role, primary_floor || null, id]
+    );
+
+    // Create transporter status record if role is transporter
+    if (role === 'transporter') {
+      await query(
+        'INSERT INTO transporter_status (user_id, status) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING',
+        [id, 'offline']
+      );
+    }
+
+    const { ipAddress } = getAuditContext(req);
+    await logUpdate(
+      req.user!.id,
+      'user',
+      parseInt(id as string),
+      { approval_status: 'pending' },
+      { approval_status: 'approved', role },
+      ipAddress
+    );
+
+    res.json({ user: result.rows[0], message: 'User approved successfully' });
+  } catch (error) {
+    logger.error('Approve user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Reject a pending user
+export const rejectUser = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const existing = await query(
+      'SELECT id, approval_status FROM users WHERE id = $1',
+      [id]
+    );
+
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    if (existing.rows[0].approval_status !== 'pending') {
+      res.status(400).json({ error: 'User is not pending approval' });
+      return;
+    }
+
+    await query(
+      `UPDATE users SET approval_status = 'rejected', is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+      [id]
+    );
+
+    const { ipAddress } = getAuditContext(req);
+    await logUpdate(
+      req.user!.id,
+      'user',
+      parseInt(id as string),
+      { approval_status: 'pending' },
+      { approval_status: 'rejected', is_active: false },
+      ipAddress
+    );
+
+    res.json({ message: 'User rejected' });
+  } catch (error) {
+    logger.error('Reject user error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

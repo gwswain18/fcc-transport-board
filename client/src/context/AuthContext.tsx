@@ -6,7 +6,8 @@ interface AuthContextType {
   user: User | null;
   activeShift: ShiftLog | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsShiftStart?: boolean }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean }>;
+  oauthLogin: (provider: string, idToken: string) => Promise<{ success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean }>;
   logout: () => Promise<void>;
   setActiveShift: (shift: ShiftLog | null) => void;
   refreshUser: () => Promise<void>;
@@ -34,10 +35,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
-  const login = async (email: string, password: string) => {
-    const response = await api.login(email, password);
+  const handleLoginResponse = (response: { data?: { user: User; activeShift?: ShiftLog; isPending?: boolean }; error?: string }) => {
     if (response.data?.user) {
       setUser(response.data.user);
+
+      // Check if pending approval
+      if (response.data.isPending) {
+        return { success: true, isPending: true };
+      }
 
       // Check if transporter needs to start shift
       if (response.data.user.role === 'transporter') {
@@ -45,7 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setActiveShift(response.data.activeShift);
           return { success: true };
         } else {
-          // No active shift - prompt to start one
           return { success: true, needsShiftStart: true };
         }
       }
@@ -53,6 +57,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     }
     return { success: false, error: response.error };
+  };
+
+  const login = async (email: string, password: string) => {
+    const response = await api.login(email, password);
+    return handleLoginResponse(response as any);
+  };
+
+  const oauthLogin = async (provider: string, idToken: string) => {
+    const response = await api.oauthLogin(provider, idToken);
+    return handleLoginResponse(response as any);
   };
 
   const logout = async () => {
@@ -72,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, activeShift, loading, login, logout, setActiveShift, refreshUser }}>
+    <AuthContext.Provider value={{ user, activeShift, loading, login, oauthLogin, logout, setActiveShift, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

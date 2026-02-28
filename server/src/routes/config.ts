@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireApproved } from '../middleware/auth.js';
 import { canManageUsers, canViewReports } from '../middleware/roleAuth.js';
 import {
   getConfigValue,
@@ -10,8 +10,9 @@ import {
 
 const router = express.Router();
 
-// All routes require authentication
+// All routes require authentication and approval
 router.use(authenticate);
+router.use(requireApproved);
 
 // Alert settings readable by all authenticated users (needed for UI)
 router.get('/alert_settings', (req, res) => {

@@ -1,10 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { api } from '../../utils/api';
 import DateTimeDisplay from './DateTimeDisplay';
-import PasswordChangeModal from './PasswordChangeModal';
 import MuteToggle from './MuteToggle';
 import DarkModeToggle from './DarkModeToggle';
 
@@ -14,10 +13,20 @@ export default function Header() {
   const navigate = useNavigate();
   const location = useLocation();
   const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + '/');
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (user?.role === 'manager') {
+      api.getPendingCount().then((res) => {
+        if (res.data?.count) {
+          setPendingCount(res.data.count);
+        }
+      });
+    }
+  }, [user?.role]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -105,9 +114,14 @@ export default function Header() {
                 </Link>
                 <Link
                   to="/manager/users"
-                  className={isActive('/manager/users') ? 'text-accent font-bold px-3 py-2 transition-colors' : 'text-secondary-200 hover:text-white px-3 py-2 transition-colors'}
+                  className={`${isActive('/manager/users') ? 'text-accent font-bold' : 'text-secondary-200 hover:text-white'} px-3 py-2 transition-colors relative`}
                 >
                   Users
+                  {pendingCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
+                      {pendingCount}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   to="/manager/settings"
@@ -180,11 +194,11 @@ export default function Header() {
                     <button
                       onClick={() => {
                         setShowUserMenu(false);
-                        setShowPasswordModal(true);
+                        navigate('/profile');
                       }}
                       className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-smoke"
                     >
-                      Change Password
+                      My Profile
                     </button>
                     <hr className="my-1 border-alabaster" />
                     <button
@@ -241,9 +255,14 @@ export default function Header() {
                 <Link
                   to="/manager/users"
                   onClick={() => setShowMobileMenu(false)}
-                  className={isActive('/manager/users') ? 'text-accent font-bold hover:bg-white/10 px-3 py-2 rounded-lg transition-colors' : 'text-secondary-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg transition-colors'}
+                  className={`${isActive('/manager/users') ? 'text-accent font-bold' : 'text-secondary-200 hover:text-white'} hover:bg-white/10 px-3 py-2 rounded-lg transition-colors flex items-center gap-2`}
                 >
                   Users
+                  {pendingCount > 0 && (
+                    <span className="bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
+                      {pendingCount}
+                    </span>
+                  )}
                 </Link>
                 <Link
                   to="/manager/settings"
@@ -259,10 +278,6 @@ export default function Header() {
         </>
       )}
 
-      <PasswordChangeModal
-        isOpen={showPasswordModal}
-        onClose={() => setShowPasswordModal(false)}
-      />
     </>
   );
 }

@@ -9,6 +9,8 @@ import SupervisorView from './pages/SupervisorView';
 import ManagerDashboard from './pages/ManagerDashboard';
 import UserManagement from './pages/UserManagement';
 import Settings from './pages/Settings';
+import PendingApproval from './pages/PendingApproval';
+import Profile from './pages/Profile';
 
 function ProtectedRoute({
   children,
@@ -29,6 +31,10 @@ function ProtectedRoute({
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (user.approval_status === 'pending') {
+    return <Navigate to="/pending" replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
@@ -61,6 +67,10 @@ function RoleBasedRedirect() {
     return <Navigate to="/login" replace />;
   }
 
+  if (user.approval_status === 'pending') {
+    return <Navigate to="/pending" replace />;
+  }
+
   const roleRoutes: Record<string, string> = {
     transporter: '/transporter',
     secretary: '/dashboard',
@@ -76,9 +86,19 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/pending" element={<PendingApproval />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/" element={<RoleBasedRedirect />} />
+
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Profile />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/transporter"

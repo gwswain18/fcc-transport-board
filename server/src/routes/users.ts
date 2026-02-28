@@ -9,8 +9,13 @@ import {
   deleteUser,
   getTransporters,
   getUserById,
+  getPendingUsers,
+  getPendingCount,
+  approveUser,
+  rejectUser,
 } from '../controllers/userController.js';
 import { getUserDelays } from '../controllers/delayController.js';
+import { requireApproved } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -18,7 +23,13 @@ const router = Router();
 router.use(authenticate);
 
 // Get transporters (dispatcher+)
-router.get('/transporters', canDispatch, getTransporters);
+router.get('/transporters', requireApproved, canDispatch, getTransporters);
+
+// Pending user management (manager only)
+router.get('/pending', canManageUsers, getPendingUsers);
+router.get('/pending/count', canManageUsers, getPendingCount);
+router.put('/:id/approve', canManageUsers, approveUser);
+router.put('/:id/reject', canManageUsers, rejectUser);
 
 // User management (manager only)
 router.get('/', canManageUsers, getAllUsers);

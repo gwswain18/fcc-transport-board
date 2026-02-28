@@ -88,6 +88,27 @@ export const api = {
 
   heartbeat: () => request<{ message: string; timestamp: string }>('/auth/heartbeat', { method: 'POST' }),
 
+  oauthLogin: (provider: string, id_token: string) =>
+    request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; isPending?: boolean; message: string }>('/auth/oauth', {
+      method: 'POST',
+      body: JSON.stringify({ provider, id_token }),
+    }),
+
+  getProfile: () =>
+    request<{ user: import('../types').User }>('/auth/profile'),
+
+  updateProfile: (data: { first_name?: string; last_name?: string; phone_number?: string; email?: string }) =>
+    request<{ user: import('../types').User; message: string }>('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  linkOAuthAccount: (provider: string, id_token: string) =>
+    request<{ message: string }>('/auth/link-oauth', {
+      method: 'POST',
+      body: JSON.stringify({ provider, id_token }),
+    }),
+
   // Users
   getUsers: () => request<{ users: import('../types').User[] }>('/users'),
 
@@ -135,6 +156,23 @@ export const api = {
   deleteUser: (id: number, permanent: boolean = false) =>
     request<{ message: string }>(`/users/${id}${permanent ? '?permanent=true' : ''}`, {
       method: 'DELETE',
+    }),
+
+  getPendingUsers: () =>
+    request<{ users: import('../types').User[] }>('/users/pending'),
+
+  getPendingCount: () =>
+    request<{ count: number }>('/users/pending/count'),
+
+  approveUser: (id: number, data: { role: string; primary_floor?: string }) =>
+    request<{ user: import('../types').User; message: string }>(`/users/${id}/approve`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  rejectUser: (id: number) =>
+    request<{ message: string }>(`/users/${id}/reject`, {
+      method: 'PUT',
     }),
 
   // Transporter Status

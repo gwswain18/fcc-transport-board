@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireApproved } from '../middleware/auth.js';
 import { canDispatch, canManageUsers } from '../middleware/roleAuth.js';
 import {
   getActiveDispatchers,
@@ -14,8 +14,9 @@ import {
 
 const router = express.Router();
 
-// All routes require authentication
+// All routes require authentication and approval
 router.use(authenticate);
+router.use(requireApproved);
 
 // Get active dispatchers (all authenticated users can view)
 router.get('/active', getActiveDispatchers);

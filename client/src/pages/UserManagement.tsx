@@ -23,6 +23,15 @@ export default function UserManagement() {
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Pending approval tab state
+  const [activeTab, setActiveTab] = useState<'active' | 'pending'>('active');
+  const [pendingUsers, setPendingUsers] = useState<User[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [approvingUser, setApprovingUser] = useState<User | null>(null);
+  const [approveFormData, setApproveFormData] = useState({ role: 'transporter' as UserRole, primary_floor: '' as Floor | '' });
+  const [approveLoading, setApproveLoading] = useState(false);
+
   const sortedUsers = useMemo(() => {
     return [...users].sort((a, b) => {
       let aVal: string;
@@ -80,6 +89,7 @@ export default function UserManagement() {
 
   useEffect(() => {
     loadUsers();
+    loadPendingUsers();
   }, []);
 
   const loadUsers = async () => {
@@ -88,6 +98,60 @@ export default function UserManagement() {
       setUsers(response.data.users);
     }
     setLoading(false);
+  };
+
+  const loadPendingUsers = async () => {
+    const response = await api.getPendingUsers();
+    if (response.data?.users) {
+      setPendingUsers(response.data.users);
+      setPendingCount(response.data.users.length);
+    }
+  };
+
+  const openApproveModal = (user: User) => {
+    setApprovingUser(user);
+    setApproveFormData({ role: 'transporter', primary_floor: '' });
+    setError('');
+    setApproveModalOpen(true);
+  };
+
+  const handleApproveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!approvingUser) return;
+    setError('');
+
+    if (approveFormData.role === 'transporter' && !approveFormData.primary_floor) {
+      setError('Primary floor is required for transporters');
+      return;
+    }
+
+    setApproveLoading(true);
+    const response = await api.approveUser(approvingUser.id, {
+      role: approveFormData.role,
+      primary_floor: approveFormData.primary_floor || undefined,
+    });
+    setApproveLoading(false);
+
+    if (response.error) {
+      setError(response.error);
+      return;
+    }
+
+    setApproveModalOpen(false);
+    setApprovingUser(null);
+    await loadPendingUsers();
+    await loadUsers();
+  };
+
+  const handleRejectUser = async (user: User) => {
+    if (!confirm(`Are you sure you want to reject ${user.first_name} ${user.last_name}?`)) return;
+
+    const response = await api.rejectUser(user.id);
+    if (response.error) {
+      setError(response.error);
+      return;
+    }
+    await loadPendingUsers();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -245,91 +309,182 @@ export default function UserManagement() {
         <div className="card">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-900">User Management</h2>
-            <button onClick={openCreateModal} className="btn-primary">
-              Add User
+            {activeTab === 'active' && (
+              <button onClick={openCreateModal} className="btn-primary">
+                Add User
+              </button>
+            )}
+          </div>
+
+          {/* Tab Bar */}
+          <div className="flex border-b border-gray-200 mb-4">
+            <button
+              onClick={() => setActiveTab('active')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'active'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Active Users
+            </button>
+            <button
+              onClick={() => setActiveTab('pending')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                activeTab === 'pending'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Pending Approval
+              {pendingCount > 0 && (
+                <span className="bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
+                  {pendingCount}
+                </span>
+              )}
             </button>
           </div>
 
-          {loading && users.length === 0 ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th onClick={() => handleSort('name')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
-                      Name{sortIndicator('name')}
-                    </th>
-                    <th onClick={() => handleSort('email')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
-                      Email{sortIndicator('email')}
-                    </th>
-                    <th onClick={() => handleSort('role')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
-                      Role{sortIndicator('role')}
-                    </th>
-                    <th onClick={() => handleSort('primary_floor')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
-                      Primary Floor{sortIndicator('primary_floor')}
-                    </th>
-                    <th onClick={() => handleSort('phone')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
-                      Phone{sortIndicator('phone')}
-                    </th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedUsers.map((user) => (
-                    <tr
-                      key={user.id}
-                      className="border-b border-gray-100 hover:bg-gray-50"
-                    >
-                      <td className="py-3 px-4 font-medium text-gray-900">
-                        {user.first_name} {user.last_name}
-                        {user.is_temp_account && (
-                          <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
-                            Temp
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-gray-600">{user.email}</td>
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary capitalize">
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-gray-600">
-                        {user.primary_floor || '-'}
-                      </td>
-                      <td className="py-3 px-4 text-gray-600">
-                        {user.phone_number || '-'}
-                      </td>
-                      <td className="py-3 px-4 text-right space-x-2">
-                        <button
-                          onClick={() => openEditModal(user)}
-                          className="text-primary hover:text-primary-700"
+          {activeTab === 'active' && (
+            <>
+              {loading && users.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th onClick={() => handleSort('name')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
+                          Name{sortIndicator('name')}
+                        </th>
+                        <th onClick={() => handleSort('email')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
+                          Email{sortIndicator('email')}
+                        </th>
+                        <th onClick={() => handleSort('role')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
+                          Role{sortIndicator('role')}
+                        </th>
+                        <th onClick={() => handleSort('primary_floor')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
+                          Primary Floor{sortIndicator('primary_floor')}
+                        </th>
+                        <th onClick={() => handleSort('phone')} className="text-left py-3 px-4 font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none">
+                          Phone{sortIndicator('phone')}
+                        </th>
+                        <th className="text-right py-3 px-4 font-medium text-gray-600">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedUsers.map((user) => (
+                        <tr
+                          key={user.id}
+                          className="border-b border-gray-100 hover:bg-gray-50"
                         >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => openResetPasswordModal(user.id)}
-                          className="text-gray-600 hover:text-gray-800"
-                        >
-                          Reset Password
-                        </button>
-                        <button
-                          onClick={() => openDeleteModal(user)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                          <td className="py-3 px-4 font-medium text-gray-900">
+                            {user.first_name} {user.last_name}
+                            {user.is_temp_account && (
+                              <span className="ml-2 text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">
+                                Temp
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-gray-600">{user.email}</td>
+                          <td className="py-3 px-4">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-50 text-primary capitalize">
+                              {user.role}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-gray-600">
+                            {user.primary_floor || '-'}
+                          </td>
+                          <td className="py-3 px-4 text-gray-600">
+                            {user.phone_number || '-'}
+                          </td>
+                          <td className="py-3 px-4 text-right space-x-2">
+                            <button
+                              onClick={() => openEditModal(user)}
+                              className="text-primary hover:text-primary-700"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => openResetPasswordModal(user.id)}
+                              className="text-gray-600 hover:text-gray-800"
+                            >
+                              Reset Password
+                            </button>
+                            <button
+                              onClick={() => openDeleteModal(user)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'pending' && (
+            <>
+              {pendingUsers.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  No pending approval requests
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200">
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Name</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Email</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Provider</th>
+                        <th className="text-left py-3 px-4 font-medium text-gray-600">Registered</th>
+                        <th className="text-right py-3 px-4 font-medium text-gray-600">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingUsers.map((pUser) => (
+                        <tr key={pUser.id} className="border-b border-gray-100 hover:bg-gray-50">
+                          <td className="py-3 px-4 font-medium text-gray-900">
+                            {pUser.first_name} {pUser.last_name}
+                          </td>
+                          <td className="py-3 px-4 text-gray-600">{pUser.email}</td>
+                          <td className="py-3 px-4">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 capitalize">
+                              {pUser.auth_provider}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-gray-600 text-sm">
+                            {new Date(pUser.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-4 text-right space-x-2">
+                            <button
+                              onClick={() => openApproveModal(pUser)}
+                              className="text-green-600 hover:text-green-800 font-medium"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleRejectUser(pUser)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              Reject
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </div>
       </main>
@@ -559,6 +714,76 @@ export default function UserManagement() {
               Cancel
             </button>
           </div>
+        )}
+      </Modal>
+
+      {/* Approve User Modal */}
+      <Modal
+        isOpen={approveModalOpen}
+        onClose={() => { setApproveModalOpen(false); setApprovingUser(null); }}
+        title="Approve User"
+        size="sm"
+      >
+        {approvingUser && (
+          <form onSubmit={handleApproveUser} className="space-y-4">
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>
+            )}
+
+            <p className="text-gray-700">
+              Approve <span className="font-medium">{approvingUser.first_name} {approvingUser.last_name}</span> ({approvingUser.email})
+            </p>
+
+            <div>
+              <label className="label">Assign Role</label>
+              <select
+                value={approveFormData.role}
+                onChange={(e) => setApproveFormData((prev) => ({ ...prev, role: e.target.value as UserRole }))}
+                className="input"
+              >
+                {ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {role.charAt(0).toUpperCase() + role.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {approveFormData.role === 'transporter' && (
+              <div>
+                <label className="label">
+                  Primary Floor <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={approveFormData.primary_floor}
+                  onChange={(e) => setApproveFormData((prev) => ({ ...prev, primary_floor: e.target.value as Floor | '' }))}
+                  className="input"
+                  required
+                >
+                  <option value="">Select floor...</option>
+                  <optgroup label="FCC">
+                    {MAIN_FLOORS.map((floor) => (
+                      <option key={floor} value={floor}>{floor}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Other">
+                    {OTHER_FLOORS.map((floor) => (
+                      <option key={floor} value={floor}>{floor}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+            )}
+
+            <div className="flex gap-2 pt-4">
+              <button type="button" onClick={() => { setApproveModalOpen(false); setApprovingUser(null); }} className="flex-1 btn-secondary">
+                Cancel
+              </button>
+              <button type="submit" disabled={approveLoading} className="flex-1 btn-primary">
+                {approveLoading ? 'Approving...' : 'Approve'}
+              </button>
+            </div>
+          </form>
         )}
       </Modal>
 

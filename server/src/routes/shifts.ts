@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireApproved } from '../middleware/auth.js';
 import { canViewReports } from '../middleware/roleAuth.js';
 import { canDispatch } from '../middleware/roleAuth.js';
 import {
@@ -13,8 +13,9 @@ import {
 
 const router = express.Router();
 
-// All routes require authentication
+// All routes require authentication and approval
 router.use(authenticate);
+router.use(requireApproved);
 
 // Transporter shift operations
 router.post('/start', startShift);

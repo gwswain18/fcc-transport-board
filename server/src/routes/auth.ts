@@ -10,6 +10,8 @@ import {
   recoverUsername,
   heartbeat,
 } from '../controllers/authController.js';
+import { oauthLogin } from '../controllers/oauthController.js';
+import { getProfile, updateProfile, linkOAuthAccount } from '../controllers/profileController.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
@@ -25,6 +27,7 @@ const authLimiter = rateLimit({
 
 // Public routes
 router.post('/login', authLimiter, login);
+router.post('/oauth', authLimiter, oauthLogin);
 router.post('/logout', logout);
 router.post('/forgot-password', authLimiter, forgotPassword);
 router.post('/reset-password/:token', authLimiter, resetPassword);
@@ -34,5 +37,10 @@ router.post('/recover-username', authLimiter, recoverUsername);
 router.get('/me', authenticate, me);
 router.post('/change-password', authenticate, changePassword);
 router.post('/heartbeat', authenticate, heartbeat);
+
+// Profile routes
+router.get('/profile', authenticate, getProfile);
+router.put('/profile', authenticate, updateProfile);
+router.post('/link-oauth', authenticate, linkOAuthAccount);
 
 export default router;

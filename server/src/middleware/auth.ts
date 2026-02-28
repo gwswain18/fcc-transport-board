@@ -19,7 +19,7 @@ export const authenticate = async (
     const payload = verifyToken(token);
 
     const result = await query(
-      'SELECT id, email, first_name, last_name, role, is_active, created_at, updated_at FROM users WHERE id = $1',
+      'SELECT id, email, first_name, last_name, role, is_active, auth_provider, approval_status, created_at, updated_at FROM users WHERE id = $1',
       [payload.userId]
     );
 
@@ -40,4 +40,22 @@ export const authenticate = async (
   } catch (error) {
     res.status(401).json({ error: 'Invalid or expired token' });
   }
+};
+
+export const requireApproved = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  if (req.user.approval_status !== 'approved') {
+    res.status(403).json({ error: 'Account pending approval' });
+    return;
+  }
+
+  next();
 };
