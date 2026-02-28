@@ -4,8 +4,9 @@ import { User, UserRole, Floor } from '../types';
 import Header from '../components/common/Header';
 import Modal from '../components/common/Modal';
 
-const ROLES: UserRole[] = ['transporter', 'dispatcher', 'supervisor', 'manager'];
-const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+const ROLES: UserRole[] = ['transporter', 'secretary', 'dispatcher', 'supervisor', 'manager'];
+const MAIN_FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+const OTHER_FLOORS: Floor[] = ['1WC', 'HRP', 'L&D', 'OTF'];
 
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
@@ -438,11 +439,20 @@ export default function UserManagement() {
               required={formData.role === 'transporter'}
             >
               <option value="">None</option>
-              {FLOORS.map((floor) => (
-                <option key={floor} value={floor}>
-                  {floor}
-                </option>
-              ))}
+              <optgroup label="FCC">
+                {MAIN_FLOORS.map((floor) => (
+                  <option key={floor} value={floor}>
+                    {floor}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Other">
+                {OTHER_FLOORS.map((floor) => (
+                  <option key={floor} value={floor}>
+                    {floor}
+                  </option>
+                ))}
+              </optgroup>
             </select>
             {formData.role === 'transporter' && (
               <p className="text-xs text-gray-500 mt-1">Required for transporters</p>

@@ -1,11 +1,15 @@
 import { Floor, FloorRoomValidation } from '../types/index.js';
 
-// Map floor to expected first digit of room number
-const FLOOR_DIGIT_MAP: Record<Floor, string> = {
+// Map floor to expected first digit of room number (null = free-form)
+const FLOOR_DIGIT_MAP: Record<Floor, string | null> = {
   FCC1: '1',
   FCC4: '4',
   FCC5: '5',
   FCC6: '6',
+  '1WC': '1',
+  HRP: '1',
+  'L&D': null,
+  OTF: '1',
 };
 
 // Validate that a room number is valid for a given floor
@@ -14,6 +18,23 @@ export const validateFloorRoom = (
   floor: Floor,
   roomNumber: string
 ): FloorRoomValidation => {
+  // "Nursery" is always valid on any floor
+  if (roomNumber.toLowerCase() === 'nursery') {
+    return { floor, room_number: roomNumber, is_valid: true };
+  }
+
+  const expectedFirstDigit = FLOOR_DIGIT_MAP[floor];
+
+  // Free-form floor (e.g. L&D) — accept any non-empty room
+  if (expectedFirstDigit === null) {
+    return {
+      floor,
+      room_number: roomNumber,
+      is_valid: roomNumber.trim().length > 0,
+      error: roomNumber.trim().length === 0 ? 'Room number is required' : undefined,
+    };
+  }
+
   // Extract numeric part of room number (handles formats like "401", "401A", "401-B")
   const numericMatch = roomNumber.match(/^(\d+)/);
 
@@ -25,8 +46,6 @@ export const validateFloorRoom = (
       error: 'Room number must start with a number',
     };
   }
-
-  const expectedFirstDigit = FLOOR_DIGIT_MAP[floor];
 
   if (!expectedFirstDigit) {
     return {
@@ -57,6 +76,10 @@ export const validateFloorRoom = (
 
 // Validate room number format
 export const isValidRoomFormat = (roomNumber: string): boolean => {
+  // "Nursery" is always valid
+  if (roomNumber.toLowerCase() === 'nursery') return true;
+  // Accept letter-starting rooms (e.g. L&D rooms like "A5")
+  if (/^[A-Za-z]/.test(roomNumber)) return true;
   // Accepts formats like: 401, 401A, 401-B, 401/2
   return /^\d{3}[A-Za-z0-9\-\/]*$/.test(roomNumber);
 };

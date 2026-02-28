@@ -1,6 +1,6 @@
 // Shared types between frontend and backend
 
-export type UserRole = 'transporter' | 'dispatcher' | 'supervisor' | 'manager';
+export type UserRole = 'transporter' | 'secretary' | 'dispatcher' | 'supervisor' | 'manager';
 
 // Changed 'off_unit' to 'other' per feature #4
 export type TransporterStatus =
@@ -13,7 +13,7 @@ export type TransporterStatus =
   | 'other'
   | 'offline';
 
-export type Floor = 'FCC1' | 'FCC4' | 'FCC5' | 'FCC6';
+export type Floor = 'FCC1' | 'FCC4' | 'FCC5' | 'FCC6' | '1WC' | 'HRP' | 'L&D' | 'OTF';
 
 export type Priority = 'routine' | 'stat';
 
@@ -335,11 +335,15 @@ export interface FloorRoomValidation {
 }
 
 // Room number ranges per floor
-export const FLOOR_ROOM_RANGES: Record<Floor, { min: number; max: number }> = {
+export const FLOOR_ROOM_RANGES: Record<Floor, { min: number; max: number } | null> = {
   FCC1: { min: 100, max: 199 },
   FCC4: { min: 400, max: 499 },
   FCC5: { min: 500, max: 599 },
   FCC6: { min: 600, max: 699 },
+  '1WC': { min: 100, max: 199 },
+  HRP: { min: 100, max: 199 },
+  'L&D': null,
+  OTF: { min: 100, max: 199 },
 };
 
 // Socket.io event types (updated with new events)

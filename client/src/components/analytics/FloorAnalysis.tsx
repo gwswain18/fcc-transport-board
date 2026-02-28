@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../utils/api';
-import { Floor } from '../../types';
 import { formatMinutes } from '../../utils/formatters';
 import {
   BarChart,
@@ -14,7 +13,7 @@ import {
 } from 'recharts';
 
 interface FloorAnalysisData {
-  floor: Floor;
+  floor: string;
   total_requests: number;
   avg_response_time: number;
   avg_pickup_time: number;
@@ -31,11 +30,12 @@ interface FloorAnalysisProps {
   };
 }
 
-const FLOOR_COLORS: Record<Floor, string> = {
+const FLOOR_COLORS: Record<string, string> = {
   FCC1: '#002952',  // Primary - Prussian Blue
   FCC4: '#8598c1',  // Secondary - Wisteria Blue
   FCC5: '#a36d00',  // Accent - Golden Earth
   FCC6: '#4a6fa5',  // Mid-tone blue
+  Other: '#6b7280', // Gray for Other floors
 };
 
 export default function FloorAnalysis({ dateRange }: FloorAnalysisProps) {
@@ -150,7 +150,7 @@ export default function FloorAnalysis({ dateRange }: FloorAnalysisProps) {
                   <td className="py-3 px-4">
                     <span
                       className="font-medium"
-                      style={{ color: FLOOR_COLORS[floor.floor] }}
+                      style={{ color: FLOOR_COLORS[floor.floor] || '#6b7280' }}
                     >
                       {floor.floor}
                     </span>

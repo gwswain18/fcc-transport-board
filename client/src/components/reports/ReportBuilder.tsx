@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, RefObject } from 'react';
-import { TransporterStats, Floor } from '../../types';
+import { TransporterStats } from '../../types';
 import {
   ReportType,
   ReportConfig,
@@ -12,7 +12,7 @@ import { generatePdf } from '../../utils/pdfGenerator';
 import { formatDate } from '../../utils/formatters';
 import ReportPreview from './ReportPreview';
 
-const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+const FLOORS = ['FCC1', 'FCC4', 'FCC5', 'FCC6', 'Other'] as const;
 
 const ALL_METRICS: { key: keyof MetricSelection; label: string }[] = [
   { key: 'totalCompleted', label: 'Total Completed' },
@@ -97,7 +97,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
   const [reportType, setReportType] = useState<ReportType>('global');
   const [startDate, setStartDate] = useState(dateRange.start_date);
   const [endDate, setEndDate] = useState(dateRange.end_date);
-  const [selectedFloors, setSelectedFloors] = useState<Floor[]>([...FLOORS]);
+  const [selectedFloors, setSelectedFloors] = useState<string[]>([...FLOORS]);
   const [transporterId, setTransporterId] = useState('');
 
   const [metrics, setMetrics] = useState<MetricSelection>({
@@ -132,7 +132,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
   const [activeConfig, setActiveConfig] = useState<ReportConfig | null>(null);
   const [error, setError] = useState('');
 
-  const toggleFloor = (floor: Floor) => {
+  const toggleFloor = (floor: string) => {
     setSelectedFloors((prev) =>
       prev.includes(floor) ? prev.filter((f) => f !== floor) : [...prev, floor]
     );

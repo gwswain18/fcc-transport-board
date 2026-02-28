@@ -20,6 +20,7 @@ import {
 } from 'recharts';
 
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+const FLOOR_FILTER_OPTIONS = [...FLOORS, 'Other'] as const;
 
 type TabType = 'overview' | 'floors' | 'delays' | 'activity' | 'shifts' | 'reports';
 
@@ -263,7 +264,7 @@ export default function ManagerDashboard() {
                 className="input"
               >
                 <option value="">All Floors</option>
-                {FLOORS.map((floor) => (
+                {FLOOR_FILTER_OPTIONS.map((floor) => (
                   <option key={floor} value={floor}>
                     {floor}
                   </option>

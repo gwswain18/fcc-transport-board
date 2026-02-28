@@ -7,7 +7,7 @@ import { getAuditContext } from '../middleware/auditMiddleware.js';
 import { isValidEmail, isValidPhoneNumber } from '../utils/validation.js';
 import logger from '../utils/logger.js';
 
-const validFloors: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+const validFloors: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6', '1WC', 'HRP', 'L&D', 'OTF'];
 
 export const getAllUsers = async (
   _req: AuthenticatedRequest,
@@ -56,7 +56,7 @@ export const createUser = async (
       return;
     }
 
-    const validRoles: UserRole[] = ['transporter', 'dispatcher', 'supervisor', 'manager'];
+    const validRoles: UserRole[] = ['transporter', 'secretary', 'dispatcher', 'supervisor', 'manager'];
     if (!validRoles.includes(role)) {
       res.status(400).json({ error: 'Invalid role' });
       return;

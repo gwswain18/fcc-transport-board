@@ -21,15 +21,20 @@ import DispatcherLoginModal from '../components/dispatcher/DispatcherLoginModal'
 import AlertBanners from '../components/common/AlertBanners';
 import JobHistoryModal from '../components/dispatcher/JobHistoryModal';
 
-const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+const MAIN_FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+const OTHER_FLOORS: Floor[] = ['1WC', 'HRP', 'L&D', 'OTF'];
 const DESTINATIONS = ['Atrium', 'Radiology', 'Lab', 'OR', 'NICU', 'Other'];
 
-// Map floor to expected first digit of room number
-const FLOOR_DIGIT_MAP: Record<Floor, string> = {
+// Map floor to expected first digit of room number (null = free-form)
+const FLOOR_DIGIT_MAP: Record<Floor, string | null> = {
   FCC1: '1',
   FCC4: '4',
   FCC5: '5',
   FCC6: '6',
+  '1WC': '1',
+  HRP: '1',
+  'L&D': null,
+  OTF: '1',
 };
 
 export default function DispatcherView() {
@@ -47,6 +52,7 @@ export default function DispatcherView() {
   const [selectedRequest, setSelectedRequest] = useState<TransportRequest | null>(null);
   const [showOtherDestination, setShowOtherDestination] = useState(false);
   const [roomError, setRoomError] = useState('');
+  const [showOtherFloors, setShowOtherFloors] = useState(false);
   const [showBreakModal, setShowBreakModal] = useState(false);
   const [breakLoading, setBreakLoading] = useState(false);
   const [historyRequestId, setHistoryRequestId] = useState<number | null>(null);
@@ -139,11 +145,15 @@ export default function DispatcherView() {
   );
 
   const validateRoomNumber = (floor: Floor, room: string): boolean => {
+    // "Nursery" is always valid
+    if (room.toLowerCase() === 'nursery') return true;
+    // Free-form floors (e.g. L&D) accept anything
+    const expectedDigit = FLOOR_DIGIT_MAP[floor];
+    if (expectedDigit === null) return true;
     // Get the first digit of the room number
     const match = room.match(/^(\d)/);
     if (!match) return true; // Allow non-numeric rooms (letters only)
     const firstDigit = match[1];
-    const expectedDigit = FLOOR_DIGIT_MAP[floor];
     return firstDigit === expectedDigit;
   };
 
@@ -157,15 +167,40 @@ export default function DispatcherView() {
     }
   };
 
+  const handleRoomBlur = () => {
+    // Auto-expand "Nur" or "nur" to "Nursery"
+    if (/^nur(sery)?$/i.test(formData.room_number)) {
+      setFormData((prev) => ({ ...prev, room_number: 'Nursery' }));
+      setRoomError('');
+    }
+  };
+
   const handleFloorChange = (floor: Floor) => {
     setFormData((prev) => ({ ...prev, origin_floor: floor }));
     if (formData.room_number && !validateRoomNumber(floor, formData.room_number)) {
       const expectedDigit = FLOOR_DIGIT_MAP[floor];
-      setRoomError(`Room should start with ${expectedDigit} for ${floor}`);
+      if (expectedDigit !== null) {
+        setRoomError(`Room should start with ${expectedDigit} for ${floor}`);
+      } else {
+        setRoomError('');
+      }
     } else {
       setRoomError('');
     }
   };
+
+  const handleMainFloorChange = (value: string) => {
+    if (value === 'Other') {
+      setShowOtherFloors(true);
+      // Default to first "Other" floor
+      handleFloorChange('1WC');
+    } else {
+      setShowOtherFloors(false);
+      handleFloorChange(value as Floor);
+    }
+  };
+
+  const isSecretary = user?.role === 'secretary';
 
   const handleCreateRequest = async (assignTo?: number, autoAssign?: boolean) => {
     if (!formData.room_number) return;
@@ -184,6 +219,7 @@ export default function DispatcherView() {
       priority: 'routine',
       notes: '',
     });
+    setShowOtherFloors(false);
     setShowOtherDestination(false);
     setRoomError('');
     await refreshData();
@@ -330,9 +366,9 @@ export default function DispatcherView() {
                       <RequestCard
                         key={request.id}
                         request={request}
-                        onAssign={() => openAssignModal(request)}
-                        onCancel={() => handleCancelRequest(request.id)}
-                        showAutoAssign
+                        onAssign={!isSecretary ? () => openAssignModal(request) : undefined}
+                        onCancel={!isSecretary ? () => handleCancelRequest(request.id) : undefined}
+                        showAutoAssign={!isSecretary}
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
                         onClickCard={() => setHistoryRequestId(request.id)}
@@ -353,8 +389,8 @@ export default function DispatcherView() {
                       <RequestCard
                         key={request.id}
                         request={request}
-                        onAssign={() => openAssignModal(request)}
-                        onCancel={() => handleCancelRequest(request.id)}
+                        onAssign={!isSecretary ? () => openAssignModal(request) : undefined}
+                        onCancel={!isSecretary ? () => handleCancelRequest(request.id) : undefined}
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
                         onClickCard={() => setHistoryRequestId(request.id)}
@@ -375,8 +411,8 @@ export default function DispatcherView() {
                       <RequestCard
                         key={request.id}
                         request={request}
-                        onAssign={() => openAssignModal(request)}
-                        onCancel={() => handleCancelRequest(request.id)}
+                        onAssign={!isSecretary ? () => openAssignModal(request) : undefined}
+                        onCancel={!isSecretary ? () => handleCancelRequest(request.id) : undefined}
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
                         onClickCard={() => setHistoryRequestId(request.id)}
@@ -401,16 +437,30 @@ export default function DispatcherView() {
                 <div>
                   <label className="label">Floor</label>
                   <select
-                    value={formData.origin_floor}
-                    onChange={(e) => handleFloorChange(e.target.value as Floor)}
+                    value={showOtherFloors ? 'Other' : formData.origin_floor}
+                    onChange={(e) => handleMainFloorChange(e.target.value)}
                     className="input"
                   >
-                    {FLOORS.map((floor) => (
+                    {MAIN_FLOORS.map((floor) => (
                       <option key={floor} value={floor}>
                         {floor}
                       </option>
                     ))}
+                    <option value="Other">Other</option>
                   </select>
+                  {showOtherFloors && (
+                    <select
+                      value={formData.origin_floor}
+                      onChange={(e) => handleFloorChange(e.target.value as Floor)}
+                      className="input mt-2"
+                    >
+                      {OTHER_FLOORS.map((floor) => (
+                        <option key={floor} value={floor}>
+                          {floor}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>
@@ -419,6 +469,7 @@ export default function DispatcherView() {
                     type="text"
                     value={formData.room_number}
                     onChange={(e) => handleRoomChange(e.target.value)}
+                    onBlur={handleRoomBlur}
                     className={`input ${roomError ? 'border-yellow-500' : ''}`}
                     placeholder="e.g., 412"
                   />
@@ -512,15 +563,17 @@ export default function DispatcherView() {
                   >
                     Post to Queue
                   </button>
-                  <button
-                    onClick={() => handleCreateRequest(undefined, true)}
-                    disabled={!formData.room_number || loading || availableTransporters.length === 0}
-                    className="flex-1 bg-accent text-white rounded-lg hover:bg-accent-600 disabled:opacity-50 py-2 px-4"
-                  >
-                    Auto-Assign
-                  </button>
+                  {!isSecretary && (
+                    <button
+                      onClick={() => handleCreateRequest(undefined, true)}
+                      disabled={!formData.room_number || loading || availableTransporters.length === 0}
+                      className="flex-1 bg-accent text-white rounded-lg hover:bg-accent-600 disabled:opacity-50 py-2 px-4"
+                    >
+                      Auto-Assign
+                    </button>
+                  )}
                 </div>
-                {availableTransporters.length > 0 && (
+                {!isSecretary && availableTransporters.length > 0 && (
                   <select
                     onChange={(e) => {
                       if (e.target.value) {

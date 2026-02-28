@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../utils/api';
-import { Floor } from '../../types';
 import {
   BarChart,
   Bar,
@@ -13,7 +12,7 @@ import {
 } from 'recharts';
 
 interface StaffingData {
-  floor: Floor;
+  floor: string;
   active_transporters: number;
   available_transporters: number;
   busy_transporters: number;
@@ -27,11 +26,12 @@ interface StaffingMetricsProps {
   };
 }
 
-const FLOOR_COLORS: Record<Floor, string> = {
+const FLOOR_COLORS: Record<string, string> = {
   FCC1: '#3B82F6',
   FCC4: '#10B981',
   FCC5: '#F59E0B',
   FCC6: '#8B5CF6',
+  Other: '#6b7280',
 };
 
 export default function StaffingMetrics({ dateRange }: StaffingMetricsProps) {
@@ -67,7 +67,7 @@ export default function StaffingMetrics({ dateRange }: StaffingMetricsProps) {
     Available: data.available_transporters,
     Busy: data.busy_transporters,
     'On Break': data.on_break_transporters,
-    fill: FLOOR_COLORS[data.floor],
+    fill: FLOOR_COLORS[data.floor] || '#6b7280',
   }));
 
   const totalActive = staffingData.reduce((sum, d) => sum + d.active_transporters, 0);
@@ -121,7 +121,7 @@ export default function StaffingMetrics({ dateRange }: StaffingMetricsProps) {
           <div
             key={data.floor}
             className="p-3 rounded-lg border"
-            style={{ borderColor: FLOOR_COLORS[data.floor] }}
+            style={{ borderColor: FLOOR_COLORS[data.floor] || '#6b7280' }}
           >
             <h4 className="font-medium text-gray-900 mb-2">{data.floor}</h4>
             <div className="space-y-1 text-sm">

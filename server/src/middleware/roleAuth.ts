@@ -1,9 +1,10 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest, UserRole } from '../types/index.js';
 
-// Role hierarchy: manager > supervisor > dispatcher > transporter
+// Role hierarchy: manager > supervisor > dispatcher > secretary > transporter
 const roleHierarchy: Record<UserRole, number> = {
   transporter: 1,
+  secretary: 1.5,
   dispatcher: 2,
   supervisor: 3,
   manager: 4,
@@ -52,6 +53,9 @@ export const canDispatch = requireMinimumRole('dispatcher');
 
 // Check if user can view reports (supervisor and above)
 export const canViewReports = requireMinimumRole('supervisor');
+
+// Check if user can create requests (secretary and above)
+export const canCreateRequest = requireMinimumRole('secretary');
 
 // Check if user can manage users (manager only)
 export const canManageUsers = requireRole('manager');

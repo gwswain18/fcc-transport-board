@@ -1,4 +1,4 @@
-import { Floor, ReportSummary, TransporterStats } from './index';
+import { ReportSummary, TransporterStats } from './index';
 
 export type ReportType = 'global' | 'individual';
 
@@ -6,7 +6,7 @@ export interface ReportConfig {
   reportType: ReportType;
   startDate: string;
   endDate: string;
-  floors: Floor[];
+  floors: string[];
   transporterId?: number;
   transporterName?: string;
   metrics: MetricSelection;
@@ -60,7 +60,7 @@ export interface TimeMetrics {
 }
 
 export interface FloorAnalysisData {
-  floor: Floor;
+  floor: string;
   total_requests: number;
   avg_response_time: number;
   avg_pickup_time: number;

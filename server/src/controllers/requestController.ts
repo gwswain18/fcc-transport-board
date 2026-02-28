@@ -15,7 +15,7 @@ import { logCreate, logStatusChange, logReassignment } from '../services/auditSe
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import logger from '../utils/logger.js';
 
-const validFloors: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+const validFloors: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6', '1WC', 'HRP', 'L&D', 'OTF'];
 const validPriorities: Priority[] = ['routine', 'stat'];
 
 const getRequestWithRelations = async (requestId: number) => {

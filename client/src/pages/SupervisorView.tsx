@@ -17,7 +17,8 @@ import Modal from '../components/common/Modal';
 import AlertBanners from '../components/common/AlertBanners';
 import { formatMinutes, formatTime } from '../utils/formatters';
 
-const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+const MAIN_FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+const OTHER_FLOORS: Floor[] = ['1WC', 'HRP', 'L&D', 'OTF'];
 const DESTINATIONS = ['Atrium', 'Radiology', 'Lab', 'OR', 'NICU', 'Other'];
 
 export default function SupervisorView() {
@@ -25,6 +26,7 @@ export default function SupervisorView() {
   const [loading, setLoading] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<TransportRequest | null>(null);
+  const [showOtherFloors, setShowOtherFloors] = useState(false);
   const [showOtherDestination, setShowOtherDestination] = useState(false);
   const [shiftSummary, setShiftSummary] = useState<ReportSummary | null>(null);
   const [transporterPerformance, setTransporterPerformance] = useState<TransporterStats[]>([]);
@@ -55,6 +57,26 @@ export default function SupervisorView() {
     }
     if (transporterRes.data?.transporters) {
       setTransporterPerformance(transporterRes.data.transporters);
+    }
+  };
+
+  const handleFloorChange = (floor: Floor) => {
+    setFormData((prev) => ({ ...prev, origin_floor: floor }));
+  };
+
+  const handleMainFloorChange = (value: string) => {
+    if (value === 'Other') {
+      setShowOtherFloors(true);
+      handleFloorChange('1WC');
+    } else {
+      setShowOtherFloors(false);
+      handleFloorChange(value as Floor);
+    }
+  };
+
+  const handleRoomBlur = () => {
+    if (/^nur(sery)?$/i.test(formData.room_number)) {
+      setFormData((prev) => ({ ...prev, room_number: 'Nursery' }));
     }
   };
 
@@ -96,6 +118,7 @@ export default function SupervisorView() {
       priority: 'routine',
       notes: '',
     });
+    setShowOtherFloors(false);
     setShowOtherDestination(false);
     await refreshData();
     await loadShiftSummary();
@@ -317,21 +340,30 @@ export default function SupervisorView() {
                 <div>
                   <label className="label">Floor</label>
                   <select
-                    value={formData.origin_floor}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        origin_floor: e.target.value as Floor,
-                      }))
-                    }
+                    value={showOtherFloors ? 'Other' : formData.origin_floor}
+                    onChange={(e) => handleMainFloorChange(e.target.value)}
                     className="input"
                   >
-                    {FLOORS.map((floor) => (
+                    {MAIN_FLOORS.map((floor) => (
                       <option key={floor} value={floor}>
                         {floor}
                       </option>
                     ))}
+                    <option value="Other">Other</option>
                   </select>
+                  {showOtherFloors && (
+                    <select
+                      value={formData.origin_floor}
+                      onChange={(e) => handleFloorChange(e.target.value as Floor)}
+                      className="input mt-2"
+                    >
+                      {OTHER_FLOORS.map((floor) => (
+                        <option key={floor} value={floor}>
+                          {floor}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div>
@@ -342,6 +374,7 @@ export default function SupervisorView() {
                     onChange={(e) =>
                       setFormData((prev) => ({ ...prev, room_number: e.target.value }))
                     }
+                    onBlur={handleRoomBlur}
                     className="input"
                     placeholder="e.g., 412"
                   />

@@ -37,8 +37,12 @@ export const getSummary = async (
     }
 
     if (floor) {
-      whereClause += ` AND origin_floor = $${paramIndex++}`;
-      params.push(floor);
+      if (floor === 'Other') {
+        whereClause += ` AND origin_floor IN ('1WC', 'HRP', 'L&D', 'OTF')`;
+      } else {
+        whereClause += ` AND origin_floor = $${paramIndex++}`;
+        params.push(floor);
+      }
     }
 
     if (transporter_id) {
@@ -299,11 +303,11 @@ export const getJobsByFloor = async (
 
     const result = await query(
       `SELECT
-        origin_floor as floor,
+        CASE WHEN origin_floor::text IN ('1WC', 'HRP', 'L&D', 'OTF') THEN 'Other' ELSE origin_floor::text END AS floor,
         COUNT(*) as count
        FROM transport_requests
        ${whereClause}
-       GROUP BY origin_floor
+       GROUP BY CASE WHEN origin_floor::text IN ('1WC', 'HRP', 'L&D', 'OTF') THEN 'Other' ELSE origin_floor::text END
        ORDER BY floor`,
       params
     );
@@ -421,11 +425,16 @@ export const getStaffingByFloor = async (
   res: Response
 ): Promise<void> => {
   try {
-    const floors = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+    const floors = ['FCC1', 'FCC4', 'FCC5', 'FCC6', 'Other'];
     const staffing = [];
 
     for (const floor of floors) {
       // Get all active transporters for this floor
+      const floorCondition = floor === 'Other'
+        ? `u.primary_floor::text IN ('1WC', 'HRP', 'L&D', 'OTF')`
+        : `(u.primary_floor = $1 OR $1 = '')`;
+      const floorParams = floor === 'Other' ? [] : [floor];
+
       const result = await query(
         `SELECT
           ts.status,
@@ -435,10 +444,10 @@ export const getStaffingByFloor = async (
          WHERE u.role = 'transporter'
            AND u.is_active = true
            AND u.include_in_analytics = true
-           AND (u.primary_floor = $1 OR $1 = '')
+           AND ${floorCondition}
            AND ts.status != 'offline'
          GROUP BY ts.status`,
-        [floor]
+        floorParams
       );
 
       let available = 0;
@@ -1020,12 +1029,14 @@ export const getFloorAnalysis = async (
 
     whereClause += ` ${ANALYTICS_FILTER}`;
 
-    const floors = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
+    const floors = ['FCC1', 'FCC4', 'FCC5', 'FCC6', 'Other'];
     const floorData = [];
 
     for (const floor of floors) {
-      const floorWhere = `${whereClause} AND origin_floor = $${paramIndex}`;
-      const floorParams = [...params, floor];
+      const floorWhere = floor === 'Other'
+        ? `${whereClause} AND origin_floor::text IN ('1WC', 'HRP', 'L&D', 'OTF')`
+        : `${whereClause} AND origin_floor = $${paramIndex}`;
+      const floorParams = floor === 'Other' ? [...params] : [...params, floor];
 
       // Get aggregate stats (excluding PCT transfers from timing calculations)
       const statsResult = await query(

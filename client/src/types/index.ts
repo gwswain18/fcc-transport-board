@@ -1,4 +1,4 @@
-export type UserRole = 'transporter' | 'dispatcher' | 'supervisor' | 'manager';
+export type UserRole = 'transporter' | 'secretary' | 'dispatcher' | 'supervisor' | 'manager';
 
 // Changed 'off_unit' to 'other' per feature #4
 export type TransporterStatus =
@@ -11,7 +11,7 @@ export type TransporterStatus =
   | 'other'
   | 'offline';
 
-export type Floor = 'FCC1' | 'FCC4' | 'FCC5' | 'FCC6';
+export type Floor = 'FCC1' | 'FCC4' | 'FCC5' | 'FCC6' | '1WC' | 'HRP' | 'L&D' | 'OTF';
 
 export type Priority = 'routine' | 'stat';
 

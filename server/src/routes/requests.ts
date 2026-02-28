@@ -11,14 +11,14 @@ import {
 import { getRequestHistory } from '../controllers/requestHistoryController.js';
 import { addDelays, getDelays } from '../controllers/delayController.js';
 import { authenticate } from '../middleware/auth.js';
-import { canDispatch } from '../middleware/roleAuth.js';
+import { canDispatch, canCreateRequest } from '../middleware/roleAuth.js';
 
 const router = Router();
 
 router.use(authenticate);
 
 router.get('/', getRequests);
-router.post('/', canDispatch, createRequest);
+router.post('/', canCreateRequest, createRequest);
 router.put('/:id', updateRequest);
 router.put('/:id/cancel', canDispatch, cancelRequest);
 router.put('/:id/claim', claimRequest);

@@ -35,6 +35,7 @@ function ProtectedRoute({
     // Redirect to appropriate view based on role
     const roleRoutes: Record<string, string> = {
       transporter: '/transporter',
+      secretary: '/dashboard',
       dispatcher: '/dashboard',
       supervisor: '/supervisor',
       manager: '/analytics',
@@ -62,6 +63,7 @@ function RoleBasedRedirect() {
 
   const roleRoutes: Record<string, string> = {
     transporter: '/transporter',
+    secretary: '/dashboard',
     dispatcher: '/dashboard',
     supervisor: '/supervisor',
     manager: '/analytics',
@@ -91,7 +93,7 @@ export default function App() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute allowedRoles={['dispatcher', 'supervisor', 'manager']}>
+          <ProtectedRoute allowedRoles={['secretary', 'dispatcher', 'supervisor', 'manager']}>
             <DispatcherView />
           </ProtectedRoute>
         }
