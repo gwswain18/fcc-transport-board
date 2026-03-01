@@ -41,5 +41,9 @@
   },
   "devDependencies": {
     "tsx": "^4.19.0"
+  },
+  "overrides": {
+    "fast-xml-parser": "^5.3.8",
+    "tar": "^7.5.8"
   }
 }
