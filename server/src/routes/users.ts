@@ -13,6 +13,8 @@ import {
   getPendingCount,
   approveUser,
   rejectUser,
+  getActiveUsers,
+  endUserSession,
 } from '../controllers/userController.js';
 import { getUserDelays } from '../controllers/delayController.js';
 import { requireApproved } from '../middleware/auth.js';
@@ -24,6 +26,10 @@ router.use(authenticate);
 
 // Get transporters (dispatcher+)
 router.get('/transporters', requireApproved, canDispatch, getTransporters);
+
+// Active users management (manager only)
+router.get('/active', requireApproved, canManageUsers, getActiveUsers);
+router.post('/:id/end-session', requireApproved, canManageUsers, endUserSession);
 
 // Pending user management (manager only)
 router.get('/pending', canManageUsers, getPendingUsers);

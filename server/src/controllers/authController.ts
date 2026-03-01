@@ -27,7 +27,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const result = await query(
       `SELECT id, email, password_hash, first_name, last_name, role, is_active,
               primary_floor, phone_number, include_in_analytics, is_temp_account,
-              auth_provider, provider_id, approval_status,
+              auth_provider, provider_id, approval_status, lockout_until,
               created_at, updated_at
        FROM users WHERE email = $1`,
       [email.toLowerCase()]
@@ -56,6 +56,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     if (!isValidPassword) {
       res.status(401).json({ error: 'Invalid email or password' });
+      return;
+    }
+
+    // Check if user is locked out
+    if (user.lockout_until && new Date(user.lockout_until) > new Date()) {
+      const remainingMs = new Date(user.lockout_until).getTime() - Date.now();
+      const remainingMin = Math.ceil(remainingMs / 60000);
+      res.status(403).json({ error: `Account is temporarily locked. Try again in ${remainingMin} minute${remainingMin !== 1 ? 's' : ''}.` });
       return;
     }
 
@@ -89,6 +97,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     res.json({
       user: safeUser,
       activeShift,
+      isSecretary: user.role === 'secretary',
       isPending: user.approval_status === 'pending',
       message: user.approval_status === 'pending' ? 'Account pending approval' : 'Login successful',
     });
@@ -108,6 +117,14 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
       // End any active dispatcher session for this user
       await query(
         `UPDATE active_dispatchers
+         SET ended_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1 AND ended_at IS NULL`,
+        [authReq.user.id]
+      );
+
+      // End any active secretary session for this user
+      await query(
+        `UPDATE active_secretaries
          SET ended_at = CURRENT_TIMESTAMP
          WHERE user_id = $1 AND ended_at IS NULL`,
         [authReq.user.id]
@@ -141,6 +158,17 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
         }));
 
         io.emit('dispatcher_changed', { dispatchers });
+
+        // Broadcast secretary change
+        const secretaryResult = await query(
+          `SELECT a_s.*, u.email
+           FROM active_secretaries a_s
+           JOIN users u ON a_s.user_id = u.id
+           WHERE a_s.ended_at IS NULL
+           ORDER BY a_s.started_at ASC`
+        );
+
+        io.emit('secretary_changed', { secretaries: secretaryResult.rows });
       }
     }
 
@@ -342,6 +370,79 @@ export const recoverUsername = async (req: Request, res: Response): Promise<void
     res.json({ message: 'If an account exists with that email, your username has been sent' });
   } catch (error) {
     logger.error('Recover username error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Register secretary session (per-session identity)
+export const registerSecretarySession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    if (req.user.role !== 'secretary') {
+      res.status(403).json({ error: 'Only secretary accounts can register a session' });
+      return;
+    }
+
+    const { first_name, last_name, phone_extension } = req.body;
+
+    if (!first_name || !last_name) {
+      res.status(400).json({ error: 'First name and last name are required' });
+      return;
+    }
+
+    // End any prior active session for this user
+    await query(
+      `UPDATE active_secretaries SET ended_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND ended_at IS NULL`,
+      [req.user.id]
+    );
+
+    // Insert new session
+    await query(
+      `INSERT INTO active_secretaries (user_id, session_first_name, session_last_name, phone_extension)
+       VALUES ($1, $2, $3, $4)`,
+      [req.user.id, first_name, last_name, phone_extension || null]
+    );
+
+    // Broadcast secretary change via socket
+    const io = getIO();
+    if (io) {
+      const secretaryResult = await query(
+        `SELECT a_s.*, u.email
+         FROM active_secretaries a_s
+         JOIN users u ON a_s.user_id = u.id
+         WHERE a_s.ended_at IS NULL
+         ORDER BY a_s.started_at ASC`
+      );
+
+      io.emit('secretary_changed', { secretaries: secretaryResult.rows });
+    }
+
+    res.json({ message: 'Secretary session registered' });
+  } catch (error) {
+    logger.error('Register secretary session error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get active secretaries
+export const getActiveSecretaries = async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const result = await query(
+      `SELECT a_s.*, u.email
+       FROM active_secretaries a_s
+       JOIN users u ON a_s.user_id = u.id
+       WHERE a_s.ended_at IS NULL
+       ORDER BY a_s.started_at ASC`
+    );
+
+    res.json({ secretaries: result.rows });
+  } catch (error) {
+    logger.error('Get active secretaries error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

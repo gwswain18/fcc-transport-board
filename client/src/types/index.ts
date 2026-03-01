@@ -189,6 +189,16 @@ export interface ActiveDispatcher {
   user?: User;
 }
 
+// Active secretary (per-session identity)
+export interface ActiveSecretary {
+  id: number;
+  user_id: number;
+  session_first_name: string;
+  session_last_name: string;
+  phone_extension?: string;
+  started_at: string;
+}
+
 // Break alert
 export interface BreakAlert {
   user_id: number;

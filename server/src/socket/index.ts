@@ -92,6 +92,21 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
         logger.error('Error sending initial dispatcher data:', error);
       }
 
+      // Send initial active secretaries to newly connected client
+      try {
+        const secretaryResult = await query(
+          `SELECT a_s.*, u.email
+           FROM active_secretaries a_s
+           JOIN users u ON a_s.user_id = u.id
+           WHERE a_s.ended_at IS NULL
+           ORDER BY a_s.started_at ASC`
+        );
+
+        socket.emit('secretary_changed', { secretaries: secretaryResult.rows });
+      } catch (error) {
+        logger.error('Error sending initial secretary data:', error);
+      }
+
       // Close any open offline_periods on reconnection (always, regardless of shift/job)
       await query(
         `UPDATE offline_periods
@@ -146,6 +161,29 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
         if (!hasOtherConnections) {
           // User has no more active connections
           await removeHeartbeat(disconnectedUserId);
+
+          // End secretary session on disconnect
+          const secretarySession = await query(
+            `SELECT id FROM active_secretaries WHERE user_id = $1 AND ended_at IS NULL`,
+            [disconnectedUserId]
+          );
+          if (secretarySession.rows.length > 0) {
+            await query(
+              `UPDATE active_secretaries SET ended_at = CURRENT_TIMESTAMP
+               WHERE user_id = $1 AND ended_at IS NULL`,
+              [disconnectedUserId]
+            );
+
+            // Broadcast updated secretary list
+            const secretaryResult = await query(
+              `SELECT a_s.*, u.email
+               FROM active_secretaries a_s
+               JOIN users u ON a_s.user_id = u.id
+               WHERE a_s.ended_at IS NULL
+               ORDER BY a_s.started_at ASC`
+            );
+            io?.emit('secretary_changed', { secretaries: secretaryResult.rows });
+          }
 
           // Mark transporter as offline if they have no active jobs
           const jobResult = await query(

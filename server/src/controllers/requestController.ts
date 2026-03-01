@@ -24,10 +24,13 @@ const getRequestWithRelations = async (requestId: number) => {
             creator.first_name as creator_first_name,
             creator.last_name as creator_last_name,
             assignee.first_name as assignee_first_name,
-            assignee.last_name as assignee_last_name
+            assignee.last_name as assignee_last_name,
+            assigner.first_name as assigner_first_name,
+            assigner.last_name as assigner_last_name
      FROM transport_requests tr
      LEFT JOIN users creator ON tr.created_by = creator.id
      LEFT JOIN users assignee ON tr.assigned_to = assignee.id
+     LEFT JOIN users assigner ON tr.assigned_by = assigner.id
      WHERE tr.id = $1`,
     [requestId]
   );
@@ -47,6 +50,13 @@ const getRequestWithRelations = async (requestId: number) => {
           id: row.assigned_to,
           first_name: row.assignee_first_name,
           last_name: row.assignee_last_name,
+        }
+      : null,
+    assigner: row.assigned_by
+      ? {
+          id: row.assigned_by,
+          first_name: row.assigner_first_name,
+          last_name: row.assigner_last_name,
         }
       : null,
   };
@@ -202,8 +212,8 @@ export const createRequest = async (
     const result = await query(
       `INSERT INTO transport_requests
        (origin_floor, room_number, destination, priority, notes, status,
-        created_by, assigned_to, assigned_at, assignment_method)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        created_by, assigned_to, assigned_at, assignment_method, assigned_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         origin_floor,
@@ -216,6 +226,7 @@ export const createRequest = async (
         finalAssignedTo || null,
         finalAssignedTo ? new Date().toISOString() : null,
         assignmentMethod,
+        finalAssignedTo ? req.user.id : null,
       ]
     );
 
@@ -259,7 +270,7 @@ export const createRequest = async (
 
     // Handle auto-assign after creation if requested
     if (auto_assign && !finalAssignedTo) {
-      const autoAssignResult = await autoAssignRequest(requestId);
+      const autoAssignResult = await autoAssignRequest(requestId, req.user.id);
       if (autoAssignResult.success) {
         request = await getRequestWithRelations(requestId);
 
@@ -430,6 +441,8 @@ export const updateRequest = async (
       params.push(assigned_to || null);
       updates.push(`assignment_method = $${paramIndex++}`);
       params.push('manual');
+      updates.push(`assigned_by = $${paramIndex++}`);
+      params.push(req.user.id);
 
       if (assigned_to && !currentRequest.assigned_to) {
         updates.push(`status = $${paramIndex++}`);
@@ -709,7 +722,7 @@ export const autoAssign = async (
 
     const { id } = req.params;
 
-    const result = await autoAssignRequest(parseInt(id));
+    const result = await autoAssignRequest(parseInt(id), req.user!.id);
 
     if (!result.success) {
       res.status(400).json({ error: result.reason });

@@ -22,6 +22,7 @@ interface CompletedJob {
   pct_assigned_at: string | null;
   creator: { first_name: string; last_name: string } | null;
   assignee: { first_name: string; last_name: string } | null;
+  assigner: { first_name: string; last_name: string } | null;
   reassignments: Array<{ from_name: string; to_name: string; timestamp: string }>;
   delays: Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>;
   cancelled_by: { first_name: string; last_name: string } | null;
@@ -334,6 +335,9 @@ function JobCard({ job, expanded, onToggle }: { job: CompletedJob; expanded: boo
                 <div><span className="text-gray-500">Assigned to:</span> <span className="font-medium"><PersonName person={job.assignee} status={job.status} /></span></div>
                 {job.assignment_method && (
                   <div><span className="text-gray-500">Assignment:</span> <span className="font-medium capitalize">{job.assignment_method.replace('_', ' ')}</span></div>
+                )}
+                {job.assigner && (
+                  <div><span className="text-gray-500">Assigned by:</span> <span className="font-medium">{job.assigner.first_name} {job.assigner.last_name}</span></div>
                 )}
                 {job.notes && (
                   <div className="mt-2 p-2 bg-yellow-50 rounded text-xs text-gray-600">

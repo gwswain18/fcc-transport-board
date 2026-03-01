@@ -6,8 +6,8 @@ interface AuthContextType {
   user: User | null;
   activeShift: ShiftLog | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean }>;
-  oauthLogin: (provider: string, idToken: string) => Promise<{ success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean; isSecretary?: boolean }>;
+  oauthLogin: (provider: string, idToken: string) => Promise<{ success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean; isSecretary?: boolean }>;
   logout: () => Promise<void>;
   setActiveShift: (shift: ShiftLog | null) => void;
   refreshUser: () => Promise<void>;
@@ -35,13 +35,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
-  const handleLoginResponse = (response: { data?: { user: User; activeShift?: ShiftLog; isPending?: boolean }; error?: string }) => {
+  const handleLoginResponse = (response: { data?: { user: User; activeShift?: ShiftLog; isPending?: boolean; isSecretary?: boolean }; error?: string }) => {
     if (response.data?.user) {
       setUser(response.data.user);
 
       // Check if pending approval
       if (response.data.isPending) {
         return { success: true, isPending: true };
+      }
+
+      // Check if secretary needs session setup
+      if (response.data.isSecretary) {
+        return { success: true, isSecretary: true };
       }
 
       // Check if transporter needs to start shift

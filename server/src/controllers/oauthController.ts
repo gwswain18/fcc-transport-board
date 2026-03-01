@@ -50,6 +50,12 @@ export const oauthLogin = async (req: Request, res: Response): Promise<void> => 
       user = result.rows[0];
 
       if (user) {
+        // Block OAuth login for temp accounts
+        if (user.is_temp_account) {
+          res.status(403).json({ error: 'Temp accounts cannot use OAuth sign-in' });
+          return;
+        }
+
         // Existing local user — auto-link OAuth account
         if (user.auth_provider === 'local' && !user.provider_id) {
           await query(

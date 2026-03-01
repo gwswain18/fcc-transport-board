@@ -222,8 +222,8 @@ export default function Profile() {
               </div>
             )}
 
-            {/* Link OAuth Account (local users without OAuth linked) */}
-            {isLocal && !hasOAuthLinked && (
+            {/* Link OAuth Account (local users without OAuth linked, not temp accounts) */}
+            {isLocal && !hasOAuthLinked && !profile?.is_temp_account && (
               <div className="card">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Link OAuth Account</h3>
                 <p className="text-sm text-gray-600 mb-4">
@@ -245,6 +245,8 @@ export default function Profile() {
                     shape="rectangular"
                     width="200"
                   />
+                  {/* Microsoft link button hidden — kept for future re-enable */}
+                  {false && (
                   <button
                     onClick={handleMicrosoftLink}
                     className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
@@ -257,6 +259,7 @@ export default function Profile() {
                     </svg>
                     Link Microsoft
                   </button>
+                  )}
                 </div>
               </div>
             )}

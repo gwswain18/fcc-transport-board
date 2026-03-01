@@ -8,6 +8,7 @@ import FloorAnalysis from '../components/analytics/FloorAnalysis';
 import DelayReport from '../components/analytics/DelayReport';
 import JobActivityLog from '../components/manager/JobActivityLog';
 import ShiftLogTab from '../components/manager/ShiftLogTab';
+import ActiveUsersTab from '../components/manager/ActiveUsersTab';
 import ReportBuilder from '../components/reports/ReportBuilder';
 import {
   BarChart,
@@ -22,7 +23,7 @@ import {
 const FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
 const FLOOR_FILTER_OPTIONS = [...FLOORS, 'Other'] as const;
 
-type TabType = 'overview' | 'floors' | 'delays' | 'activity' | 'shifts' | 'reports';
+type TabType = 'overview' | 'floors' | 'delays' | 'activity' | 'shifts' | 'reports' | 'active-users';
 
 export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
@@ -187,6 +188,16 @@ export default function ManagerDashboard() {
           >
             Reports
           </button>
+          <button
+            onClick={() => setActiveTab('active-users')}
+            className={`px-6 py-3 font-medium text-sm ${
+              activeTab === 'active-users'
+                ? 'border-b-2 border-primary text-primary'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Active Users
+          </button>
         </div>
 
         {/* Floor Analysis Tab */}
@@ -214,6 +225,9 @@ export default function ManagerDashboard() {
 
         {/* Shift Logs Tab */}
         {activeTab === 'shifts' && <ShiftLogTab />}
+
+        {/* Active Users Tab */}
+        {activeTab === 'active-users' && <ActiveUsersTab />}
 
         {/* Reports Tab */}
         {activeTab === 'reports' && (

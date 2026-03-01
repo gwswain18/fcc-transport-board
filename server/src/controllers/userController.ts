@@ -5,6 +5,8 @@ import { AuthenticatedRequest, UserRole, Floor } from '../types/index.js';
 import { logCreate, logUpdate, logDelete } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import { isValidEmail, isValidPhoneNumber } from '../utils/validation.js';
+import { getOnlineUsers, removeHeartbeat } from '../services/heartbeatService.js';
+import { getIO, emitToUser } from '../socket/index.js';
 import logger from '../utils/logger.js';
 
 const validFloors: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6', '1WC', 'HRP', 'L&D', 'OTF'];
@@ -560,6 +562,142 @@ export const rejectUser = async (
     res.json({ message: 'User rejected' });
   } catch (error) {
     logger.error('Reject user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Get all currently online users
+export const getActiveUsers = async (
+  _req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const onlineUserIds = await getOnlineUsers();
+
+    if (onlineUserIds.length === 0) {
+      res.json({ users: [] });
+      return;
+    }
+
+    const result = await query(
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.is_temp_account,
+              uh.last_heartbeat as login_time,
+              a_s.session_first_name, a_s.session_last_name, a_s.phone_extension
+       FROM users u
+       JOIN user_heartbeats uh ON u.id = uh.user_id
+       LEFT JOIN active_secretaries a_s ON u.id = a_s.user_id AND a_s.ended_at IS NULL
+       WHERE u.id = ANY($1)
+       ORDER BY u.role, u.last_name, u.first_name`,
+      [onlineUserIds]
+    );
+
+    const users = result.rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      first_name: row.session_first_name || row.first_name,
+      last_name: row.session_last_name || row.last_name,
+      role: row.role,
+      is_temp_account: row.is_temp_account,
+      login_time: row.login_time,
+      phone_extension: row.phone_extension,
+    }));
+
+    res.json({ users });
+  } catch (error) {
+    logger.error('Get active users error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// End a user's session (manager action)
+export const endUserSession = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = parseInt(id);
+
+    // Set lockout for 1 hour
+    await query(
+      `UPDATE users SET lockout_until = NOW() + INTERVAL '1 hour' WHERE id = $1`,
+      [userId]
+    );
+
+    // Remove heartbeat
+    await removeHeartbeat(userId);
+
+    // End dispatcher session
+    await query(
+      `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND ended_at IS NULL`,
+      [userId]
+    );
+
+    // End secretary session
+    await query(
+      `UPDATE active_secretaries SET ended_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND ended_at IS NULL`,
+      [userId]
+    );
+
+    // End transporter shift
+    await query(
+      `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND shift_end IS NULL`,
+      [userId]
+    );
+
+    // Set transporter status to offline
+    await query(
+      `UPDATE transporter_status SET status = 'offline', updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1`,
+      [userId]
+    );
+
+    // Emit force_logout to the user via socket
+    emitToUser(userId, 'force_logout', { message: 'Your session has been ended by a manager.' });
+
+    // Broadcast updated dispatcher/secretary lists
+    const io = getIO();
+    if (io) {
+      const dispatcherResult = await query(
+        `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
+         FROM active_dispatchers ad
+         JOIN users u ON ad.user_id = u.id
+         WHERE ad.ended_at IS NULL
+         ORDER BY ad.is_primary DESC, ad.started_at ASC`
+      );
+      const dispatchers = dispatcherResult.rows.map((row) => ({
+        id: row.id,
+        user_id: row.user_id,
+        is_primary: row.is_primary,
+        on_break: row.on_break,
+        contact_info: row.contact_info,
+        started_at: row.started_at,
+        user: {
+          id: row.user_id,
+          first_name: row.first_name,
+          last_name: row.last_name,
+          email: row.email,
+          phone_number: row.phone_number,
+        },
+      }));
+      io.emit('dispatcher_changed', { dispatchers });
+
+      const secretaryResult = await query(
+        `SELECT a_s.*, u.email
+         FROM active_secretaries a_s
+         JOIN users u ON a_s.user_id = u.id
+         WHERE a_s.ended_at IS NULL
+         ORDER BY a_s.started_at ASC`
+      );
+      io.emit('secretary_changed', { secretaries: secretaryResult.rows });
+    }
+
+    res.json({ message: 'User session ended' });
+  } catch (error) {
+    logger.error('End user session error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

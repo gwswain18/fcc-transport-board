@@ -1127,7 +1127,7 @@ export const getCompletedJobs = async (
     );
     const total = parseInt(countResult.rows[0].total) || 0;
 
-    // Get jobs with creator/assignee info
+    // Get jobs with creator/assignee/assigner info
     const jobsResult = await query(
       `SELECT
         tr.id, tr.origin_floor, tr.room_number, tr.destination, tr.priority,
@@ -1135,10 +1135,12 @@ export const getCompletedJobs = async (
         tr.created_at, tr.assigned_at, tr.accepted_at, tr.en_route_at,
         tr.with_patient_at, tr.completed_at, tr.cancelled_at, tr.pct_assigned_at,
         creator.id as creator_id, creator.first_name as creator_first_name, creator.last_name as creator_last_name,
-        assignee.id as assignee_id, assignee.first_name as assignee_first_name, assignee.last_name as assignee_last_name
+        assignee.id as assignee_id, assignee.first_name as assignee_first_name, assignee.last_name as assignee_last_name,
+        assigner.first_name as assigner_first_name, assigner.last_name as assigner_last_name
        FROM transport_requests tr
        LEFT JOIN users creator ON tr.created_by = creator.id
        LEFT JOIN users assignee ON tr.assigned_to = assignee.id
+       LEFT JOIN users assigner ON tr.assigned_by = assigner.id
        ${whereClause}
        ORDER BY tr.created_at DESC
        LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
@@ -1238,6 +1240,7 @@ export const getCompletedJobs = async (
       pct_assigned_at: row.pct_assigned_at,
       creator: row.creator_id ? { first_name: row.creator_first_name, last_name: row.creator_last_name } : null,
       assignee: row.assignee_id ? { first_name: row.assignee_first_name, last_name: row.assignee_last_name } : null,
+      assigner: row.assigner_first_name ? { first_name: row.assigner_first_name, last_name: row.assigner_last_name } : null,
       reassignments: reassignments[row.id as number] || [],
       delays: delays[row.id as number] || [],
       cancelled_by: cancelledByMap[row.id as number] || null,

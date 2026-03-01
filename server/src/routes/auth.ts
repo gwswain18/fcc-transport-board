@@ -9,6 +9,8 @@ import {
   resetPassword,
   recoverUsername,
   heartbeat,
+  registerSecretarySession,
+  getActiveSecretaries,
 } from '../controllers/authController.js';
 import { oauthLogin } from '../controllers/oauthController.js';
 import { getProfile, updateProfile, linkOAuthAccount } from '../controllers/profileController.js';
@@ -37,6 +39,8 @@ router.post('/recover-username', authLimiter, recoverUsername);
 router.get('/me', authenticate, me);
 router.post('/change-password', authenticate, changePassword);
 router.post('/heartbeat', authenticate, heartbeat);
+router.post('/secretary-session', authenticate, registerSecretarySession);
+router.get('/active-secretaries', authenticate, getActiveSecretaries);
 
 // Profile routes
 router.get('/profile', authenticate, getProfile);

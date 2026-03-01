@@ -109,6 +109,21 @@ export const api = {
       body: JSON.stringify({ provider, id_token }),
     }),
 
+  registerSecretarySession: (data: { first_name: string; last_name: string; phone_extension?: string }) =>
+    request<{ message: string }>('/auth/secretary-session', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getActiveSecretaries: () =>
+    request<{ secretaries: import('../types').ActiveSecretary[] }>('/auth/active-secretaries'),
+
+  getActiveUsers: () =>
+    request<{ users: Array<{ id: number; email: string; first_name: string; last_name: string; role: string; is_temp_account: boolean; login_time: string; phone_extension?: string }> }>('/users/active'),
+
+  endUserSession: (userId: number) =>
+    request<{ message: string }>(`/users/${userId}/end-session`, { method: 'POST' }),
+
   // Users
   getUsers: () => request<{ users: import('../types').User[] }>('/users'),
 
@@ -614,6 +629,7 @@ export const api = {
         pct_assigned_at: string | null;
         creator: { first_name: string; last_name: string } | null;
         assignee: { first_name: string; last_name: string } | null;
+        assigner: { first_name: string; last_name: string } | null;
         reassignments: Array<{ from_name: string; to_name: string; timestamp: string }>;
         delays: Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>;
         cancelled_by: { first_name: string; last_name: string } | null;

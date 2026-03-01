@@ -9,6 +9,7 @@ import {
   BreakAlert,
   TransporterOffline,
   ActiveDispatcher,
+  ActiveSecretary,
   AlertSettings,
   JobRemovedNotification,
 } from '../types';
@@ -29,6 +30,7 @@ interface SocketContextType {
   breakAlerts: BreakAlert[];
   offlineAlerts: TransporterOffline[];
   activeDispatchers: ActiveDispatcher[];
+  activeSecretaries: ActiveSecretary[];
   alertSettings: AlertSettings | null;
   requireExplanation: boolean;
   requireTransporterExplanation: boolean;
@@ -56,6 +58,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [breakAlerts, setBreakAlerts] = useState<BreakAlert[]>([]);
   const [offlineAlerts, setOfflineAlerts] = useState<TransporterOffline[]>([]);
   const [activeDispatchers, setActiveDispatchers] = useState<ActiveDispatcher[]>([]);
+  const [activeSecretaries, setActiveSecretaries] = useState<ActiveSecretary[]>([]);
   const [alertSettings, setAlertSettings] = useState<AlertSettings | null>(null);
   const [jobRemovedNotification, setJobRemovedNotification] = useState<JobRemovedNotification | null>(null);
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
@@ -264,6 +267,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setActiveDispatchers(data.dispatchers);
     });
 
+    // Secretary changes
+    newSocket.on('secretary_changed', (data: { secretaries: ActiveSecretary[] }) => {
+      setActiveSecretaries(data.secretaries);
+    });
+
+    // Force logout (from manager ending session)
+    newSocket.on('force_logout', (data: { message: string }) => {
+      alert(data.message || 'Your session has been ended by a manager.');
+      window.location.href = '/login';
+    });
+
     // Job removed notification (cancel/reassign)
     newSocket.on('job_removed', (notification: JobRemovedNotification) => {
       setJobRemovedNotification(notification);
@@ -342,10 +356,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
   const refreshData = async () => {
     const apiBase = import.meta.env.VITE_API_URL || '/api';
-    const [statusRes, requestRes, dispatcherRes, alertSettingsRes] = await Promise.all([
+    const [statusRes, requestRes, dispatcherRes, secretaryRes, alertSettingsRes] = await Promise.all([
       fetch(`${apiBase}/status`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { statuses: [] }),
       fetch(`${apiBase}/requests`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { requests: [] }),
       fetch(`${apiBase}/dispatchers/active`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { dispatchers: [] }).catch(() => ({ dispatchers: [] })),
+      fetch(`${apiBase}/auth/active-secretaries`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { secretaries: [] }).catch(() => ({ secretaries: [] })),
       fetch(`${apiBase}/config/alert_settings`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { value: null }).catch(() => ({ value: null })),
     ]);
 
@@ -357,6 +372,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
     if (dispatcherRes.dispatchers) {
       setActiveDispatchers(dispatcherRes.dispatchers);
+    }
+    if (secretaryRes.secretaries) {
+      setActiveSecretaries(secretaryRes.secretaries);
     }
     if (alertSettingsRes.value) {
       setAlertSettings(alertSettingsRes.value);
@@ -412,6 +430,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         breakAlerts,
         offlineAlerts,
         activeDispatchers,
+        activeSecretaries,
         alertSettings,
         requireExplanation,
         requireTransporterExplanation,

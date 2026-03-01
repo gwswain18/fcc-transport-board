@@ -15,6 +15,7 @@ import PriorityBadge from '../components/common/PriorityBadge';
 import ElapsedTimer from '../components/common/ElapsedTimer';
 import Modal from '../components/common/Modal';
 import AlertBanners from '../components/common/AlertBanners';
+import ActiveSecretaryCard from '../components/common/ActiveSecretaryCard';
 import { formatMinutes, formatTime } from '../utils/formatters';
 
 const MAIN_FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
@@ -22,7 +23,7 @@ const OTHER_FLOORS: Floor[] = ['1WC', 'HRP', 'L&D', 'OTF'];
 const DESTINATIONS = ['Atrium', 'Radiology', 'Lab', 'OR', 'NICU', 'Other'];
 
 export default function SupervisorView() {
-  const { transporterStatuses, requests, refreshData } = useSocket();
+  const { transporterStatuses, requests, activeSecretaries, refreshData } = useSocket();
   const [loading, setLoading] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<TransportRequest | null>(null);
@@ -153,8 +154,8 @@ export default function SupervisorView() {
       <AlertBanners />
 
       {/* Shift Summary Widget */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-3">
+      <div className="max-w-7xl mx-auto px-4 pt-4">
+        <div className="card">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-900">Shift Summary</h2>
             {shiftSummary && (
@@ -265,6 +266,9 @@ export default function SupervisorView() {
                 )}
               </div>
             </div>
+
+            {/* Active Secretaries Card */}
+            <ActiveSecretaryCard secretaries={activeSecretaries} />
           </div>
 
           {/* Center Panel - Active Jobs */}

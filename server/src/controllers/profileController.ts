@@ -115,9 +115,14 @@ export const linkOAuthAccount = async (req: AuthenticatedRequest, res: Response)
 
     // Verify current user is a local user
     const current = await query(
-      'SELECT auth_provider, provider_id FROM users WHERE id = $1',
+      'SELECT auth_provider, provider_id, is_temp_account FROM users WHERE id = $1',
       [req.user.id]
     );
+
+    if (current.rows[0].is_temp_account) {
+      res.status(403).json({ error: 'Temp accounts cannot link OAuth providers' });
+      return;
+    }
 
     if (current.rows[0].provider_id) {
       res.status(400).json({ error: 'Account already has an OAuth provider linked' });

@@ -34,7 +34,8 @@ export const stopAutoAssignService = () => {
 
 // Auto-assign a request to the best available transporter
 export const autoAssignRequest = async (
-  requestId: number
+  requestId: number,
+  assignedBy?: number
 ): Promise<{ success: boolean; assignedTo?: number; reason: string }> => {
   // Get request details
   const requestResult = await query(
@@ -59,9 +60,9 @@ export const autoAssignRequest = async (
   await query(
     `UPDATE transport_requests
      SET assigned_to = $1, status = 'assigned', assigned_at = CURRENT_TIMESTAMP,
-         assignment_method = 'auto'
+         assignment_method = 'auto', assigned_by = $3
      WHERE id = $2`,
-    [transporter.user_id, requestId]
+    [transporter.user_id, requestId, assignedBy || null]
   );
 
   // Update transporter status

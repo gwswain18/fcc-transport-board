@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 import ShiftStartModal from '../components/transporter/ShiftStartModal';
 import DispatcherLoginModal from '../components/dispatcher/DispatcherLoginModal';
+import SecretarySessionModal from '../components/common/SecretarySessionModal';
 import { GoogleLogin } from '@react-oauth/google';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../config/msalConfig';
@@ -16,8 +17,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showShiftModal, setShowShiftModal] = useState(false);
   const [showDispatcherModal, setShowDispatcherModal] = useState(false);
+  const [showSecretaryModal, setShowSecretaryModal] = useState(false);
   const [shiftLoading, setShiftLoading] = useState(false);
   const [dispatcherLoading, setDispatcherLoading] = useState(false);
+  const [secretaryLoading, setSecretaryLoading] = useState(false);
   const [hasPrimaryDispatcher, setHasPrimaryDispatcher] = useState(false);
   const [primaryDispatcherName, setPrimaryDispatcherName] = useState<string | undefined>();
   const [oauthLoading, setOauthLoading] = useState(false);
@@ -41,7 +44,7 @@ export default function Login() {
       setShowDispatcherModal(true);
     };
 
-    if (user && !showShiftModal && !showDispatcherModal) {
+    if (user && !showShiftModal && !showDispatcherModal && !showSecretaryModal) {
       // Check if dispatcher/supervisor needs to set up (NOT manager)
       if ((user.role === 'dispatcher' || user.role === 'supervisor') && !loading) {
         handleDispatcherLogin();
@@ -49,13 +52,14 @@ export default function Login() {
       }
       const roleRoutes: Record<string, string> = {
         transporter: '/transporter',
+        secretary: '/dashboard',
         dispatcher: '/dashboard',
         supervisor: '/supervisor',
         manager: '/analytics',
       };
       navigate(roleRoutes[user.role] || '/');
     }
-  }, [user, navigate, showShiftModal, showDispatcherModal, loading]);
+  }, [user, navigate, showShiftModal, showDispatcherModal, showSecretaryModal, loading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,6 +74,9 @@ export default function Login() {
     } else if (result.isPending) {
       setLoading(false);
       navigate('/pending');
+    } else if (result.isSecretary) {
+      setLoading(false);
+      setShowSecretaryModal(true);
     } else if (result.needsShiftStart) {
       setLoading(false);
       setShowShiftModal(true);
@@ -171,6 +178,19 @@ export default function Login() {
   const handleSkipDispatcherSetup = () => {
     setShowDispatcherModal(false);
     navigate('/dashboard');
+  };
+
+  const handleSecretarySession = async (data: { first_name: string; last_name: string; phone_extension?: string }) => {
+    setSecretaryLoading(true);
+    const response = await api.registerSecretarySession(data);
+    setSecretaryLoading(false);
+
+    if (response.error) {
+      setError(response.error);
+    } else {
+      setShowSecretaryModal(false);
+      navigate('/dashboard');
+    }
   };
 
   return (
@@ -301,6 +321,8 @@ export default function Login() {
                 shape="rectangular"
                 width="300"
               />
+              {/* Microsoft sign-in button hidden — kept for future re-enable */}
+              {false && (
               <button
                 onClick={handleMicrosoftLogin}
                 disabled={loading}
@@ -314,6 +336,7 @@ export default function Login() {
                 </svg>
                 Sign in with Microsoft
               </button>
+              )}
             </>
           )}
         </div>
@@ -340,6 +363,12 @@ export default function Login() {
         onJoinAsSecondary={handleJoinAsSecondary}
         onClose={handleSkipDispatcherSetup}
         loading={dispatcherLoading}
+      />
+
+      <SecretarySessionModal
+        isOpen={showSecretaryModal}
+        onSubmit={handleSecretarySession}
+        loading={secretaryLoading}
       />
     </div>
   );
