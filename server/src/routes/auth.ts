@@ -37,7 +37,7 @@ router.post('/recover-username', authLimiter, recoverUsername);
 
 // Protected routes
 router.get('/me', authenticate, me);
-router.post('/change-password', authenticate, changePassword);
+router.post('/change-password', authenticate, authLimiter, changePassword);
 router.post('/heartbeat', authenticate, heartbeat);
 router.post('/secretary-session', authenticate, registerSecretarySession);
 router.get('/active-secretaries', authenticate, getActiveSecretaries);

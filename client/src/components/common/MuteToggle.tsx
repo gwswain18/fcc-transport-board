@@ -29,6 +29,7 @@ export default function MuteToggle({ className = '', showLabel = false }: MuteTo
       onClick={handleToggle}
       className={`flex items-center gap-2 p-2 rounded-lg hover:bg-white/10 transition-colors ${className}`}
       title={muted ? 'Unmute notifications' : 'Mute notifications'}
+      aria-label={muted ? 'Unmute notifications' : 'Mute notifications'}
     >
       {muted ? (
         // Speaker with X icon (muted)

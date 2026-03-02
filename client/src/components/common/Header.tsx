@@ -142,6 +142,7 @@ export default function Header() {
               disabled={isRefreshing}
               className="p-2 rounded-lg hover:bg-white/10 transition-colors text-secondary-200 hover:text-white disabled:opacity-50"
               title="Refresh data"
+              aria-label="Refresh data"
             >
               <svg
                 className={`w-5 h-5 ${isRefreshing ? 'animate-spin' : ''}`}
@@ -161,6 +162,7 @@ export default function Header() {
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center space-x-3 focus:outline-none"
+                aria-label="User menu"
               >
                 <div className="text-right">
                   <p className="text-sm font-medium text-white">

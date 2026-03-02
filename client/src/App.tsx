@@ -1,16 +1,18 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
-import TransporterView from './pages/TransporterView';
-import DispatcherView from './pages/DispatcherView';
-import SupervisorView from './pages/SupervisorView';
-import ManagerDashboard from './pages/ManagerDashboard';
-import UserManagement from './pages/UserManagement';
-import Settings from './pages/Settings';
 import PendingApproval from './pages/PendingApproval';
-import Profile from './pages/Profile';
+
+const TransporterView = lazy(() => import('./pages/TransporterView'));
+const DispatcherView = lazy(() => import('./pages/DispatcherView'));
+const SupervisorView = lazy(() => import('./pages/SupervisorView'));
+const ManagerDashboard = lazy(() => import('./pages/ManagerDashboard'));
+const UserManagement = lazy(() => import('./pages/UserManagement'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Profile = lazy(() => import('./pages/Profile'));
 
 function ProtectedRoute({
   children,
@@ -82,8 +84,15 @@ function RoleBasedRedirect() {
   return <Navigate to={roleRoutes[user.role] || '/login'} replace />;
 }
 
+const LazyFallback = (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+  </div>
+);
+
 export default function App() {
   return (
+    <Suspense fallback={LazyFallback}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/pending" element={<PendingApproval />} />
@@ -119,12 +128,6 @@ export default function App() {
         }
       />
 
-      {/* Keep old route for backward compatibility */}
-      <Route
-        path="/dispatcher"
-        element={<Navigate to="/dashboard" replace />}
-      />
-
       <Route
         path="/supervisor"
         element={
@@ -142,12 +145,6 @@ export default function App() {
             <ManagerDashboard />
           </ProtectedRoute>
         }
-      />
-
-      {/* Keep old route for backward compatibility */}
-      <Route
-        path="/manager"
-        element={<Navigate to="/analytics" replace />}
       />
 
       <Route
@@ -170,5 +167,6 @@ export default function App() {
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </Suspense>
   );
 }

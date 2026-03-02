@@ -93,9 +93,10 @@ const checkHeartbeats = async () => {
     logger.info(`[Heartbeat] Diagnostic (check #${heartbeatCheckCount}): total_heartbeat_records=${totalHeartbeats.rows[0].count}, online=${onlineCount.rows[0].count}, offline_threshold=${timing.offline_alert_minutes}min`);
   }
 
-  // Find users with stale heartbeats who are not already offline
+  // Find users with stale heartbeats who are not already offline (JOIN user data to avoid N+1)
   const result = await query(
-    `SELECT uh.user_id, uh.last_heartbeat, ts.status
+    `SELECT uh.user_id, uh.last_heartbeat, ts.status,
+            u.first_name, u.last_name
      FROM user_heartbeats uh
      JOIN transporter_status ts ON uh.user_id = ts.user_id
      JOIN users u ON uh.user_id = u.id
@@ -142,28 +143,21 @@ const checkHeartbeats = async () => {
       'heartbeat_timeout'
     );
 
-    // Get user details for notification
-    const userResult = await query(
-      'SELECT first_name, last_name FROM users WHERE id = $1',
-      [row.user_id]
-    );
-    const user = userResult.rows[0];
-
     // Emit offline event if alerts are enabled
     const alertSettings = await getAlertSettings();
     if (alertSettings.master_enabled && alertSettings.alerts.offline_alert) {
       io.emit('transporter_offline', {
         user_id: row.user_id,
         last_heartbeat: row.last_heartbeat,
-        first_name: user?.first_name,
-        last_name: user?.last_name,
+        first_name: row.first_name,
+        last_name: row.last_name,
       });
       logger.info(`[Heartbeat] Emitted transporter_offline for user ${row.user_id}`);
     } else {
       logger.info(`[Heartbeat] Offline alert skipped for user ${row.user_id} (master_enabled=${alertSettings.master_enabled}, offline_alert=${alertSettings.alerts.offline_alert})`);
     }
 
-    // Also emit status change
+    // Re-fetch status after UPDATE for the emit (need the updated record)
     const statusResult = await query(
       `SELECT ts.*, u.first_name, u.last_name, u.email, u.role
        FROM transporter_status ts

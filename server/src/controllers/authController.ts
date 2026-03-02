@@ -48,8 +48,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     // OAuth-only user trying to use password login
     if (!user.password_hash) {
-      const providerName = user.auth_provider === 'google' ? 'Google' : 'Microsoft';
-      res.status(401).json({ error: `Please sign in with ${providerName}` });
+      res.status(401).json({ error: 'This account uses single sign-on. Please use the SSO button below.' });
       return;
     }
 

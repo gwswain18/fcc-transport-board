@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
@@ -131,19 +131,19 @@ export default function DispatcherView() {
     notes: '',
   });
 
-  const availableTransporters = transporterStatuses.filter(
+  const availableTransporters = useMemo(() => transporterStatuses.filter(
     (t) => t.status === 'available'
-  );
+  ), [transporterStatuses]);
 
-  const activeRequests = requests.filter(
+  const activeRequests = useMemo(() => requests.filter(
     (r) => !['complete', 'cancelled'].includes(r.status)
-  );
+  ), [requests]);
 
-  const pendingRequests = activeRequests.filter((r) => r.status === 'pending');
-  const assignedRequests = activeRequests.filter((r) => r.status === 'assigned');
-  const inProgressRequests = activeRequests.filter((r) =>
+  const pendingRequests = useMemo(() => activeRequests.filter((r) => r.status === 'pending'), [activeRequests]);
+  const assignedRequests = useMemo(() => activeRequests.filter((r) => r.status === 'assigned'), [activeRequests]);
+  const inProgressRequests = useMemo(() => activeRequests.filter((r) =>
     ['accepted', 'en_route', 'with_patient'].includes(r.status)
-  );
+  ), [activeRequests]);
 
   const validateRoomNumber = (floor: Floor, room: string): boolean => {
     // "Nursery" is always valid
@@ -703,7 +703,7 @@ export default function DispatcherView() {
   );
 }
 
-function TransporterCard({
+const TransporterCard = memo(function TransporterCard({
   transporter,
   onClick,
   canEndShift,
@@ -786,9 +786,9 @@ function TransporterCard({
       )}
     </div>
   );
-}
+});
 
-function RequestCard({
+const RequestCard = memo(function RequestCard({
   request,
   onAssign,
   onCancel,
@@ -807,6 +807,8 @@ function RequestCard({
 }) {
   const isPCTTransfer = request.status === 'transferred_to_pct';
   const hasAlert = !!cycleTimeAlert;
+  const [showDismissInput, setShowDismissInput] = useState(false);
+  const [dismissReason, setDismissReason] = useState('');
 
   return (
     <div
@@ -818,8 +820,8 @@ function RequestCard({
             : 'bg-gray-50'
       } ${onClickCard ? 'cursor-pointer hover:ring-2 hover:ring-primary-200' : ''}`}
       onClick={(e) => {
-        // Only trigger if not clicking a button
-        if ((e.target as HTMLElement).closest('button')) return;
+        // Only trigger if not clicking a button or input
+        if ((e.target as HTMLElement).closest('button, input')) return;
         onClickCard?.();
       }}
     >
@@ -873,20 +875,59 @@ function RequestCard({
         {showAutoAssign && !request.assignee && !isPCTTransfer && (
           <AutoAssignButton requestId={request.id} />
         )}
-        {hasAlert && onDismissAlert && (
+        {hasAlert && onDismissAlert && !showDismissInput && (
           <button
             onClick={() => {
               if (request.delay_reason) {
                 onDismissAlert(request.id, `Transporter provided: ${request.delay_reason}`);
               } else {
-                const reason = prompt('Reason for dismissing alert:');
-                if (reason) onDismissAlert(request.id, reason);
+                setShowDismissInput(true);
               }
             }}
             className="bg-yellow-100 text-yellow-700 hover:bg-yellow-200 px-3 py-1 rounded text-sm font-medium"
           >
             {request.delay_reason ? 'Acknowledge' : 'Dismiss Alert'}
           </button>
+        )}
+        {hasAlert && onDismissAlert && showDismissInput && (
+          <div className="flex gap-1 items-center w-full">
+            <input
+              type="text"
+              value={dismissReason}
+              onChange={(e) => setDismissReason(e.target.value)}
+              placeholder="Reason for dismissing..."
+              className="flex-1 text-sm border border-yellow-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-yellow-400"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && dismissReason.trim()) {
+                  onDismissAlert(request.id, dismissReason.trim());
+                  setShowDismissInput(false);
+                  setDismissReason('');
+                } else if (e.key === 'Escape') {
+                  setShowDismissInput(false);
+                  setDismissReason('');
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                if (dismissReason.trim()) {
+                  onDismissAlert(request.id, dismissReason.trim());
+                  setShowDismissInput(false);
+                  setDismissReason('');
+                }
+              }}
+              className="bg-yellow-200 text-yellow-800 hover:bg-yellow-300 px-2 py-1 rounded text-sm"
+            >
+              OK
+            </button>
+            <button
+              onClick={() => { setShowDismissInput(false); setDismissReason(''); }}
+              className="text-gray-400 hover:text-gray-600 px-1 py-1 text-sm"
+            >
+              Cancel
+            </button>
+          </div>
         )}
         {onCancel && !isPCTTransfer && (
           <button onClick={onCancel} className="btn-danger text-sm py-1">
@@ -896,4 +937,4 @@ function RequestCard({
       </div>
     </div>
   );
-}
+});

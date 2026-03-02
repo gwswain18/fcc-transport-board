@@ -57,16 +57,30 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
       // Record initial heartbeat with socket ID
       await recordHeartbeat(userId, socket.id);
 
-      // Send initial dispatcher list to newly connected client
+      // Send initial dispatcher + secretary lists to newly connected client
       try {
-        const dispatcherResult = await query(
-          `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
-           FROM active_dispatchers ad
-           JOIN users u ON ad.user_id = u.id
-           WHERE ad.ended_at IS NULL
-           ORDER BY ad.is_primary DESC, ad.started_at ASC`
-        );
+        // Query user role for PII filtering
+        const userRoleResult = await query('SELECT role FROM users WHERE id = $1', [userId]);
+        const userRole = userRoleResult.rows[0]?.role;
 
+        const [dispatcherResult, secretaryResult] = await Promise.all([
+          query(
+            `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
+             FROM active_dispatchers ad
+             JOIN users u ON ad.user_id = u.id
+             WHERE ad.ended_at IS NULL
+             ORDER BY ad.is_primary DESC, ad.started_at ASC`
+          ),
+          query(
+            `SELECT a_s.*, u.email
+             FROM active_secretaries a_s
+             JOIN users u ON a_s.user_id = u.id
+             WHERE a_s.ended_at IS NULL
+             ORDER BY a_s.started_at ASC`
+          ),
+        ]);
+
+        const isTransporter = userRole === 'transporter';
         const dispatchers = dispatcherResult.rows.map((row) => ({
           id: row.id,
           user_id: row.user_id,
@@ -75,36 +89,21 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
           break_start: row.break_start,
           replaced_by: row.replaced_by,
           relief_info: row.relief_info,
-          contact_info: row.contact_info,
+          contact_info: isTransporter ? undefined : row.contact_info,
           started_at: row.started_at,
           ended_at: row.ended_at,
           user: {
             id: row.user_id,
             first_name: row.first_name,
             last_name: row.last_name,
-            email: row.email,
-            phone_number: row.phone_number,
+            ...(isTransporter ? {} : { email: row.email, phone_number: row.phone_number }),
           },
         }));
 
         socket.emit('dispatcher_changed', { dispatchers });
-      } catch (error) {
-        logger.error('Error sending initial dispatcher data:', error);
-      }
-
-      // Send initial active secretaries to newly connected client
-      try {
-        const secretaryResult = await query(
-          `SELECT a_s.*, u.email
-           FROM active_secretaries a_s
-           JOIN users u ON a_s.user_id = u.id
-           WHERE a_s.ended_at IS NULL
-           ORDER BY a_s.started_at ASC`
-        );
-
         socket.emit('secretary_changed', { secretaries: secretaryResult.rows });
       } catch (error) {
-        logger.error('Error sending initial secretary data:', error);
+        logger.error('Error sending initial data:', error);
       }
 
       // Close any open offline_periods on reconnection (always, regardless of shift/job)
@@ -244,19 +243,27 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
       }
     });
 
-    // Join role-specific rooms
+    // Join role-specific rooms (whitelist: only floor:* and role:* patterns)
     socket.on('join_room', (room: string) => {
+      if (!/^(floor|role):[a-zA-Z0-9&_]+$/.test(room)) {
+        logger.warn(`Socket ${socket.id} tried to join invalid room: ${room}`);
+        return;
+      }
       socket.join(room);
       logger.info(`Socket ${socket.id} joined room: ${room}`);
     });
 
     socket.on('leave_room', (room: string) => {
+      if (!/^(floor|role):[a-zA-Z0-9&_]+$/.test(room)) {
+        return;
+      }
       socket.leave(room);
       logger.info(`Socket ${socket.id} left room: ${room}`);
     });
 
     // Cycle time alert dismissed
     socket.on('cycle_alert_dismissed', async (data: { request_id: number; explanation?: string; phase?: string }) => {
+      if (!Number.isInteger(data.request_id) || data.request_id <= 0) return;
       logger.info(`Cycle alert dismissed for request ${data.request_id}: ${data.explanation || 'no explanation'}`);
       if (data.phase) {
         acknowledgeDelay(data.request_id, data.phase);
@@ -265,16 +272,19 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
 
     // Break alert dismissed
     socket.on('break_alert_dismissed', async (data: { user_id: number; explanation?: string }) => {
+      if (!Number.isInteger(data.user_id) || data.user_id <= 0) return;
       logger.info(`Break alert dismissed for user ${data.user_id}: ${data.explanation || 'no explanation'}`);
     });
 
     // Offline alert dismissed
     socket.on('offline_alert_dismissed', async (data: { user_id: number; explanation?: string }) => {
+      if (!Number.isInteger(data.user_id) || data.user_id <= 0) return;
       logger.info(`Offline alert dismissed for user ${data.user_id}: ${data.explanation || 'no explanation'}`);
     });
 
     // Timeout alert dismissed
     socket.on('timeout_alert_dismissed', async (data: { request_id: number; explanation?: string }) => {
+      if (!Number.isInteger(data.request_id) || data.request_id <= 0) return;
       logger.info(`Timeout alert dismissed for request ${data.request_id}: ${data.explanation || 'no explanation'}`);
     });
 

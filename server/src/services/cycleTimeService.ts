@@ -13,6 +13,7 @@ import logger from '../utils/logger.js';
 const CHECK_INTERVAL_MS = 15000; // 15 seconds
 
 let intervalId: NodeJS.Timeout | null = null;
+let averageIntervalId: NodeJS.Timeout | null = null;
 
 // Track acknowledged delay phases per request: Map<requestId, Set<phase>>
 const delayAcknowledgedPhases = new Map<number, Set<string>>();
@@ -60,7 +61,10 @@ export const startCycleTimeService = () => {
   }, CHECK_INTERVAL_MS);
 
   // Recalculate averages every 5 minutes
-  setInterval(async () => {
+  if (averageIntervalId) {
+    clearInterval(averageIntervalId);
+  }
+  averageIntervalId = setInterval(async () => {
     try {
       await calculateRollingAverages();
     } catch (error) {
@@ -73,6 +77,10 @@ export const stopCycleTimeService = () => {
   if (intervalId) {
     clearInterval(intervalId);
     intervalId = null;
+  }
+  if (averageIntervalId) {
+    clearInterval(averageIntervalId);
+    averageIntervalId = null;
   }
 };
 

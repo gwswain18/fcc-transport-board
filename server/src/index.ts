@@ -8,10 +8,10 @@ import dotenv from 'dotenv';
 
 import routes from './routes/index.js';
 import { initializeSocket } from './socket/index.js';
-import { startAlertService } from './services/alertService.js';
-import { startHeartbeatService } from './services/heartbeatService.js';
-import { startCycleTimeService } from './services/cycleTimeService.js';
-import { startAutoAssignService } from './services/autoAssignService.js';
+import { startAlertService, stopAlertService } from './services/alertService.js';
+import { startHeartbeatService, stopHeartbeatService } from './services/heartbeatService.js';
+import { startCycleTimeService, stopCycleTimeService } from './services/cycleTimeService.js';
+import { startAutoAssignService, stopAutoAssignService } from './services/autoAssignService.js';
 import { initializeTwilio } from './services/twilioService.js';
 import { initializeEmail } from './services/emailService.js';
 import logger from './utils/logger.js';
@@ -83,6 +83,18 @@ httpServer.listen(PORT, async () => {
   await initializeEmail();
 
   logger.info('All services started');
+});
+
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down...');
+  stopHeartbeatService();
+  stopAlertService();
+  stopCycleTimeService();
+  stopAutoAssignService();
+  httpServer.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
 });
 
 export default app;

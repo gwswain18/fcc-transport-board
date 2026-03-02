@@ -4,7 +4,7 @@ import { hashPassword } from '../utils/password.js';
 import { AuthenticatedRequest, UserRole, Floor } from '../types/index.js';
 import { logCreate, logUpdate, logDelete } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
-import { isValidEmail, isValidPhoneNumber } from '../utils/validation.js';
+import { isValidEmail, isValidPhoneNumber, validatePasswordStrength } from '../utils/validation.js';
 import { getOnlineUsers, removeHeartbeat } from '../services/heartbeatService.js';
 import { getIO, emitToUser } from '../socket/index.js';
 import logger from '../utils/logger.js';
@@ -267,8 +267,14 @@ export const resetPassword = async (
     const { id } = req.params;
     const { password } = req.body;
 
-    if (!password || password.length < 6) {
-      res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (!password) {
+      res.status(400).json({ error: 'Password is required' });
+      return;
+    }
+
+    const validation = validatePasswordStrength(password);
+    if (!validation.valid) {
+      res.status(400).json({ error: validation.errors.join('. ') });
       return;
     }
 

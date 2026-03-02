@@ -8,6 +8,7 @@ export default function DarkModeToggle({ className = '' }: { className?: string 
       onClick={toggleDarkMode}
       className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${className}`}
       title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+      aria-label={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
     >
       {darkMode ? (
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">

@@ -273,8 +273,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     });
 
     // Force logout (from manager ending session)
-    newSocket.on('force_logout', (data: { message: string }) => {
-      alert(data.message || 'Your session has been ended by a manager.');
+    newSocket.on('force_logout', () => {
       window.location.href = '/login';
     });
 
@@ -312,6 +311,24 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
+      newSocket.off('connect');
+      newSocket.off('disconnect');
+      newSocket.off('transporter_status_changed');
+      newSocket.off('request_created');
+      newSocket.off('request_assigned');
+      newSocket.off('request_status_changed');
+      newSocket.off('request_cancelled');
+      newSocket.off('alert_triggered');
+      newSocket.off('cycle_time_alert');
+      newSocket.off('break_alert');
+      newSocket.off('transporter_offline');
+      newSocket.off('delay_note_added');
+      newSocket.off('dispatcher_changed');
+      newSocket.off('secretary_changed');
+      newSocket.off('force_logout');
+      newSocket.off('job_removed');
+      newSocket.off('alert_settings_changed');
+      newSocket.off('auto_assign_timeout');
       newSocket.disconnect();
       if (heartbeatInterval.current) {
         clearInterval(heartbeatInterval.current);

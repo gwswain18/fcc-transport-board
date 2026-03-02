@@ -52,7 +52,7 @@ const DEFAULT_ALERT_SETTINGS: AlertSettings = {
 
 // In-memory cache for frequently accessed config
 const configCache: Map<string, { value: unknown; cachedAt: number }> = new Map();
-const CACHE_TTL_MS = 60000; // 1 minute cache
+const CACHE_TTL_MS = 300000; // 5 minute cache
 
 export const getConfig = async <T = unknown>(key: string): Promise<T | null> => {
   // Check cache first

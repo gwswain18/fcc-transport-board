@@ -16,6 +16,8 @@ interface AlertRequest {
   assigned_at: string | null;
 }
 
+let alertIntervalId: NodeJS.Timeout | null = null;
+
 export const startAlertService = async () => {
   logger.info('Starting alert service...');
 
@@ -30,13 +32,24 @@ export const startAlertService = async () => {
     logger.error('[AlertService] Failed to load initial settings:', error);
   }
 
-  setInterval(async () => {
+  if (alertIntervalId) {
+    clearInterval(alertIntervalId);
+  }
+
+  alertIntervalId = setInterval(async () => {
     try {
       await checkForAlerts();
     } catch (error) {
       logger.error('Alert service error:', error);
     }
   }, CHECK_INTERVAL_MS);
+};
+
+export const stopAlertService = () => {
+  if (alertIntervalId) {
+    clearInterval(alertIntervalId);
+    alertIntervalId = null;
+  }
 };
 
 const checkForAlerts = async () => {
