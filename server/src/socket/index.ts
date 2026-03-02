@@ -161,28 +161,11 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
           // User has no more active connections
           await removeHeartbeat(disconnectedUserId);
 
-          // End secretary session on disconnect
-          const secretarySession = await query(
-            `SELECT id FROM active_secretaries WHERE user_id = $1 AND ended_at IS NULL`,
-            [disconnectedUserId]
-          );
-          if (secretarySession.rows.length > 0) {
-            await query(
-              `UPDATE active_secretaries SET ended_at = CURRENT_TIMESTAMP
-               WHERE user_id = $1 AND ended_at IS NULL`,
-              [disconnectedUserId]
-            );
-
-            // Broadcast updated secretary list
-            const secretaryResult = await query(
-              `SELECT a_s.*, u.email
-               FROM active_secretaries a_s
-               JOIN users u ON a_s.user_id = u.id
-               WHERE a_s.ended_at IS NULL
-               ORDER BY a_s.started_at ASC`
-            );
-            io?.emit('secretary_changed', { secretaries: secretaryResult.rows });
-          }
+          // Note: Secretary sessions are NOT ended on disconnect.
+          // They persist across browser refreshes and are only ended by:
+          // - Explicit logout (authController)
+          // - Manager ending the session (userController)
+          // - Heartbeat timeout (stale session cleanup)
 
           // Mark transporter as offline if they have no active jobs
           const jobResult = await query(
