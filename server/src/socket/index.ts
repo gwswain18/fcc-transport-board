@@ -4,6 +4,7 @@ import { verifyToken } from '../utils/jwt.js';
 import { recordHeartbeat, removeHeartbeat } from '../services/heartbeatService.js';
 import { query } from '../config/database.js';
 import { acknowledgeDelay } from '../services/cycleTimeService.js';
+import { logStatusChange } from '../services/auditService.js';
 import logger from '../utils/logger.js';
 
 let io: Server | null = null;
@@ -132,11 +133,30 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
         );
 
         if (jobResult.rows.length === 0) {
-          await query(
+          const updateResult = await query(
             `UPDATE transporter_status SET status = 'available', went_offline_at = NULL, updated_at = CURRENT_TIMESTAMP
-             WHERE user_id = $1 AND status = 'offline'`,
+             WHERE user_id = $1 AND status = 'offline'
+             RETURNING *`,
             [userId]
           );
+
+          // Only emit and log if status actually changed (was offline)
+          if (updateResult.rows.length > 0) {
+            // Log status restoration to audit_logs for shift log timeline
+            await logStatusChange(userId, 'transporter_status', userId, 'offline', 'available', 'socket_reconnect');
+
+            // Emit status change so dispatcher board updates
+            const statusResult = await query(
+              `SELECT ts.*, u.first_name, u.last_name, u.email, u.role
+               FROM transporter_status ts
+               JOIN users u ON ts.user_id = u.id
+               WHERE ts.user_id = $1`,
+              [userId]
+            );
+            if (statusResult.rows[0]) {
+              io?.emit('transporter_status_changed', statusResult.rows[0]);
+            }
+          }
         }
       }
     }
@@ -175,11 +195,23 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
           );
 
           if (jobResult.rows.length === 0) {
+            // Get current status before overwriting for audit log
+            const prevStatusResult = await query(
+              `SELECT status FROM transporter_status WHERE user_id = $1`,
+              [disconnectedUserId]
+            );
+            const oldStatus = prevStatusResult.rows[0]?.status || 'available';
+
             await query(
               `UPDATE transporter_status SET status = 'offline', went_offline_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
                WHERE user_id = $1`,
               [disconnectedUserId]
             );
+
+            // Log status change to audit_logs so shift log timeline is accurate
+            if (oldStatus !== 'offline') {
+              await logStatusChange(disconnectedUserId, 'transporter_status', disconnectedUserId, oldStatus, 'offline', 'socket_disconnect');
+            }
 
             // Create offline_periods record
             const shiftResult2 = await query(
