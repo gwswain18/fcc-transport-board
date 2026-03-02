@@ -50,8 +50,8 @@ export const recordHeartbeat = async (
   socketId?: string
 ): Promise<void> => {
   await query(
-    `INSERT INTO user_heartbeats (user_id, last_heartbeat, socket_id)
-     VALUES ($1, CURRENT_TIMESTAMP, $2)
+    `INSERT INTO user_heartbeats (user_id, last_heartbeat, socket_id, created_at)
+     VALUES ($1, CURRENT_TIMESTAMP, $2, CURRENT_TIMESTAMP)
      ON CONFLICT (user_id) DO UPDATE SET
        last_heartbeat = CURRENT_TIMESTAMP,
        socket_id = COALESCE($2, user_heartbeats.socket_id)`,

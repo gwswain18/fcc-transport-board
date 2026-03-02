@@ -14,6 +14,7 @@ import {
 import { validatePasswordStrength } from '../utils/validation.js';
 import logger from '../utils/logger.js';
 import { getIO } from '../socket/index.js';
+import { removeHeartbeat } from '../services/heartbeatService.js';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -170,13 +171,26 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
 
         io.emit('secretary_changed', { secretaries: secretaryResult.rows });
       }
+
+      // Remove heartbeat so user disappears from active users
+      await removeHeartbeat(authReq.user.id);
     }
 
-    res.clearCookie('token');
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      partitioned: true,
+    });
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     logger.error('Logout error:', error);
-    res.clearCookie('token');
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      partitioned: true,
+    });
     res.json({ message: 'Logged out successfully' });
   }
 };
@@ -213,7 +227,25 @@ export const me = async (req: AuthenticatedRequest, res: Response): Promise<void
       activeShift = shiftResult.rows[0] || null;
     }
 
-    res.json({ user: result.rows[0], activeShift });
+    // Check secretary session
+    let secretarySession = null;
+    let needsSecretarySession = false;
+    if (result.rows[0].role === 'secretary') {
+      const sessionResult = await query(
+        `SELECT session_first_name, session_last_name, phone_extension
+         FROM active_secretaries
+         WHERE user_id = $1 AND ended_at IS NULL
+         ORDER BY started_at DESC LIMIT 1`,
+        [req.user.id]
+      );
+      if (sessionResult.rows.length > 0) {
+        secretarySession = sessionResult.rows[0];
+      } else {
+        needsSecretarySession = true;
+      }
+    }
+
+    res.json({ user: result.rows[0], activeShift, secretarySession, needsSecretarySession });
   } catch (error) {
     logger.error('Me error:', error);
     res.status(500).json({ error: 'Internal server error' });

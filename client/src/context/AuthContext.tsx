@@ -6,6 +6,8 @@ interface AuthContextType {
   user: User | null;
   activeShift: ShiftLog | null;
   loading: boolean;
+  needsSecretarySession: boolean;
+  clearNeedsSecretarySession: () => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean; isSecretary?: boolean }>;
   oauthLogin: (provider: string, idToken: string) => Promise<{ success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean; isSecretary?: boolean }>;
   logout: () => Promise<void>;
@@ -19,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [activeShift, setActiveShift] = useState<ShiftLog | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsSecretarySession, setNeedsSecretarySession] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -27,9 +30,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = async () => {
     const response = await api.me();
     if (response.data?.user) {
-      setUser(response.data.user);
+      const userData = { ...response.data.user };
+      // Merge secretary session names into user object
+      if (response.data.secretarySession) {
+        userData.first_name = response.data.secretarySession.session_first_name;
+        userData.last_name = response.data.secretarySession.session_last_name;
+      }
+      setUser(userData);
       if (response.data.activeShift) {
         setActiveShift(response.data.activeShift);
+      }
+      if (response.data.needsSecretarySession) {
+        setNeedsSecretarySession(true);
       }
     }
     setLoading(false);
@@ -78,12 +90,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api.logout();
     setUser(null);
     setActiveShift(null);
+    setNeedsSecretarySession(false);
+  };
+
+  const clearNeedsSecretarySession = () => {
+    setNeedsSecretarySession(false);
   };
 
   const refreshUser = async () => {
     const response = await api.me();
     if (response.data?.user) {
-      setUser(response.data.user);
+      const userData = { ...response.data.user };
+      if (response.data.secretarySession) {
+        userData.first_name = response.data.secretarySession.session_first_name;
+        userData.last_name = response.data.secretarySession.session_last_name;
+      }
+      setUser(userData);
       if (response.data.activeShift) {
         setActiveShift(response.data.activeShift);
       }
@@ -91,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, activeShift, loading, login, oauthLogin, logout, setActiveShift, refreshUser }}>
+    <AuthContext.Provider value={{ user, activeShift, loading, needsSecretarySession, clearNeedsSecretarySession, login, oauthLogin, logout, setActiveShift, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

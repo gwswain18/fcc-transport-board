@@ -581,7 +581,7 @@ export const getActiveUsers = async (
 
     const result = await query(
       `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.is_temp_account,
-              uh.last_heartbeat as login_time,
+              uh.created_at as login_time,
               a_s.session_first_name, a_s.session_last_name, a_s.phone_extension
        FROM users u
        JOIN user_heartbeats uh ON u.id = uh.user_id

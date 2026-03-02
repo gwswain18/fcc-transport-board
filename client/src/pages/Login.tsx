@@ -24,7 +24,7 @@ export default function Login() {
   const [hasPrimaryDispatcher, setHasPrimaryDispatcher] = useState(false);
   const [primaryDispatcherName, setPrimaryDispatcherName] = useState<string | undefined>();
   const [oauthLoading, setOauthLoading] = useState(false);
-  const { login, oauthLogin, user, setActiveShift } = useAuth();
+  const { login, oauthLogin, user, setActiveShift, needsSecretarySession, clearNeedsSecretarySession } = useAuth();
   const { instance: msalInstance } = useMsal();
   const navigate = useNavigate();
 
@@ -45,6 +45,11 @@ export default function Login() {
     };
 
     if (user && !showShiftModal && !showDispatcherModal && !showSecretaryModal) {
+      // If secretary needs session setup (e.g. after refresh with no active session)
+      if (needsSecretarySession) {
+        setShowSecretaryModal(true);
+        return;
+      }
       // Check if dispatcher/supervisor needs to set up (NOT manager)
       if ((user.role === 'dispatcher' || user.role === 'supervisor') && !loading) {
         handleDispatcherLogin();
@@ -59,7 +64,7 @@ export default function Login() {
       };
       navigate(roleRoutes[user.role] || '/');
     }
-  }, [user, navigate, showShiftModal, showDispatcherModal, showSecretaryModal, loading]);
+  }, [user, navigate, showShiftModal, showDispatcherModal, showSecretaryModal, loading, needsSecretarySession]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,11 +90,13 @@ export default function Login() {
     }
   };
 
-  const handleOAuthResult = (result: { success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean }) => {
+  const handleOAuthResult = (result: { success: boolean; error?: string; needsShiftStart?: boolean; isPending?: boolean; isSecretary?: boolean }) => {
     if (!result.success) {
       setError(result.error || 'Sign-in failed');
     } else if (result.isPending) {
       navigate('/pending');
+    } else if (result.isSecretary) {
+      setShowSecretaryModal(true);
     } else if (result.needsShiftStart) {
       setShowShiftModal(true);
     }
@@ -188,6 +195,7 @@ export default function Login() {
     if (response.error) {
       setError(response.error);
     } else {
+      clearNeedsSecretarySession();
       setShowSecretaryModal(false);
       navigate('/dashboard');
     }

@@ -16,7 +16,7 @@ import ElapsedTimer from '../components/common/ElapsedTimer';
 import Modal from '../components/common/Modal';
 import AutoAssignButton from '../components/dispatcher/AutoAssignButton';
 import ActiveDispatcherCard from '../components/dispatcher/ActiveDispatcherCard';
-import ActiveSecretaryCard from '../components/common/ActiveSecretaryCard';
+
 import BreakModal from '../components/dispatcher/BreakModal';
 import DispatcherLoginModal from '../components/dispatcher/DispatcherLoginModal';
 import AlertBanners from '../components/common/AlertBanners';
@@ -45,7 +45,6 @@ export default function DispatcherView() {
     requests,
     cycleTimeAlerts,
     activeDispatchers,
-    activeSecretaries,
     dismissCycleAlert,
     refreshData,
   } = useSocket();
@@ -323,9 +322,6 @@ export default function DispatcherView() {
               onReturnFromBreak={handleReturnFromBreak}
               onSetPrimary={handleSetPrimary}
             />
-
-            {/* Active Secretaries Card */}
-            <ActiveSecretaryCard secretaries={activeSecretaries} />
 
             <div className="card">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Transporters</h2>
