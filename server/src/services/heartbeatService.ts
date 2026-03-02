@@ -9,6 +9,7 @@ const CHECK_INTERVAL_MS = 30000; // 30 seconds
 let intervalId: NodeJS.Timeout | null = null;
 let heartbeatCheckCount = 0;
 let lastAutoLogoutDate: string | null = null;
+let lastRetentionCleanupDate: string | null = null;
 
 export const startHeartbeatService = async () => {
   logger.info('Starting heartbeat service...');
@@ -32,6 +33,7 @@ export const startHeartbeatService = async () => {
       await checkHeartbeats();
       await checkBreakDurations();
       await checkAutoLogout();
+      await cleanupOldAuditLogs();
     } catch (error) {
       logger.error('Heartbeat service error:', error);
     }
@@ -415,4 +417,22 @@ export const getOnlineUsers = async (): Promise<number[]> => {
   );
 
   return result.rows.map((row) => row.user_id);
+};
+
+const cleanupOldAuditLogs = async () => {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (lastRetentionCleanupDate === todayStr) return;
+  lastRetentionCleanupDate = todayStr;
+
+  try {
+    const result = await query(
+      `DELETE FROM audit_logs WHERE timestamp < NOW() - INTERVAL '180 days'`
+    );
+    const deleted = result.rowCount ?? 0;
+    if (deleted > 0) {
+      logger.info(`[Retention] Deleted ${deleted} audit log(s) older than 180 days`);
+    }
+  } catch (error) {
+    logger.error('[Retention] Failed to clean up audit logs:', error);
+  }
 };
