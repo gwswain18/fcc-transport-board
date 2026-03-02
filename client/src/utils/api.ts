@@ -60,7 +60,7 @@ export const api = {
 
   logout: () => request('/auth/logout', { method: 'POST' }),
 
-  me: () => request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog }>('/auth/me'),
+  me: () => request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; secretarySession?: { session_first_name: string; session_last_name: string; phone_extension?: string }; needsSecretarySession?: boolean }>('/auth/me'),
 
   changePassword: (current_password: string, new_password: string) =>
     request<{ message: string }>('/auth/change-password', {
