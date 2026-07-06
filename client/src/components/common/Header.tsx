@@ -19,13 +19,20 @@ export default function Header() {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    if (user?.role === 'manager') {
+    if (user?.role !== 'manager') return;
+
+    const loadPendingCount = () => {
       api.getPendingCount().then((res) => {
-        if (res.data?.count) {
+        if (res.data?.count !== undefined) {
           setPendingCount(res.data.count);
         }
       });
-    }
+    };
+
+    loadPendingCount();
+    // Refresh when the tab regains focus so the badge doesn't go stale
+    window.addEventListener('focus', loadPendingCount);
+    return () => window.removeEventListener('focus', loadPendingCount);
   }, [user?.role]);
 
   const handleRefresh = async () => {
@@ -62,6 +69,8 @@ export default function Header() {
               <h1 className="text-xl font-bold text-white">FCC Transport</h1>
             </div>
             <div
+              role="status"
+              aria-label={connected ? 'Connected' : 'Disconnected'}
               className={`w-2 h-2 rounded-full ${
                 connected ? 'bg-green-400' : 'bg-red-400'
               }`}

@@ -47,6 +47,8 @@ export interface User {
   auth_provider: AuthProvider;
   provider_id?: string;
   approval_status: ApprovalStatus;
+  lockout_until?: string | null;
+  password_changed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -57,6 +59,8 @@ export interface OAuthProfile {
   last_name: string;
   provider_id: string;
   provider: AuthProvider;
+  // True only when the provider certifies ownership of the email address
+  email_verified: boolean;
 }
 
 export interface TransporterStatusRecord {

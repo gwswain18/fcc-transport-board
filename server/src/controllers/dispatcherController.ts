@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database.js';
-import { getIO } from '../socket/index.js';
+import { getIO, broadcastDispatcherChanged } from '../socket/index.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { performFullLogout } from '../services/heartbeatService.js';
 import logger from '../utils/logger.js';
@@ -315,21 +315,9 @@ export const endDispatcherSession = async (req: AuthenticatedRequest, res: Respo
   }
 };
 
-// Helper to emit dispatcher change event
+// Helper to emit dispatcher change event (role-filtered)
 const emitDispatcherChange = async () => {
-  const io = getIO();
-  if (!io) return;
-
-  const result = await query(
-    `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
-     FROM active_dispatchers ad
-     JOIN users u ON ad.user_id = u.id
-     WHERE ad.ended_at IS NULL
-     ORDER BY ad.is_primary DESC, ad.started_at ASC`
-  );
-
-  const dispatchers = transformDispatcherRows(result.rows);
-  io.emit('dispatcher_changed', { dispatchers });
+  await broadcastDispatcherChanged();
 };
 
 // Force logout all users (dispatchers + transporters)

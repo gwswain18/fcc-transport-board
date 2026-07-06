@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
 import { Floor } from '../../types';
+import { localDayStart, localDayEnd, localDateDaysAgo, localToday } from '../../utils/dateRange';
 
 interface CompletedJob {
   id: number;
@@ -390,8 +391,8 @@ export default function JobActivityLog() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [filters, setFilters] = useState({
-    start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    end_date: new Date().toISOString().split('T')[0],
+    start_date: localDateDaysAgo(7),
+    end_date: localToday(),
     floor: '',
     search: '',
   });
@@ -403,8 +404,8 @@ export default function JobActivityLog() {
   const loadData = async (page: number) => {
     setLoading(true);
     const response = await api.getCompletedJobs({
-      start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : undefined,
-      end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : undefined,
+      start_date: filters.start_date ? localDayStart(filters.start_date) : undefined,
+      end_date: filters.end_date ? localDayEnd(filters.end_date) : undefined,
       floor: filters.floor || undefined,
       search: filters.search || undefined,
       page,

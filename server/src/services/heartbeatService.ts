@@ -1,5 +1,5 @@
 import { query } from '../config/database.js';
-import { getIO } from '../socket/index.js';
+import { getIO, broadcastDispatcherChanged } from '../socket/index.js';
 import { getAlertSettings, getAlertTiming } from './configService.js';
 import { logStatusChange } from './auditService.js';
 import logger from '../utils/logger.js';
@@ -263,33 +263,8 @@ const checkAutoLogout = async () => {
        WHERE ended_at IS NULL`
     );
 
-    // Emit updated dispatcher list
-    const result = await query(
-      `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
-       FROM active_dispatchers ad
-       JOIN users u ON ad.user_id = u.id
-       WHERE ad.ended_at IS NULL
-       ORDER BY ad.is_primary DESC, ad.started_at ASC`
-    );
-
-    const dispatchers = result.rows.map((row: any) => ({
-      id: row.id,
-      user_id: row.user_id,
-      is_primary: row.is_primary,
-      on_break: row.on_break,
-      contact_info: row.contact_info,
-      started_at: row.started_at,
-      ended_at: row.ended_at,
-      user: {
-        id: row.user_id,
-        first_name: row.first_name,
-        last_name: row.last_name,
-        email: row.email,
-        phone_number: row.phone_number,
-      },
-    }));
-
-    io.emit('dispatcher_changed', { dispatchers });
+    // Emit updated dispatcher list (role-filtered)
+    await broadcastDispatcherChanged();
     // End all active transporter shifts
     await query(
       `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP WHERE shift_end IS NULL`
@@ -342,9 +317,7 @@ export const performFullLogout = async (): Promise<{ dispatchers_ended: number; 
   );
 
   // Emit updated (empty) dispatcher list
-  if (io) {
-    io.emit('dispatcher_changed', { dispatchers: [] });
-  }
+  await broadcastDispatcherChanged();
 
   // End all active transporter shifts
   await query(

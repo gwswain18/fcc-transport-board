@@ -405,9 +405,20 @@ export const exportData = async (
       row.assigned_to_name || '',
     ]);
 
+    // Escape quotes and neutralize leading formula characters so free-text
+    // fields (notes, room, destination) can't corrupt columns or execute as
+    // formulas when opened in Excel/Sheets
+    const toCsvCell = (cell: unknown): string => {
+      let value = cell === null || cell === undefined ? '' : String(cell);
+      if (/^[=+\-@\t\r]/.test(value)) {
+        value = `'${value}`;
+      }
+      return `"${value.replace(/"/g, '""')}"`;
+    };
+
     const csv = [
       headers.join(','),
-      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
+      ...rows.map((row) => row.map(toCsvCell).join(',')),
     ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv');

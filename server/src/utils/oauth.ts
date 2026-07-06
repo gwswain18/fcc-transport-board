@@ -26,12 +26,17 @@ export async function verifyGoogleToken(idToken: string): Promise<OAuthProfile> 
     throw new Error('Invalid Google token payload');
   }
 
+  if (!payload.email || payload.email_verified !== true) {
+    throw new Error('Google account email is not verified');
+  }
+
   return {
-    email: payload.email!,
+    email: payload.email,
     first_name: payload.given_name || '',
     last_name: payload.family_name || '',
     provider_id: payload.sub,
     provider: 'google',
+    email_verified: true,
   };
 }
 
@@ -69,14 +74,17 @@ export async function verifyMicrosoftToken(idToken: string): Promise<OAuthProfil
       `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/v2.0`,
       'https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0',
     ],
-  }) as Record<string, string>;
+  }) as Record<string, unknown>;
 
+  // preferred_username is not a verified email claim, so never treat a
+  // Microsoft profile as email-verified for account linking
   return {
-    email: payload.preferred_username || payload.email,
-    first_name: payload.given_name || '',
-    last_name: payload.family_name || '',
-    provider_id: payload.oid || payload.sub,
+    email: String(payload.email || payload.preferred_username || ''),
+    first_name: String(payload.given_name || ''),
+    last_name: String(payload.family_name || ''),
+    provider_id: String(payload.oid || payload.sub || ''),
     provider: 'microsoft',
+    email_verified: false,
   };
 }
 

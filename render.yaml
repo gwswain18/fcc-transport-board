@@ -3,19 +3,21 @@ services:
   - type: web
     name: fcc-transport-api
     env: node
-    buildCommand: cd server && npm install && npm run build
+    # --include=dev: typescript/@types live in devDependencies but are needed to build
+    buildCommand: cd server && npm install --include=dev && npm run build
     startCommand: cd server && npm start
+    healthCheckPath: /api/health
     envVars:
-- key: NODE_ENV
-    value: production
-  - key: DATABASE_URL
-    value: ""
-  - key: JWT_SECRET
-    value: ""
-  - key: CLIENT_URL
-    value: https://fcc-transport-client.onrender.com
-  - key: LOG_LEVEL
-    value: info
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CLIENT_URL
+        value: https://fcc-transport-client.onrender.com
+      - key: LOG_LEVEL
+        value: info
 
   # Frontend
   - type: web

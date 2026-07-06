@@ -180,12 +180,16 @@ export const sendUsernameRecoveryEmail = async (
   return sendEmail(email, 'FCC Transport - Username Recovery', html);
 };
 
-export const verifyResetToken = async (
+// Atomically mark the token used and return its owner. The single guarded
+// UPDATE prevents two concurrent requests from both consuming the same token.
+export const consumeResetToken = async (
   token: string
 ): Promise<{ valid: boolean; userId?: number; error?: string }> => {
   const result = await query(
-    `SELECT user_id, expires_at, used_at FROM password_reset_tokens
-     WHERE token = $1`,
+    `UPDATE password_reset_tokens
+     SET used_at = CURRENT_TIMESTAMP
+     WHERE token = $1 AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+     RETURNING user_id`,
     [token]
   );
 
@@ -193,24 +197,7 @@ export const verifyResetToken = async (
     return { valid: false, error: 'Invalid or expired token' };
   }
 
-  const { user_id, expires_at, used_at } = result.rows[0];
-
-  if (used_at) {
-    return { valid: false, error: 'Token has already been used' };
-  }
-
-  if (new Date(expires_at) < new Date()) {
-    return { valid: false, error: 'Token has expired' };
-  }
-
-  return { valid: true, userId: user_id };
-};
-
-export const markTokenUsed = async (token: string): Promise<void> => {
-  await query(
-    `UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE token = $1`,
-    [token]
-  );
+  return { valid: true, userId: result.rows[0].user_id };
 };
 
 export const isEmailConfigured = (): boolean => {

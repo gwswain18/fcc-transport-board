@@ -4,6 +4,7 @@ import { Floor, ReportSummary, TransporterStats } from '../types';
 import Header from '../components/common/Header';
 import AlertBanners from '../components/common/AlertBanners';
 import { formatMinutes, formatSecondsAsHoursMinutes } from '../utils/formatters';
+import { localDayStart, localDayEnd, localDateDaysAgo, localToday } from '../utils/dateRange';
 import FloorAnalysis from '../components/analytics/FloorAnalysis';
 import DelayReport from '../components/analytics/DelayReport';
 import JobActivityLog from '../components/manager/JobActivityLog';
@@ -53,8 +54,8 @@ export default function ManagerDashboard() {
   const [loading, setLoading] = useState(true);
 
   const [filters, setFilters] = useState({
-    start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    end_date: new Date().toISOString().split('T')[0],
+    start_date: localDateDaysAgo(7),
+    end_date: localToday(),
     floor: '',
     transporter_id: '',
   });
@@ -78,8 +79,8 @@ export default function ManagerDashboard() {
     setLoading(true);
 
     const params = {
-      start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : undefined,
-      end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : undefined,
+      start_date: filters.start_date ? localDayStart(filters.start_date) : undefined,
+      end_date: filters.end_date ? localDayEnd(filters.end_date) : undefined,
       floor: filters.floor || undefined,
       transporter_id: filters.transporter_id ? parseInt(filters.transporter_id) : undefined,
     };
@@ -113,8 +114,8 @@ export default function ManagerDashboard() {
 
   const handleExport = () => {
     api.exportData({
-      start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : undefined,
-      end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : undefined,
+      start_date: filters.start_date ? localDayStart(filters.start_date) : undefined,
+      end_date: filters.end_date ? localDayEnd(filters.end_date) : undefined,
       floor: filters.floor || undefined,
       transporter_id: filters.transporter_id ? parseInt(filters.transporter_id) : undefined,
     });
@@ -204,8 +205,8 @@ export default function ManagerDashboard() {
         {activeTab === 'floors' && (
           <FloorAnalysis
             dateRange={{
-              start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : '',
-              end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : '',
+              start_date: filters.start_date ? localDayStart(filters.start_date) : '',
+              end_date: filters.end_date ? localDayEnd(filters.end_date) : '',
             }}
           />
         )}
@@ -214,8 +215,8 @@ export default function ManagerDashboard() {
         {activeTab === 'delays' && (
           <DelayReport
             dateRange={{
-              start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : '',
-              end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : '',
+              start_date: filters.start_date ? localDayStart(filters.start_date) : '',
+              end_date: filters.end_date ? localDayEnd(filters.end_date) : '',
             }}
           />
         )}

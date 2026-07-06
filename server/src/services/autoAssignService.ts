@@ -1,9 +1,14 @@
-import { query } from '../config/database.js';
+import { PoolClient } from 'pg';
+import { query, withTransaction } from '../config/database.js';
 import { getIO } from '../socket/index.js';
 import { getAutoAssignTimeoutMs } from './configService.js';
 import { logStatusChange } from './auditService.js';
 import { Floor, TransportRequest } from '../types/index.js';
 import logger from '../utils/logger.js';
+
+// Run a query on the transaction client when inside one, else on the pool
+const runQuery = (client?: PoolClient) => (text: string, params?: unknown[]) =>
+  client ? client.query(text, params) : query(text, params);
 
 const CHECK_INTERVAL_MS = 30000; // 30 seconds
 
@@ -37,40 +42,66 @@ export const autoAssignRequest = async (
   requestId: number,
   assignedBy?: number
 ): Promise<{ success: boolean; assignedTo?: number; reason: string }> => {
-  // Get request details
-  const requestResult = await query(
-    'SELECT * FROM transport_requests WHERE id = $1 AND status = $2',
-    [requestId, 'pending']
-  );
+  const outcome = await withTransaction<{
+    success: boolean;
+    assignedTo?: number;
+    reason: string;
+  }>(async (client) => {
+    // Lock the request row so concurrent claims/auto-assigns serialize on it
+    const requestResult = await client.query(
+      'SELECT * FROM transport_requests WHERE id = $1 AND status = $2 FOR UPDATE',
+      [requestId, 'pending']
+    );
 
-  if (requestResult.rows.length === 0) {
-    return { success: false, reason: 'Request not found or not pending' };
-  }
+    if (requestResult.rows.length === 0) {
+      return { success: false, reason: 'Request not found or not pending' };
+    }
 
-  const request = requestResult.rows[0] as TransportRequest;
+    const request = requestResult.rows[0] as TransportRequest;
 
-  // Find best available transporter using tie-breaker rules
-  const transporter = await findBestTransporter(request.origin_floor);
+    // A selected transporter can be grabbed by a concurrent claim between the
+    // read and the reservation, so retry with that transporter excluded.
+    const excluded: number[] = [];
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const transporter = excluded.length
+        ? await findBestTransporterExcluding(request.origin_floor, excluded, client)
+        : await findBestTransporter(request.origin_floor, client);
 
-  if (!transporter) {
+      if (!transporter) {
+        return { success: false, reason: 'No available transporters' };
+      }
+
+      // Atomically reserve the transporter; rowCount 0 means someone else got them
+      const reserved = await client.query(
+        `UPDATE transporter_status SET status = 'assigned', updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1 AND status = 'available'`,
+        [transporter.user_id]
+      );
+
+      if (reserved.rowCount === 0) {
+        excluded.push(transporter.user_id);
+        continue;
+      }
+
+      await client.query(
+        `UPDATE transport_requests
+         SET assigned_to = $1, status = 'assigned', assigned_at = CURRENT_TIMESTAMP,
+             assignment_method = 'auto', assigned_by = $3
+         WHERE id = $2 AND status = 'pending'`,
+        [transporter.user_id, requestId, assignedBy || null]
+      );
+
+      return { success: true, assignedTo: transporter.user_id, reason: transporter.reason };
+    }
+
     return { success: false, reason: 'No available transporters' };
+  });
+
+  if (!outcome.success || !outcome.assignedTo) {
+    return outcome;
   }
 
-  // Assign the request
-  await query(
-    `UPDATE transport_requests
-     SET assigned_to = $1, status = 'assigned', assigned_at = CURRENT_TIMESTAMP,
-         assignment_method = 'auto', assigned_by = $3
-     WHERE id = $2`,
-    [transporter.user_id, requestId, assignedBy || null]
-  );
-
-  // Update transporter status
-  await query(
-    `UPDATE transporter_status SET status = 'assigned', updated_at = CURRENT_TIMESTAMP
-     WHERE user_id = $1`,
-    [transporter.user_id]
-  );
+  const assignedTo = outcome.assignedTo;
 
   // Emit events
   const io = getIO();
@@ -83,26 +114,23 @@ export const autoAssignRequest = async (
        FROM transporter_status ts
        JOIN users u ON ts.user_id = u.id
        WHERE ts.user_id = $1`,
-      [transporter.user_id]
+      [assignedTo]
     );
     if (statusResult.rows[0]) {
       io.emit('transporter_status_changed', statusResult.rows[0]);
     }
   }
 
-  return {
-    success: true,
-    assignedTo: transporter.user_id,
-    reason: transporter.reason,
-  };
+  return outcome;
 };
 
 // Find best transporter using tie-breaker rules
 export const findBestTransporter = async (
-  originFloor: Floor
+  originFloor: Floor,
+  client?: PoolClient
 ): Promise<{ user_id: number; reason: string } | null> => {
   // Get all available transporters with their stats
-  const result = await query(
+  const result = await runQuery(client)(
     `WITH transporter_jobs AS (
        SELECT
          ts.user_id,
@@ -179,13 +207,69 @@ const checkAutoAssignTimeouts = async () => {
   for (const request of result.rows) {
     const oldAssignee = request.assigned_to;
 
-    // Try to reassign to a different transporter
-    // First, mark the old assignee as available (they didn't respond)
-    await query(
-      `UPDATE transporter_status SET status = 'available', updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $1`,
-      [oldAssignee]
-    );
+    // Reassign atomically: re-verify under lock so a transporter who accepted
+    // between the scan and now keeps their job
+    const reassignment = await withTransaction<{ newAssignee: number | null } | null>(async (client) => {
+      const current = await client.query(
+        `SELECT id, origin_floor FROM transport_requests
+         WHERE id = $1 AND status = 'assigned' AND assignment_method = 'auto'
+           AND assigned_at < $2
+         FOR UPDATE`,
+        [request.id, cutoffTime]
+      );
+      if (current.rows.length === 0) return null;
+
+      // Free the old assignee unless they've since moved to another status
+      await client.query(
+        `UPDATE transporter_status SET status = 'available', updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1 AND status = 'assigned'`,
+        [oldAssignee]
+      );
+
+      // Reset request to pending temporarily
+      await client.query(
+        `UPDATE transport_requests
+         SET status = 'pending', assigned_to = NULL, assigned_at = NULL
+         WHERE id = $1`,
+        [request.id]
+      );
+
+      // Try another transporter, excluding the one who timed out
+      const excluded = [oldAssignee];
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const newTransporter = await findBestTransporterExcluding(
+          request.origin_floor,
+          excluded,
+          client
+        );
+        if (!newTransporter) break;
+
+        const reserved = await client.query(
+          `UPDATE transporter_status SET status = 'assigned', updated_at = CURRENT_TIMESTAMP
+           WHERE user_id = $1 AND status = 'available'`,
+          [newTransporter.user_id]
+        );
+        if (reserved.rowCount === 0) {
+          excluded.push(newTransporter.user_id);
+          continue;
+        }
+
+        await client.query(
+          `UPDATE transport_requests
+           SET assigned_to = $1, status = 'assigned', assigned_at = CURRENT_TIMESTAMP,
+               assignment_method = 'auto'
+           WHERE id = $2`,
+          [newTransporter.user_id, request.id]
+        );
+        return { newAssignee: newTransporter.user_id };
+      }
+
+      // No available transporter, leave as pending
+      return { newAssignee: null };
+    });
+
+    // Request was claimed/progressed before we could reassign — nothing to do
+    if (!reassignment) continue;
 
     // Log the timeout
     await logStatusChange(
@@ -197,49 +281,11 @@ const checkAutoAssignTimeouts = async () => {
       'auto_assign_timeout'
     );
 
-    // Reset request to pending temporarily
-    await query(
-      `UPDATE transport_requests
-       SET status = 'pending', assigned_to = NULL, assigned_at = NULL
-       WHERE id = $1`,
-      [request.id]
-    );
-
-    // Try to find another transporter (excluding the one who timed out)
-    const newTransporter = await findBestTransporterExcluding(
-      request.origin_floor,
-      [oldAssignee]
-    );
-
-    if (newTransporter) {
-      // Assign to new transporter
-      await query(
-        `UPDATE transport_requests
-         SET assigned_to = $1, status = 'assigned', assigned_at = CURRENT_TIMESTAMP,
-             assignment_method = 'auto'
-         WHERE id = $2`,
-        [newTransporter.user_id, request.id]
-      );
-
-      await query(
-        `UPDATE transporter_status SET status = 'assigned', updated_at = CURRENT_TIMESTAMP
-         WHERE user_id = $1`,
-        [newTransporter.user_id]
-      );
-
-      io.emit('auto_assign_timeout', {
-        request_id: request.id,
-        old_assignee: oldAssignee,
-        new_assignee: newTransporter.user_id,
-      });
-    } else {
-      // No available transporter, leave as pending
-      io.emit('auto_assign_timeout', {
-        request_id: request.id,
-        old_assignee: oldAssignee,
-        new_assignee: null,
-      });
-    }
+    io.emit('auto_assign_timeout', {
+      request_id: request.id,
+      old_assignee: oldAssignee,
+      new_assignee: reassignment.newAssignee,
+    });
 
     // Emit status change for old assignee
     const statusResult = await query(
@@ -258,13 +304,14 @@ const checkAutoAssignTimeouts = async () => {
 // Find best transporter excluding certain users
 const findBestTransporterExcluding = async (
   originFloor: Floor,
-  excludeUserIds: number[]
+  excludeUserIds: number[],
+  client?: PoolClient
 ): Promise<{ user_id: number; reason: string } | null> => {
   if (excludeUserIds.length === 0) {
-    return findBestTransporter(originFloor);
+    return findBestTransporter(originFloor, client);
   }
 
-  const result = await query(
+  const result = await runQuery(client)(
     `WITH transporter_jobs AS (
        SELECT
          ts.user_id,

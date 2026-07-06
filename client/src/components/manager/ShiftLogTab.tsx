@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
 import { formatSecondsAsHoursMinutes } from '../../utils/formatters';
+import { localDayStart, localDayEnd, localDateDaysAgo, localToday } from '../../utils/dateRange';
 
 interface ShiftLogEntry {
   user_id: number;
@@ -234,8 +235,8 @@ export default function ShiftLogTab() {
   const [loading, setLoading] = useState(true);
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [filters, setFilters] = useState({
-    start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    end_date: new Date().toISOString().split('T')[0],
+    start_date: localDateDaysAgo(7),
+    end_date: localToday(),
     search: '',
   });
 
@@ -246,8 +247,8 @@ export default function ShiftLogTab() {
   const loadData = async (page: number) => {
     setLoading(true);
     const response = await api.getShiftLogs({
-      start_date: filters.start_date ? `${filters.start_date}T00:00:00Z` : undefined,
-      end_date: filters.end_date ? `${filters.end_date}T23:59:59Z` : undefined,
+      start_date: filters.start_date ? localDayStart(filters.start_date) : undefined,
+      end_date: filters.end_date ? localDayEnd(filters.end_date) : undefined,
       search: filters.search || undefined,
       page,
       limit: 20,

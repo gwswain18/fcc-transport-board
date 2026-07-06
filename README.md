@@ -61,7 +61,7 @@ cp server/.env.example server/.env
 2. Update the `.env` file with your database credentials:
 
 ```env
-DATABASE_URL=postgresql://postgres:[YOUR_PASSWORD]@db.amiebucoazkmmmvoqfyx.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:[YOUR_PASSWORD]@db.[YOUR_PROJECT_REF].supabase.co:5432/postgres
 JWT_SECRET=your-super-secret-jwt-key-change-this
 JWT_EXPIRES_IN=12h
 PORT=3001

@@ -8,13 +8,16 @@ import { getAuditContext } from '../middleware/auditMiddleware.js';
 import {
   sendPasswordResetEmail,
   sendUsernameRecoveryEmail,
-  verifyResetToken,
-  markTokenUsed,
+  consumeResetToken,
 } from '../services/emailService.js';
 import { validatePasswordStrength } from '../utils/validation.js';
+import { TOKEN_COOKIE_OPTIONS, TOKEN_COOKIE_MAX_AGE_MS } from '../utils/cookies.js';
 import logger from '../utils/logger.js';
-import { getIO } from '../socket/index.js';
+import { getIO, broadcastDispatcherChanged, broadcastSecretaryChanged } from '../socket/index.js';
 import { removeHeartbeat } from '../services/heartbeatService.js';
+
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_MINUTES = 15;
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -29,7 +32,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       `SELECT id, email, password_hash, first_name, last_name, role, is_active,
               primary_floor, phone_number, include_in_analytics, is_temp_account,
               auth_provider, provider_id, approval_status, lockout_until,
-              created_at, updated_at
+              failed_login_attempts, created_at, updated_at
        FROM users WHERE email = $1`,
       [email.toLowerCase()]
     );
@@ -41,30 +44,48 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     const user = result.rows[0];
 
-    if (!user.is_active) {
-      res.status(401).json({ error: 'Account is deactivated' });
+    // Check lockout before anything else so a locked account can't be probed
+    if (user.lockout_until && new Date(user.lockout_until) > new Date()) {
+      const remainingMs = new Date(user.lockout_until).getTime() - Date.now();
+      const remainingMin = Math.ceil(remainingMs / 60000);
+      res.status(403).json({ error: `Account is temporarily locked. Try again in ${remainingMin} minute${remainingMin !== 1 ? 's' : ''}.` });
       return;
     }
 
-    // OAuth-only user trying to use password login
-    if (!user.password_hash) {
-      res.status(401).json({ error: 'This account uses single sign-on. Please use the SSO button below.' });
+    // Generic message for deactivated and OAuth-only accounts to prevent
+    // account enumeration
+    if (!user.is_active || !user.password_hash) {
+      res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
     const isValidPassword = await comparePassword(password, user.password_hash);
 
     if (!isValidPassword) {
+      // Count the failure; lock the account after too many consecutive misses
+      const attempts = (user.failed_login_attempts || 0) + 1;
+      if (attempts >= MAX_FAILED_LOGIN_ATTEMPTS) {
+        await query(
+          `UPDATE users
+           SET failed_login_attempts = 0,
+               lockout_until = CURRENT_TIMESTAMP + ($2 || ' minutes')::interval
+           WHERE id = $1`,
+          [user.id, LOCKOUT_MINUTES]
+        );
+        logger.warn(`Account ${user.id} locked after ${attempts} failed login attempts`);
+      } else {
+        await query('UPDATE users SET failed_login_attempts = $2 WHERE id = $1', [
+          user.id,
+          attempts,
+        ]);
+      }
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
-    // Check if user is locked out
-    if (user.lockout_until && new Date(user.lockout_until) > new Date()) {
-      const remainingMs = new Date(user.lockout_until).getTime() - Date.now();
-      const remainingMin = Math.ceil(remainingMs / 60000);
-      res.status(403).json({ error: `Account is temporarily locked. Try again in ${remainingMin} minute${remainingMin !== 1 ? 's' : ''}.` });
-      return;
+    // Successful login resets the failure counter
+    if (user.failed_login_attempts > 0) {
+      await query('UPDATE users SET failed_login_attempts = 0 WHERE id = $1', [user.id]);
     }
 
     const token = generateToken(user);
@@ -74,13 +95,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     await logLogin(user.id, ipAddress, userAgent);
 
     // Set httpOnly cookie - sameSite: 'none' and partitioned required for cross-origin
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      partitioned: true,
-      maxAge: 12 * 60 * 60 * 1000, // 12 hours
-    });
+    res.cookie('token', token, { ...TOKEN_COOKIE_OPTIONS, maxAge: TOKEN_COOKIE_MAX_AGE_MS });
 
     // Check if user has an active shift (for transporters)
     let activeShift = null;
@@ -130,66 +145,19 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
         [authReq.user.id]
       );
 
-      // Broadcast dispatcher change via socket
-      const io = getIO();
-      if (io) {
-        const dispatcherResult = await query(
-          `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
-           FROM active_dispatchers ad
-           JOIN users u ON ad.user_id = u.id
-           WHERE ad.ended_at IS NULL
-           ORDER BY ad.is_primary DESC, ad.started_at ASC`
-        );
-
-        const dispatchers = dispatcherResult.rows.map((row) => ({
-          id: row.id,
-          user_id: row.user_id,
-          is_primary: row.is_primary,
-          on_break: row.on_break,
-          contact_info: row.contact_info,
-          started_at: row.started_at,
-          user: {
-            id: row.user_id,
-            first_name: row.first_name,
-            last_name: row.last_name,
-            email: row.email,
-            phone_number: row.phone_number,
-          },
-        }));
-
-        io.emit('dispatcher_changed', { dispatchers });
-
-        // Broadcast secretary change
-        const secretaryResult = await query(
-          `SELECT a_s.*, u.email
-           FROM active_secretaries a_s
-           JOIN users u ON a_s.user_id = u.id
-           WHERE a_s.ended_at IS NULL
-           ORDER BY a_s.started_at ASC`
-        );
-
-        io.emit('secretary_changed', { secretaries: secretaryResult.rows });
-      }
+      // Broadcast dispatcher + secretary changes via socket (role-filtered)
+      await broadcastDispatcherChanged();
+      await broadcastSecretaryChanged();
 
       // Remove heartbeat so user disappears from active users
       await removeHeartbeat(authReq.user.id);
     }
 
-    res.clearCookie('token', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      partitioned: true,
-    });
+    res.clearCookie('token', TOKEN_COOKIE_OPTIONS);
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     logger.error('Logout error:', error);
-    res.clearCookie('token', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      partitioned: true,
-    });
+    res.clearCookie('token', TOKEN_COOKIE_OPTIONS);
     res.json({ message: 'Logged out successfully' });
   }
 };
@@ -294,12 +262,17 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response): 
       return;
     }
 
-    // Hash and update password
+    // Hash and update password; stamping password_changed_at evicts any other
+    // sessions holding tokens issued before the change
     const newHash = await hashPassword(new_password);
-    await query('UPDATE users SET password_hash = $1 WHERE id = $2', [
-      newHash,
-      req.user.id,
-    ]);
+    await query(
+      'UPDATE users SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [newHash, req.user.id]
+    );
+
+    // Re-issue this session's token so the current user stays logged in
+    const freshToken = generateToken(req.user);
+    res.cookie('token', freshToken, { ...TOKEN_COOKIE_OPTIONS, maxAge: TOKEN_COOKIE_MAX_AGE_MS });
 
     // Log the change
     const { ipAddress } = getAuditContext(req);
@@ -358,22 +331,23 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Verify token
-    const tokenResult = await verifyResetToken(token);
+    // Atomically consume the token (prevents double-use)
+    const tokenResult = await consumeResetToken(token);
     if (!tokenResult.valid) {
       res.status(400).json({ error: tokenResult.error });
       return;
     }
 
-    // Hash and update password
+    // Hash and update password; stamping password_changed_at invalidates
+    // JWTs issued before the reset, and the lockout counters are cleared
     const newHash = await hashPassword(new_password);
-    await query('UPDATE users SET password_hash = $1 WHERE id = $2', [
-      newHash,
-      tokenResult.userId,
-    ]);
-
-    // Mark token as used
-    await markTokenUsed(token);
+    await query(
+      `UPDATE users
+       SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP,
+           failed_login_attempts = 0, lockout_until = NULL
+       WHERE id = $2`,
+      [newHash, tokenResult.userId]
+    );
 
     // Log the reset
     await logPasswordReset(tokenResult.userId!);
@@ -439,19 +413,8 @@ export const registerSecretarySession = async (req: AuthenticatedRequest, res: R
       [req.user.id, first_name, last_name, phone_extension || null]
     );
 
-    // Broadcast secretary change via socket
-    const io = getIO();
-    if (io) {
-      const secretaryResult = await query(
-        `SELECT a_s.*, u.email
-         FROM active_secretaries a_s
-         JOIN users u ON a_s.user_id = u.id
-         WHERE a_s.ended_at IS NULL
-         ORDER BY a_s.started_at ASC`
-      );
-
-      io.emit('secretary_changed', { secretaries: secretaryResult.rows });
-    }
+    // Broadcast secretary change via socket (role-filtered)
+    await broadcastSecretaryChanged();
 
     res.json({ message: 'Secretary session registered' });
   } catch (error) {

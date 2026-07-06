@@ -78,12 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const response = await api.login(email, password);
-    return handleLoginResponse(response as any);
+    return handleLoginResponse(response);
   };
 
   const oauthLogin = async (provider: string, idToken: string) => {
     const response = await api.oauthLogin(provider, idToken);
-    return handleLoginResponse(response as any);
+    return handleLoginResponse(response);
   };
 
   const logout = async () => {

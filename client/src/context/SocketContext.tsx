@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback, useMemo } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
+import { api } from '../utils/api';
 import {
   TransporterStatusRecord,
   TransportRequest,
@@ -61,16 +62,21 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [activeSecretaries, setActiveSecretaries] = useState<ActiveSecretary[]>([]);
   const [alertSettings, setAlertSettings] = useState<AlertSettings | null>(null);
   const [jobRemovedNotification, setJobRemovedNotification] = useState<JobRemovedNotification | null>(null);
-  const [dismissedAlerts, setDismissedAlerts] = useState<Set<number>>(new Set());
   const [recentlyCompleted, setRecentlyCompleted] = useState<Map<number, number>>(new Map());
   const [completedAlerts, setCompletedAlerts] = useState<CycleTimeAlert[]>([]);
   const heartbeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Ref (not state) so socket handlers always see current dismissals without
+  // re-subscribing the socket effect
+  const dismissedAlertsRef = useRef<Set<number>>(new Set());
+  const pendingTimeouts = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   const requireExplanation = alertSettings?.require_explanation_on_dismiss ?? false;
   const requireTransporterExplanation = alertSettings?.require_transporter_explanation_on_dismiss ?? true;
 
+  const userId = user?.id;
+
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       if (socket) {
         socket.disconnect();
         setSocket(null);
@@ -129,7 +135,17 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     // Request events
     newSocket.on('request_created', (request: TransportRequest) => {
-      setRequests((prev) => [...prev, request]);
+      setRequests((prev) => {
+        // De-dupe: a reconnect replay or refresh overlap can deliver the same
+        // request twice
+        const index = prev.findIndex((r) => r.id === request.id);
+        if (index >= 0) {
+          const updated = [...prev];
+          updated[index] = request;
+          return updated;
+        }
+        return [...prev, request];
+      });
     });
 
     newSocket.on('request_assigned', (request: TransportRequest) => {
@@ -143,7 +159,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         return prev;
       });
       // Play sound if assigned to current user
-      if (request.assigned_to === user?.id) {
+      if (request.assigned_to === userId) {
         playJobAssignmentBeep();
       }
     });
@@ -181,7 +197,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
         });
 
         // Clear from recently completed after 30 seconds
-        setTimeout(() => {
+        const timeoutId = setTimeout(() => {
+          pendingTimeouts.current.delete(timeoutId);
           setRecentlyCompleted((prev) => {
             const next = new Map(prev);
             next.delete(request.id);
@@ -190,6 +207,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
           // Also remove from completed alerts
           setCompletedAlerts((prev) => prev.filter((a) => a.request_id !== request.id));
         }, 30000);
+        pendingTimeouts.current.add(timeoutId);
       }
     });
 
@@ -207,7 +225,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
     // Alert events
     newSocket.on('alert_triggered', (alert: AlertData) => {
-      if (!dismissedAlerts.has(alert.request_id)) {
+      if (!dismissedAlertsRef.current.has(alert.request_id)) {
         setAlerts((prev) => {
           const exists = prev.some((a) => a.request_id === alert.request_id);
           if (exists) return prev;
@@ -229,7 +247,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       // Check by looking up the request in our state
       setRequests((currentRequests) => {
         const alertRequest = currentRequests.find((r) => r.id === alert.request_id);
-        if (alertRequest?.assigned_to === user?.id) {
+        if (alertRequest?.assigned_to === userId) {
           playCycleTimeAlertBeep();
         }
         return currentRequests; // Return unchanged
@@ -333,12 +351,18 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       if (heartbeatInterval.current) {
         clearInterval(heartbeatInterval.current);
       }
+      for (const timeoutId of pendingTimeouts.current) {
+        clearTimeout(timeoutId);
+      }
+      pendingTimeouts.current.clear();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [user]);
+    // Key on the id, not the object: auth refreshes rebuild the user object and
+    // must not tear down the socket
+  }, [userId]);
 
   const dismissAlert = useCallback((requestId: number, explanation?: string) => {
-    setDismissedAlerts((prev) => new Set([...prev, requestId]));
+    dismissedAlertsRef.current.add(requestId);
     setAlerts((prev) => prev.filter((a) => a.request_id !== requestId));
     if (socket) {
       socket.emit('timeout_alert_dismissed', { request_id: requestId, explanation });
@@ -371,38 +395,37 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     setJobRemovedNotification(null);
   }, []);
 
-  const refreshData = async () => {
-    const apiBase = import.meta.env.VITE_API_URL || '/api';
+  const refreshData = useCallback(async () => {
     const [statusRes, requestRes, dispatcherRes, secretaryRes, alertSettingsRes] = await Promise.all([
-      fetch(`${apiBase}/status`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { statuses: [] }),
-      fetch(`${apiBase}/requests`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { requests: [] }),
-      fetch(`${apiBase}/dispatchers/active`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { dispatchers: [] }).catch(() => ({ dispatchers: [] })),
-      fetch(`${apiBase}/auth/active-secretaries`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { secretaries: [] }).catch(() => ({ secretaries: [] })),
-      fetch(`${apiBase}/config/alert_settings`, { credentials: 'include' }).then((r) => r.ok ? r.json() : { value: null }).catch(() => ({ value: null })),
+      api.getStatuses(),
+      api.getRequests(),
+      api.getActiveDispatchers(),
+      api.getActiveSecretaries(),
+      api.getConfigByKey('alert_settings'),
     ]);
 
-    if (statusRes.statuses) {
-      setTransporterStatuses(statusRes.statuses);
+    if (statusRes.data?.statuses) {
+      setTransporterStatuses(statusRes.data.statuses);
     }
-    if (requestRes.requests) {
-      setRequests(requestRes.requests);
+    if (requestRes.data?.requests) {
+      setRequests(requestRes.data.requests);
     }
-    if (dispatcherRes.dispatchers) {
-      setActiveDispatchers(dispatcherRes.dispatchers);
+    if (dispatcherRes.data?.dispatchers) {
+      setActiveDispatchers(dispatcherRes.data.dispatchers);
     }
-    if (secretaryRes.secretaries) {
-      setActiveSecretaries(secretaryRes.secretaries);
+    if (secretaryRes.data?.secretaries) {
+      setActiveSecretaries(secretaryRes.data.secretaries);
     }
-    if (alertSettingsRes.value) {
-      setAlertSettings(alertSettingsRes.value);
+    if (alertSettingsRes.data?.value) {
+      setAlertSettings(alertSettingsRes.data.value as AlertSettings);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    if (user) {
+    if (userId) {
       refreshData();
     }
-  }, [user]);
+  }, [userId, refreshData]);
 
   // Initialize audio context on first user interaction (required by browsers)
   useEffect(() => {
@@ -427,39 +450,67 @@ export function SocketProvider({ children }: { children: ReactNode }) {
 
   // Combine active cycle alerts with preserved alerts for recently completed requests
   // recentlyCompleted is used to track which requests recently finished (for 30-second alert window)
-  const visibleCycleAlerts = [
-    ...cycleTimeAlerts,
-    ...completedAlerts.filter(
-      (ca) => !cycleTimeAlerts.some((a) => a.request_id === ca.request_id) &&
-        recentlyCompleted.has(ca.request_id)
-    ),
-  ];
+  const visibleCycleAlerts = useMemo(
+    () => [
+      ...cycleTimeAlerts,
+      ...completedAlerts.filter(
+        (ca) => !cycleTimeAlerts.some((a) => a.request_id === ca.request_id) &&
+          recentlyCompleted.has(ca.request_id)
+      ),
+    ],
+    [cycleTimeAlerts, completedAlerts, recentlyCompleted]
+  );
+
+  // Memoize so consumers only re-render when a value they use actually changes
+  const contextValue = useMemo(
+    () => ({
+      socket,
+      connected,
+      transporterStatuses,
+      requests,
+      alerts,
+      cycleTimeAlerts: visibleCycleAlerts,
+      breakAlerts,
+      offlineAlerts,
+      activeDispatchers,
+      activeSecretaries,
+      alertSettings,
+      requireExplanation,
+      requireTransporterExplanation,
+      jobRemovedNotification,
+      dismissAlert,
+      dismissCycleAlert,
+      dismissBreakAlert,
+      dismissOfflineAlert,
+      clearJobRemovedNotification,
+      refreshData,
+    }),
+    [
+      socket,
+      connected,
+      transporterStatuses,
+      requests,
+      alerts,
+      visibleCycleAlerts,
+      breakAlerts,
+      offlineAlerts,
+      activeDispatchers,
+      activeSecretaries,
+      alertSettings,
+      requireExplanation,
+      requireTransporterExplanation,
+      jobRemovedNotification,
+      dismissAlert,
+      dismissCycleAlert,
+      dismissBreakAlert,
+      dismissOfflineAlert,
+      clearJobRemovedNotification,
+      refreshData,
+    ]
+  );
 
   return (
-    <SocketContext.Provider
-      value={{
-        socket,
-        connected,
-        transporterStatuses,
-        requests,
-        alerts,
-        cycleTimeAlerts: visibleCycleAlerts,
-        breakAlerts,
-        offlineAlerts,
-        activeDispatchers,
-        activeSecretaries,
-        alertSettings,
-        requireExplanation,
-        requireTransporterExplanation,
-        jobRemovedNotification,
-        dismissAlert,
-        dismissCycleAlert,
-        dismissBreakAlert,
-        dismissOfflineAlert,
-        clearJobRemovedNotification,
-        refreshData,
-      }}
-    >
+    <SocketContext.Provider value={contextValue}>
       {children}
     </SocketContext.Provider>
   );

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { api } from '../utils/api';
 import { ReportConfig, ReportData } from '../types/reports';
+import { localDayStart, localDayEnd } from '../utils/dateRange';
 
 export function useReportData() {
   const [loading, setLoading] = useState(false);
@@ -13,8 +14,8 @@ export function useReportData() {
     const floorParam = config.floors.length === 1 ? config.floors[0] : undefined;
 
     const params: { start_date: string; end_date: string; floor?: string } = {
-      start_date: `${config.startDate}T00:00:00Z`,
-      end_date: `${config.endDate}T23:59:59Z`,
+      start_date: localDayStart(config.startDate),
+      end_date: localDayEnd(config.endDate),
       ...(floorParam && { floor: floorParam }),
     };
 

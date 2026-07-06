@@ -12,6 +12,101 @@ let io: Server | null = null;
 // Track socket -> user mapping
 const socketUserMap = new Map<string, number>();
 
+type AuthedSocket = Socket & { userId?: number; userRole?: string };
+
+// Minimal RFC-compliant cookie parse; substring matching breaks on names
+// like csrf_token that merely contain "token"
+const parseCookies = (header?: string): Record<string, string> => {
+  const cookies: Record<string, string> = {};
+  if (!header) return cookies;
+  for (const part of header.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx === -1) continue;
+    const key = part.slice(0, idx).trim();
+    if (!key) continue;
+    let value = part.slice(idx + 1).trim();
+    if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+    try {
+      cookies[key] = decodeURIComponent(value);
+    } catch {
+      cookies[key] = value;
+    }
+  }
+  return cookies;
+};
+
+const DISPATCHER_LIST_SQL = `
+  SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
+  FROM active_dispatchers ad
+  JOIN users u ON ad.user_id = u.id
+  WHERE ad.ended_at IS NULL
+  ORDER BY ad.is_primary DESC, ad.started_at ASC`;
+
+const SECRETARY_LIST_SQL = `
+  SELECT a_s.*, u.email
+  FROM active_secretaries a_s
+  JOIN users u ON a_s.user_id = u.id
+  WHERE a_s.ended_at IS NULL
+  ORDER BY a_s.started_at ASC`;
+
+// Build both variants of the dispatcher payload: full for dispatch staff,
+// contact-info-stripped for transporters
+export const buildDispatcherPayloads = async () => {
+  const result = await query(DISPATCHER_LIST_SQL);
+  const full = result.rows.map((row) => ({
+    id: row.id,
+    user_id: row.user_id,
+    is_primary: row.is_primary,
+    on_break: row.on_break,
+    break_start: row.break_start,
+    replaced_by: row.replaced_by,
+    relief_info: row.relief_info,
+    contact_info: row.contact_info,
+    started_at: row.started_at,
+    ended_at: row.ended_at,
+    user: {
+      id: row.user_id,
+      first_name: row.first_name,
+      last_name: row.last_name,
+      email: row.email,
+      phone_number: row.phone_number,
+    },
+  }));
+  const filtered = full.map((d) => ({
+    ...d,
+    contact_info: undefined,
+    user: {
+      id: d.user.id,
+      first_name: d.user.first_name,
+      last_name: d.user.last_name,
+    },
+  }));
+  return { full, filtered };
+};
+
+export const buildSecretaryPayloads = async () => {
+  const result = await query(SECRETARY_LIST_SQL);
+  const full = result.rows;
+  const filtered = full.map(({ email: _email, ...rest }) => rest);
+  return { full, filtered };
+};
+
+// Broadcast the dispatcher list to everyone, with PII stripped for transporters.
+// Sockets are joined to their role:<role> room at connect time.
+export const broadcastDispatcherChanged = async (): Promise<void> => {
+  if (!io) return;
+  const { full, filtered } = await buildDispatcherPayloads();
+  io.to('role:transporter').emit('dispatcher_changed', { dispatchers: filtered });
+  io.except('role:transporter').emit('dispatcher_changed', { dispatchers: full });
+};
+
+export const broadcastSecretaryChanged = async (): Promise<void> => {
+  if (!io) return;
+  const { full, filtered } = await buildSecretaryPayloads();
+  io.to('role:transporter').emit('secretary_changed', { secretaries: filtered });
+  io.except('role:transporter').emit('secretary_changed', { secretaries: full });
+};
+
 export const initializeSocket = (httpServer: HTTPServer): Server => {
   io = new Server(httpServer, {
     cors: {
@@ -31,9 +126,11 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     },
   });
 
-  // Authentication middleware
-  io.use((socket, next) => {
-    const token = socket.handshake.auth.token || socket.handshake.headers.cookie?.split('token=')[1]?.split(';')[0];
+  // Authentication middleware — mirrors the REST authenticate middleware so a
+  // deactivated/unapproved/locked account cannot hold a live socket
+  io.use(async (socket, next) => {
+    const cookies = parseCookies(socket.handshake.headers.cookie);
+    const token = socket.handshake.auth.token || cookies.token;
 
     if (!token) {
       return next(new Error('Authentication required'));
@@ -41,7 +138,29 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
 
     try {
       const payload = verifyToken(token);
-      (socket as Socket & { userId?: number }).userId = payload.userId;
+      const result = await query(
+        'SELECT id, role, is_active, approval_status, lockout_until, password_changed_at FROM users WHERE id = $1',
+        [payload.userId]
+      );
+      const user = result.rows[0];
+
+      if (!user || !user.is_active || user.approval_status !== 'approved') {
+        return next(new Error('Account not authorized'));
+      }
+      if (user.lockout_until && new Date(user.lockout_until) > new Date()) {
+        return next(new Error('Account is temporarily locked'));
+      }
+      if (
+        user.password_changed_at &&
+        payload.iat &&
+        (payload.iat + 2) * 1000 < new Date(user.password_changed_at).getTime()
+      ) {
+        return next(new Error('Session expired'));
+      }
+
+      const authedSocket = socket as AuthedSocket;
+      authedSocket.userId = payload.userId;
+      authedSocket.userRole = user.role;
       next();
     } catch (error) {
       next(new Error('Invalid token'));
@@ -49,60 +168,34 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
   });
 
   io.on('connection', async (socket) => {
-    const userId = (socket as Socket & { userId?: number }).userId;
+    const { userId, userRole } = socket as AuthedSocket;
     logger.info(`Client connected: ${socket.id} (user: ${userId})`);
 
     if (userId) {
       socketUserMap.set(socket.id, userId);
+
+      // Server-side role room so broadcasts can be role-scoped
+      if (userRole) {
+        socket.join(`role:${userRole}`);
+      }
 
       // Record initial heartbeat with socket ID
       await recordHeartbeat(userId, socket.id);
 
       // Send initial dispatcher + secretary lists to newly connected client
       try {
-        // Query user role for PII filtering
-        const userRoleResult = await query('SELECT role FROM users WHERE id = $1', [userId]);
-        const userRole = userRoleResult.rows[0]?.role;
-
-        const [dispatcherResult, secretaryResult] = await Promise.all([
-          query(
-            `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
-             FROM active_dispatchers ad
-             JOIN users u ON ad.user_id = u.id
-             WHERE ad.ended_at IS NULL
-             ORDER BY ad.is_primary DESC, ad.started_at ASC`
-          ),
-          query(
-            `SELECT a_s.*, u.email
-             FROM active_secretaries a_s
-             JOIN users u ON a_s.user_id = u.id
-             WHERE a_s.ended_at IS NULL
-             ORDER BY a_s.started_at ASC`
-          ),
+        const isTransporter = userRole === 'transporter';
+        const [dispatcherPayloads, secretaryPayloads] = await Promise.all([
+          buildDispatcherPayloads(),
+          buildSecretaryPayloads(),
         ]);
 
-        const isTransporter = userRole === 'transporter';
-        const dispatchers = dispatcherResult.rows.map((row) => ({
-          id: row.id,
-          user_id: row.user_id,
-          is_primary: row.is_primary,
-          on_break: row.on_break,
-          break_start: row.break_start,
-          replaced_by: row.replaced_by,
-          relief_info: row.relief_info,
-          contact_info: isTransporter ? undefined : row.contact_info,
-          started_at: row.started_at,
-          ended_at: row.ended_at,
-          user: {
-            id: row.user_id,
-            first_name: row.first_name,
-            last_name: row.last_name,
-            ...(isTransporter ? {} : { email: row.email, phone_number: row.phone_number }),
-          },
-        }));
-
-        socket.emit('dispatcher_changed', { dispatchers });
-        socket.emit('secretary_changed', { secretaries: secretaryResult.rows });
+        socket.emit('dispatcher_changed', {
+          dispatchers: isTransporter ? dispatcherPayloads.filtered : dispatcherPayloads.full,
+        });
+        socket.emit('secretary_changed', {
+          secretaries: isTransporter ? secretaryPayloads.filtered : secretaryPayloads.full,
+        });
       } catch (error) {
         logger.error('Error sending initial data:', error);
       }
@@ -262,6 +355,13 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     socket.on('join_room', (room: string) => {
       if (!/^(floor|role):[a-zA-Z0-9&_]+$/.test(room)) {
         logger.warn(`Socket ${socket.id} tried to join invalid room: ${room}`);
+        return;
+      }
+      // Role rooms carry role-scoped payloads; only allow a user's own role
+      // room (dispatch staff may join any)
+      const isDispatchStaff = ['dispatcher', 'supervisor', 'manager'].includes(userRole || '');
+      if (room.startsWith('role:') && room !== `role:${userRole}` && !isDispatchStaff) {
+        logger.warn(`Socket ${socket.id} (role: ${userRole}) denied joining room: ${room}`);
         return;
       }
       socket.join(room);

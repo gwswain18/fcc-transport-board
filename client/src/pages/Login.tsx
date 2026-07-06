@@ -329,8 +329,8 @@ export default function Login() {
                 shape="rectangular"
                 width="300"
               />
-              {/* Microsoft sign-in button hidden — kept for future re-enable */}
-              {false && (
+              {/* Microsoft sign-in — set VITE_ENABLE_MICROSOFT_LOGIN=true to re-enable */}
+              {import.meta.env.VITE_ENABLE_MICROSOFT_LOGIN === 'true' && (
               <button
                 onClick={handleMicrosoftLogin}
                 disabled={loading}

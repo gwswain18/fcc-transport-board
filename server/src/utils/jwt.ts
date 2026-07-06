@@ -11,6 +11,7 @@ export interface JWTPayload {
   userId: number;
   email: string;
   role: string;
+  iat?: number; // issued-at, set automatically by jwt.sign
 }
 
 export const generateToken = (user: User): string => {

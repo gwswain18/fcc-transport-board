@@ -19,7 +19,7 @@ export const authenticate = async (
     const payload = verifyToken(token);
 
     const result = await query(
-      'SELECT id, email, first_name, last_name, role, is_active, auth_provider, approval_status, lockout_until, created_at, updated_at FROM users WHERE id = $1',
+      'SELECT id, email, first_name, last_name, role, is_active, auth_provider, approval_status, lockout_until, password_changed_at, created_at, updated_at FROM users WHERE id = $1',
       [payload.userId]
     );
 
@@ -35,8 +35,20 @@ export const authenticate = async (
       return;
     }
 
-    if ((user as any).lockout_until && new Date((user as any).lockout_until) > new Date()) {
+    if (user.lockout_until && new Date(user.lockout_until) > new Date()) {
       res.status(403).json({ error: 'Account is temporarily locked' });
+      return;
+    }
+
+    // Tokens issued before the last password change are no longer valid.
+    // 2s grace window because iat has second precision and a re-issued token
+    // can share the second of the change itself.
+    if (
+      user.password_changed_at &&
+      payload.iat &&
+      (payload.iat + 2) * 1000 < new Date(user.password_changed_at).getTime()
+    ) {
+      res.status(401).json({ error: 'Session expired. Please log in again.' });
       return;
     }
 

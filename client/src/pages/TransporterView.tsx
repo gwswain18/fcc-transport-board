@@ -68,7 +68,7 @@ export default function TransporterView() {
       setLoading(false);
       return;
     }
-    await refreshData();
+    // Socket broadcast (transporter_status_changed) syncs the new status
     setLoading(false);
   };
 
@@ -111,7 +111,9 @@ export default function TransporterView() {
       setLoading(false);
       return;
     }
-    await refreshData();
+    if (result.error) {
+      setError(result.error);
+    }
     setLoading(false);
   };
 
@@ -145,7 +147,6 @@ export default function TransporterView() {
     setDelayReason('');
     setSelectedDelayReasons(new Set());
     setCustomDelayNote('');
-    await refreshData();
     setLoading(false);
   };
 
@@ -159,9 +160,11 @@ export default function TransporterView() {
 
     if (pendingCompletion) {
       setLoading(true);
-      await api.updateRequest(currentJob.id, { status: 'complete' });
+      const result = await api.updateRequest(currentJob.id, { status: 'complete' });
+      if (result.error && result.error !== 'Network error') {
+        setError(result.error);
+      }
       setPendingCompletion(false);
-      await refreshData();
       setLoading(false);
     }
   };
@@ -187,7 +190,10 @@ export default function TransporterView() {
       setLoading(false);
       return;
     }
-    await refreshData();
+    if (result.error) {
+      // e.g. someone else claimed it first (409)
+      setError(result.error);
+    }
     setQueueOpen(false);
     setLoading(false);
   };
@@ -200,12 +206,21 @@ export default function TransporterView() {
     if (response.data?.shift) {
       setActiveShift(response.data.shift);
       setShowShiftStartModal(false);
+    } else if (response.error) {
+      setError(response.error);
+      setShowShiftStartModal(false);
     }
   };
 
   const handleEndShift = async () => {
     setShiftLoading(true);
-    await api.endShift();
+    const response = await api.endShift();
+    if (response.error && response.error !== 'Network error') {
+      setError(response.error);
+      setShowShiftEndModal(false);
+      setShiftLoading(false);
+      return;
+    }
     await logout();
     setShiftLoading(false);
     navigate('/login');
@@ -357,6 +372,7 @@ export default function TransporterView() {
               <span>{error}</span>
               <button
                 onClick={() => setError(null)}
+                aria-label="Dismiss error"
                 className="text-red-500 hover:text-red-700 font-bold"
               >
                 ×

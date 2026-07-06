@@ -6,7 +6,7 @@ import { logCreate, logUpdate, logDelete } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import { isValidEmail, isValidPhoneNumber, validatePasswordStrength } from '../utils/validation.js';
 import { getOnlineUsers, removeHeartbeat } from '../services/heartbeatService.js';
-import { getIO, emitToUser } from '../socket/index.js';
+import { getIO, emitToUser, broadcastDispatcherChanged, broadcastSecretaryChanged } from '../socket/index.js';
 import logger from '../utils/logger.js';
 
 const validFloors: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6', '1WC', 'HRP', 'L&D', 'OTF'];
@@ -287,10 +287,14 @@ export const resetPassword = async (
 
     const passwordHash = await hashPassword(password);
 
-    await query('UPDATE users SET password_hash = $1 WHERE id = $2', [
-      passwordHash,
-      id,
-    ]);
+    // password_changed_at invalidates the user's existing sessions
+    await query(
+      `UPDATE users
+       SET password_hash = $1, password_changed_at = CURRENT_TIMESTAMP,
+           failed_login_attempts = 0, lockout_until = NULL
+       WHERE id = $2`,
+      [passwordHash, id]
+    );
 
     res.json({ message: 'Password reset successfully' });
   } catch (error) {
@@ -664,42 +668,9 @@ export const endUserSession = async (
     // Emit force_logout to the user via socket
     emitToUser(userId, 'force_logout', { message: 'Your session has been ended by a manager.' });
 
-    // Broadcast updated dispatcher/secretary lists
-    const io = getIO();
-    if (io) {
-      const dispatcherResult = await query(
-        `SELECT ad.*, u.first_name, u.last_name, u.email, u.phone_number
-         FROM active_dispatchers ad
-         JOIN users u ON ad.user_id = u.id
-         WHERE ad.ended_at IS NULL
-         ORDER BY ad.is_primary DESC, ad.started_at ASC`
-      );
-      const dispatchers = dispatcherResult.rows.map((row) => ({
-        id: row.id,
-        user_id: row.user_id,
-        is_primary: row.is_primary,
-        on_break: row.on_break,
-        contact_info: row.contact_info,
-        started_at: row.started_at,
-        user: {
-          id: row.user_id,
-          first_name: row.first_name,
-          last_name: row.last_name,
-          email: row.email,
-          phone_number: row.phone_number,
-        },
-      }));
-      io.emit('dispatcher_changed', { dispatchers });
-
-      const secretaryResult = await query(
-        `SELECT a_s.*, u.email
-         FROM active_secretaries a_s
-         JOIN users u ON a_s.user_id = u.id
-         WHERE a_s.ended_at IS NULL
-         ORDER BY a_s.started_at ASC`
-      );
-      io.emit('secretary_changed', { secretaries: secretaryResult.rows });
-    }
+    // Broadcast updated dispatcher/secretary lists (role-filtered)
+    await broadcastDispatcherChanged();
+    await broadcastSecretaryChanged();
 
     res.json({ message: 'User session ended' });
   } catch (error) {

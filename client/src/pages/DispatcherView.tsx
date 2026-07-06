@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
@@ -62,6 +62,12 @@ export default function DispatcherView() {
   const [dispatcherLoading, setDispatcherLoading] = useState(false);
   const [hasPrimaryDispatcher, setHasPrimaryDispatcher] = useState(false);
   const [primaryDispatcherName, setPrimaryDispatcherName] = useState<string | undefined>();
+  const [actionError, setActionError] = useState('');
+  const [confirmDialog, setConfirmDialog] = useState<{
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   // Find current user's dispatcher status
   const myDispatcherStatus = activeDispatchers.find((d) => d.user_id === user?.id);
@@ -115,13 +121,18 @@ export default function DispatcherView() {
     setShowDispatcherModal(false);
   };
 
-  const handleForceEndShift = async (userId: number, userName: string) => {
-    if (!confirm(`End ${userName}'s shift? They will be set to offline.`)) return;
-    setLoading(true);
-    await api.forceEndShift(userId);
-    await refreshData();
-    setLoading(false);
-  };
+  const handleForceEndShift = useCallback((userId: number, userName: string) => {
+    setConfirmDialog({
+      message: `End ${userName}'s shift? They will be set to offline.`,
+      confirmLabel: 'End Shift',
+      onConfirm: async () => {
+        setLoading(true);
+        await api.forceEndShift(userId);
+        await refreshData();
+        setLoading(false);
+      },
+    });
+  }, [refreshData]);
 
   const [formData, setFormData] = useState<CreateTransportRequestData>({
     origin_floor: 'FCC4',
@@ -203,64 +214,94 @@ export default function DispatcherView() {
 
   const isSecretary = user?.role === 'secretary';
 
-  const handleCreateRequest = async (assignTo?: number, autoAssign?: boolean) => {
+  // Socket broadcasts (request_created/assigned/cancelled/status_changed) keep
+  // state in sync after mutations, so no full refetch is needed here
+  const handleCreateRequest = useCallback(async (assignTo?: number, autoAssign?: boolean) => {
     if (!formData.room_number) return;
     setLoading(true);
 
-    await api.createRequest({
+    const response = await api.createRequest({
       ...formData,
       assigned_to: assignTo,
       auto_assign: autoAssign,
     });
 
-    setFormData({
-      origin_floor: 'FCC4',
-      room_number: '',
-      destination: 'Atrium',
-      priority: 'routine',
-      notes: '',
-    });
-    setShowOtherFloors(false);
-    setShowOtherDestination(false);
-    setRoomError('');
-    await refreshData();
+    if (response.error) {
+      setActionError(response.error);
+    } else {
+      setActionError('');
+      setFormData({
+        origin_floor: 'FCC4',
+        room_number: '',
+        destination: 'Atrium',
+        priority: 'routine',
+        notes: '',
+      });
+      setShowOtherFloors(false);
+      setShowOtherDestination(false);
+      setRoomError('');
+    }
     setLoading(false);
-  };
+  }, [formData]);
 
-  const handleAssignRequest = async (requestId: number, transporterId: number) => {
-    // Find the request to check its status
+  const performAssign = useCallback(async (requestId: number, transporterId: number) => {
+    setLoading(true);
+    const response = await api.updateRequest(requestId, { assigned_to: transporterId });
+    if (response.error) {
+      setActionError(response.error);
+    } else {
+      setActionError('');
+    }
+    setAssignModalOpen(false);
+    setSelectedRequest(null);
+    setLoading(false);
+  }, []);
+
+  const handleAssignRequest = useCallback((requestId: number, transporterId: number) => {
+    // Reassigning an in-progress job pulls the current transporter off it
     const request = requests.find(r => r.id === requestId);
     const inProgressStatuses = ['accepted', 'en_route', 'with_patient'];
 
     if (request && inProgressStatuses.includes(request.status)) {
-      const confirmed = confirm(
-        `This request is currently in progress (${request.status.replace('_', ' ')}). ` +
-        `The current transporter (${request.assignee?.first_name} ${request.assignee?.last_name}) ` +
-        `will be removed from this job. Are you sure you want to reassign?`
-      );
-      if (!confirmed) return;
+      setConfirmDialog({
+        message:
+          `This request is currently in progress (${request.status.replace('_', ' ')}). ` +
+          `The current transporter (${request.assignee?.first_name} ${request.assignee?.last_name}) ` +
+          `will be removed from this job. Are you sure you want to reassign?`,
+        confirmLabel: 'Reassign',
+        onConfirm: () => performAssign(requestId, transporterId),
+      });
+      return;
     }
 
-    setLoading(true);
-    await api.updateRequest(requestId, { assigned_to: transporterId });
-    await refreshData();
-    setAssignModalOpen(false);
-    setSelectedRequest(null);
-    setLoading(false);
-  };
+    performAssign(requestId, transporterId);
+  }, [requests, performAssign]);
 
-  const handleCancelRequest = async (requestId: number) => {
-    if (!confirm('Are you sure you want to cancel this request?')) return;
-    setLoading(true);
-    await api.cancelRequest(requestId);
-    await refreshData();
-    setLoading(false);
-  };
+  const handleCancelRequest = useCallback((requestId: number) => {
+    setConfirmDialog({
+      message: 'Are you sure you want to cancel this request?',
+      confirmLabel: 'Cancel Request',
+      onConfirm: async () => {
+        setLoading(true);
+        const response = await api.cancelRequest(requestId);
+        if (response.error) {
+          setActionError(response.error);
+        } else {
+          setActionError('');
+        }
+        setLoading(false);
+      },
+    });
+  }, []);
 
-  const openAssignModal = (request: TransportRequest) => {
+  const openAssignModal = useCallback((request: TransportRequest) => {
     setSelectedRequest(request);
     setAssignModalOpen(true);
-  };
+  }, []);
+
+  const openHistoryModal = useCallback((requestId: number) => {
+    setHistoryRequestId(requestId);
+  }, []);
 
   const handleTakeBreak = async (reliefUserId?: number, reliefText?: string) => {
     setBreakLoading(true);
@@ -268,25 +309,22 @@ export default function DispatcherView() {
     setBreakLoading(false);
     if (!response.error) {
       setShowBreakModal(false);
-      await refreshData();
     }
   };
 
   const handleReturnFromBreak = async (asPrimary?: boolean) => {
     setLoading(true);
     await api.dispatcherReturn(asPrimary);
-    await refreshData();
     setLoading(false);
   };
 
   const handleSetPrimary = async () => {
     setLoading(true);
     await api.setPrimaryDispatcher();
-    await refreshData();
     setLoading(false);
   };
 
-  const handleAssignToPCT = async (requestId: number) => {
+  const handleAssignToPCT = useCallback((requestId: number) => {
     const request = requests.find(r => r.id === requestId);
     const inProgressStatuses = ['accepted', 'en_route', 'with_patient'];
 
@@ -298,12 +336,32 @@ export default function DispatcherView() {
         `will be removed from this job. Transfer to PCT?`;
     }
 
-    if (!confirm(confirmMessage)) return;
-    setLoading(true);
-    await api.assignToPCT(requestId);
-    await refreshData();
-    setLoading(false);
-  };
+    setConfirmDialog({
+      message: confirmMessage,
+      confirmLabel: 'Transfer to PCT',
+      onConfirm: async () => {
+        setLoading(true);
+        const response = await api.assignToPCT(requestId);
+        if (response.error) {
+          setActionError(response.error);
+        } else {
+          setActionError('');
+        }
+        setLoading(false);
+      },
+    });
+  }, [requests]);
+
+  // Stable per-card callbacks so the memoized cards actually skip re-rendering
+  const handleTransporterSelect = useCallback((t: TransporterStatusRecord) => {
+    if (t.status === 'available' && formData.room_number) {
+      handleCreateRequest(t.user_id);
+    }
+  }, [formData.room_number, handleCreateRequest]);
+
+  const handleTransporterEndShift = useCallback((t: TransporterStatusRecord) => {
+    handleForceEndShift(t.user_id, `${t.user?.first_name} ${t.user?.last_name}`);
+  }, [handleForceEndShift]);
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -311,6 +369,18 @@ export default function DispatcherView() {
       <AlertBanners />
 
       <main className="max-w-7xl mx-auto p-4">
+        {actionError && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
+            <span>{actionError}</span>
+            <button
+              onClick={() => setActionError('')}
+              aria-label="Dismiss error"
+              className="text-red-400 hover:text-red-600 font-bold ml-4"
+            >
+              ×
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-12 gap-4">
           {/* Left Panel - Transporters */}
           <div className="col-span-3 space-y-4">
@@ -330,18 +400,9 @@ export default function DispatcherView() {
                   <TransporterCard
                     key={transporter.id}
                     transporter={transporter}
-                    onClick={() => {
-                      if (transporter.status === 'available' && formData.room_number) {
-                        handleCreateRequest(transporter.user_id);
-                      }
-                    }}
+                    onSelect={handleTransporterSelect}
                     canEndShift={canEndShift}
-                    onEndShift={() =>
-                      handleForceEndShift(
-                        transporter.user_id,
-                        `${transporter.user?.first_name} ${transporter.user?.last_name}`
-                      )
-                    }
+                    onEndShift={handleTransporterEndShift}
                   />
                 ))}
                 {transporterStatuses.length === 0 && (
@@ -367,12 +428,12 @@ export default function DispatcherView() {
                       <RequestCard
                         key={request.id}
                         request={request}
-                        onAssign={!isSecretary ? () => openAssignModal(request) : undefined}
-                        onCancel={!isSecretary ? () => handleCancelRequest(request.id) : undefined}
+                        onAssign={!isSecretary ? openAssignModal : undefined}
+                        onCancel={!isSecretary ? handleCancelRequest : undefined}
                         showAutoAssign={!isSecretary}
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
-                        onClickCard={() => setHistoryRequestId(request.id)}
+                        onClickCard={openHistoryModal}
                       />
                     ))}
                   </div>
@@ -390,11 +451,11 @@ export default function DispatcherView() {
                       <RequestCard
                         key={request.id}
                         request={request}
-                        onAssign={!isSecretary ? () => openAssignModal(request) : undefined}
-                        onCancel={!isSecretary ? () => handleCancelRequest(request.id) : undefined}
+                        onAssign={!isSecretary ? openAssignModal : undefined}
+                        onCancel={!isSecretary ? handleCancelRequest : undefined}
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
-                        onClickCard={() => setHistoryRequestId(request.id)}
+                        onClickCard={openHistoryModal}
                       />
                     ))}
                   </div>
@@ -412,11 +473,11 @@ export default function DispatcherView() {
                       <RequestCard
                         key={request.id}
                         request={request}
-                        onAssign={!isSecretary ? () => openAssignModal(request) : undefined}
-                        onCancel={!isSecretary ? () => handleCancelRequest(request.id) : undefined}
+                        onAssign={!isSecretary ? openAssignModal : undefined}
+                        onCancel={!isSecretary ? handleCancelRequest : undefined}
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
-                        onClickCard={() => setHistoryRequestId(request.id)}
+                        onClickCard={openHistoryModal}
                       />
                     ))}
                   </div>
@@ -576,6 +637,7 @@ export default function DispatcherView() {
                 </div>
                 {!isSecretary && availableTransporters.length > 0 && (
                   <select
+                    value=""
                     onChange={(e) => {
                       if (e.target.value) {
                         handleCreateRequest(parseInt(e.target.value));
@@ -583,7 +645,6 @@ export default function DispatcherView() {
                     }}
                     disabled={!formData.room_number || loading}
                     className="w-full input"
-                    defaultValue=""
                   >
                     <option value="">Manual Assign to...</option>
                     {availableTransporters.map((t) => (
@@ -629,7 +690,6 @@ export default function DispatcherView() {
                     onAssigned={() => {
                       setAssignModalOpen(false);
                       setSelectedRequest(null);
-                      refreshData();
                     }}
                   />
                   <button
@@ -689,6 +749,37 @@ export default function DispatcherView() {
         requestId={historyRequestId}
       />
 
+      {/* Confirm Dialog */}
+      <Modal
+        isOpen={!!confirmDialog}
+        onClose={() => setConfirmDialog(null)}
+        title="Confirm"
+      >
+        {confirmDialog && (
+          <div className="space-y-4">
+            <p className="text-gray-700">{confirmDialog.message}</p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="btn-secondary"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={() => {
+                  const action = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  action();
+                }}
+                className="btn-danger"
+              >
+                {confirmDialog.confirmLabel}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Dispatcher Login Modal (for unregistered dispatchers) */}
       <DispatcherLoginModal
         isOpen={showDispatcherModal}
@@ -705,14 +796,14 @@ export default function DispatcherView() {
 
 const TransporterCard = memo(function TransporterCard({
   transporter,
-  onClick,
+  onSelect,
   canEndShift,
   onEndShift,
 }: {
   transporter: TransporterStatusRecord;
-  onClick?: () => void;
+  onSelect?: (transporter: TransporterStatusRecord) => void;
   canEndShift?: boolean;
-  onEndShift?: () => void;
+  onEndShift?: (transporter: TransporterStatusRecord) => void;
 }) {
   // Determine elapsed timer start time and label
   const getTimerInfo = (): { startTime: string; label: string } | null => {
@@ -743,7 +834,7 @@ const TransporterCard = memo(function TransporterCard({
 
   return (
     <div
-      onClick={onClick}
+      onClick={() => onSelect?.(transporter)}
       className={`p-3 rounded-lg border ${
         transporter.status === 'available'
           ? 'border-green-200 bg-green-50 cursor-pointer hover:bg-green-100'
@@ -777,7 +868,7 @@ const TransporterCard = memo(function TransporterCard({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onEndShift();
+            onEndShift(transporter);
           }}
           className="text-xs text-red-600 hover:text-red-800 mt-1"
         >
@@ -798,12 +889,12 @@ const RequestCard = memo(function RequestCard({
   onClickCard,
 }: {
   request: TransportRequest;
-  onAssign?: () => void;
-  onCancel?: () => void;
+  onAssign?: (request: TransportRequest) => void;
+  onCancel?: (requestId: number) => void;
   showAutoAssign?: boolean;
   cycleTimeAlert?: CycleTimeAlertType;
   onDismissAlert?: (requestId: number, reason?: string) => void;
-  onClickCard?: () => void;
+  onClickCard?: (requestId: number) => void;
 }) {
   const isPCTTransfer = request.status === 'transferred_to_pct';
   const hasAlert = !!cycleTimeAlert;
@@ -822,7 +913,7 @@ const RequestCard = memo(function RequestCard({
       onClick={(e) => {
         // Only trigger if not clicking a button or input
         if ((e.target as HTMLElement).closest('button, input')) return;
-        onClickCard?.();
+        onClickCard?.(request.id);
       }}
     >
       <div className="flex items-start justify-between mb-2">
@@ -868,7 +959,7 @@ const RequestCard = memo(function RequestCard({
 
       <div className="flex flex-wrap gap-2 mt-3">
         {onAssign && !isPCTTransfer && (
-          <button onClick={onAssign} className="btn-primary text-sm py-1">
+          <button onClick={() => onAssign(request)} className="btn-primary text-sm py-1">
             {request.assignee ? 'Reassign' : 'Assign'}
           </button>
         )}
@@ -930,7 +1021,7 @@ const RequestCard = memo(function RequestCard({
           </div>
         )}
         {onCancel && !isPCTTransfer && (
-          <button onClick={onCancel} className="btn-danger text-sm py-1">
+          <button onClick={() => onCancel(request.id)} className="btn-danger text-sm py-1">
             Cancel
           </button>
         )}

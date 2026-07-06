@@ -5,6 +5,7 @@ import { verifyOAuthToken } from '../utils/oauth.js';
 import { logLogin } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import { TOKEN_COOKIE_OPTIONS, TOKEN_COOKIE_MAX_AGE_MS } from '../utils/cookies.js';
 import logger from '../utils/logger.js';
 
 export const oauthLogin = async (req: Request, res: Response): Promise<void> => {
@@ -36,36 +37,52 @@ export const oauthLogin = async (req: Request, res: Response): Promise<void> => 
 
     let user = result.rows[0];
 
-    // 2. If not found, look up by email (potential auto-link for existing local users)
+    // 2. If not found, look up by email — but only when the provider certifies
+    // the email, otherwise an attacker-controlled claim could take over an
+    // existing account
     if (!user) {
-      result = await query(
-        `SELECT id, email, password_hash, first_name, last_name, role, is_active,
-                primary_floor, phone_number, include_in_analytics, is_temp_account,
-                auth_provider, provider_id, approval_status,
-                created_at, updated_at
-         FROM users WHERE email = $1`,
-        [profile.email.toLowerCase()]
-      );
+      if (profile.email_verified) {
+        result = await query(
+          `SELECT id, email, password_hash, first_name, last_name, role, is_active,
+                  primary_floor, phone_number, include_in_analytics, is_temp_account,
+                  auth_provider, provider_id, approval_status,
+                  created_at, updated_at
+           FROM users WHERE email = $1`,
+          [profile.email.toLowerCase()]
+        );
 
-      user = result.rows[0];
+        user = result.rows[0];
 
-      if (user) {
-        // Block OAuth login for temp accounts
-        if (user.is_temp_account) {
-          res.status(403).json({ error: 'Temp accounts cannot use OAuth sign-in' });
+        if (user) {
+          // Block OAuth login for temp accounts
+          if (user.is_temp_account) {
+            res.status(403).json({ error: 'Temp accounts cannot use OAuth sign-in' });
+            return;
+          }
+
+          // Existing local user — auto-link OAuth account
+          if (user.auth_provider === 'local' && !user.provider_id) {
+            await query(
+              `UPDATE users SET auth_provider = $1, provider_id = $2 WHERE id = $3`,
+              [provider, profile.provider_id, user.id]
+            );
+            user.auth_provider = provider;
+            user.provider_id = profile.provider_id;
+          }
+          // If they already have a different OAuth provider linked, don't overwrite
+        }
+      } else {
+        // Unverified email: never link; reject if the email is already taken
+        const existingEmail = await query('SELECT id FROM users WHERE email = $1', [
+          profile.email.toLowerCase(),
+        ]);
+        if (existingEmail.rows.length > 0) {
+          res.status(403).json({
+            error:
+              'An account with this email already exists. Sign in with your password, then link this provider from your profile.',
+          });
           return;
         }
-
-        // Existing local user — auto-link OAuth account
-        if (user.auth_provider === 'local' && !user.provider_id) {
-          await query(
-            `UPDATE users SET auth_provider = $1, provider_id = $2 WHERE id = $3`,
-            [provider, profile.provider_id, user.id]
-          );
-          user.auth_provider = provider;
-          user.provider_id = profile.provider_id;
-        }
-        // If they already have a different OAuth provider linked, don't overwrite
       }
     }
 
@@ -94,13 +111,7 @@ export const oauthLogin = async (req: Request, res: Response): Promise<void> => 
     const { ipAddress, userAgent } = getAuditContext(req as AuthenticatedRequest);
     await logLogin(user.id, ipAddress, userAgent);
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      partitioned: true,
-      maxAge: 12 * 60 * 60 * 1000,
-    });
+    res.cookie('token', token, { ...TOKEN_COOKIE_OPTIONS, maxAge: TOKEN_COOKIE_MAX_AGE_MS });
 
     const { password_hash: _, ...safeUser } = user;
 

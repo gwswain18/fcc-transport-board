@@ -50,10 +50,23 @@ async function request<T>(
   }
 }
 
+// Build a query string ('?a=1&b=2' or '') from the defined entries of params
+function buildQuery(params?: Record<string, unknown>): string {
+  if (!params) return '';
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined) {
+      searchParams.append(key, String(value));
+    }
+  });
+  const query = searchParams.toString();
+  return query ? `?${query}` : '';
+}
+
 export const api = {
   // Auth
   login: (email: string, password: string) =>
-    request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; message: string }>('/auth/login', {
+    request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; isPending?: boolean; isSecretary?: boolean; message: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
@@ -89,7 +102,7 @@ export const api = {
   heartbeat: () => request<{ message: string; timestamp: string }>('/auth/heartbeat', { method: 'POST' }),
 
   oauthLogin: (provider: string, id_token: string) =>
-    request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; isPending?: boolean; message: string }>('/auth/oauth', {
+    request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; isPending?: boolean; isSecretary?: boolean; message: string }>('/auth/oauth', {
       method: 'POST',
       body: JSON.stringify({ provider, id_token }),
     }),
@@ -219,17 +232,9 @@ export const api = {
     assigned_to?: number;
     include_complete?: boolean;
   }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{ requests: import('../types').TransportRequest[] }>(
-      `/requests${query ? `?${query}` : ''}`
+      `/requests${query}`
     );
   },
 
@@ -401,17 +406,9 @@ export const api = {
     floor?: string;
     transporter_id?: number;
   }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{ summary: import('../types').ReportSummary }>(
-      `/reports/summary${query ? `?${query}` : ''}`
+      `/reports/summary${query}`
     );
   },
 
@@ -420,75 +417,35 @@ export const api = {
     end_date?: string;
     floor?: string;
   }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{ transporters: import('../types').TransporterStats[] }>(
-      `/reports/by-transporter${query ? `?${query}` : ''}`
+      `/reports/by-transporter${query}`
     );
   },
 
   getJobsByHour: (params?: { start_date?: string; end_date?: string }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{ data: { hour: number; count: number }[] }>(
-      `/reports/by-hour${query ? `?${query}` : ''}`
+      `/reports/by-hour${query}`
     );
   },
 
   getJobsByFloor: (params?: { start_date?: string; end_date?: string }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{ data: { floor: string; count: number }[] }>(
-      `/reports/by-floor${query ? `?${query}` : ''}`
+      `/reports/by-floor${query}`
     );
   },
 
   getJobsByDay: (params?: { start_date?: string; end_date?: string }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{ jobsByDay: { date: string; count: number }[] }>(
-      `/reports/by-day${query ? `?${query}` : ''}`
+      `/reports/by-day${query}`
     );
   },
 
   getStaffingByFloor: (params?: { start_date?: string; end_date?: string }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{
       staffing: Array<{
         floor: import('../types').Floor;
@@ -497,19 +454,11 @@ export const api = {
         busy_transporters: number;
         on_break_transporters: number;
       }>;
-    }>(`/reports/staffing-by-floor${query ? `?${query}` : ''}`);
+    }>(`/reports/staffing-by-floor${query}`);
   },
 
   getFloorAnalysis: (params?: { start_date?: string; end_date?: string }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{
       floors: Array<{
         floor: import('../types').Floor;
@@ -521,19 +470,11 @@ export const api = {
         pct_transferred: number;
         cancelled_count: number;
       }>;
-    }>(`/reports/floor-analysis${query ? `?${query}` : ''}`);
+    }>(`/reports/floor-analysis${query}`);
   },
 
   getDelayReport: (params?: { start_date?: string; end_date?: string }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{
       byReason: Array<{ reason: string; count: number }>;
       byTransporter: Array<{
@@ -543,7 +484,7 @@ export const api = {
         total_delays: number;
         reasons: Array<{ reason: string; count: number }>;
       }>;
-    }>(`/reports/delays${query ? `?${query}` : ''}`);
+    }>(`/reports/delays${query}`);
   },
 
   getActivityLog: (params?: {
@@ -556,15 +497,7 @@ export const api = {
     page?: number;
     limit?: number;
   }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{
       entries: Array<{
         id: number;
@@ -588,7 +521,7 @@ export const api = {
         total: number;
         pages: number;
       };
-    }>(`/reports/activity-log${query ? `?${query}` : ''}`);
+    }>(`/reports/activity-log${query}`);
   },
 
   getCompletedJobs: (params?: {
@@ -599,15 +532,7 @@ export const api = {
     page?: number;
     limit?: number;
   }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{
       jobs: Array<{
         id: number;
@@ -635,7 +560,7 @@ export const api = {
         cancelled_by: { first_name: string; last_name: string } | null;
       }>;
       pagination: { page: number; limit: number; total: number; pages: number };
-    }>(`/reports/completed-jobs${query ? `?${query}` : ''}`);
+    }>(`/reports/completed-jobs${query}`);
   },
 
   getShiftLogs: (params?: {
@@ -645,15 +570,7 @@ export const api = {
     page?: number;
     limit?: number;
   }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{
       shiftLogs: Array<{
         user_id: number;
@@ -676,7 +593,7 @@ export const api = {
         }>;
       }>;
       pagination: { page: number; limit: number; total: number; pages: number };
-    }>(`/reports/shift-logs${query ? `?${query}` : ''}`);
+    }>(`/reports/shift-logs${query}`);
   },
 
   getCycleTimeAverages: () =>
@@ -697,15 +614,7 @@ export const api = {
     floor?: string;
     transporter_id?: number;
   }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
+    const query = buildQuery(params);
     return request<{
       transporters: Array<{
         user_id: number;
@@ -725,7 +634,7 @@ export const api = {
         total_offline_time_seconds: number;
         total_down_time_seconds: number;
       };
-    }>(`/reports/time-metrics${query ? `?${query}` : ''}`);
+    }>(`/reports/time-metrics${query}`);
   },
 
   exportData: (params?: {
@@ -734,16 +643,8 @@ export const api = {
     floor?: string;
     transporter_id?: number;
   }) => {
-    const searchParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          searchParams.append(key, String(value));
-        }
-      });
-    }
-    const query = searchParams.toString();
-    window.location.href = `${API_BASE}/reports/export${query ? `?${query}` : ''}`;
+    const query = buildQuery(params);
+    window.location.href = `${API_BASE}/reports/export${query}`;
   },
 
   // Offline sync
