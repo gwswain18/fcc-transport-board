@@ -15,6 +15,7 @@ import { startAutoAssignService, stopAutoAssignService } from './services/autoAs
 import { initializeTwilio } from './services/twilioService.js';
 import { initializeEmail } from './services/emailService.js';
 import logger from './utils/logger.js';
+import { allowedOrigins } from './utils/origins.js';
 
 dotenv.config();
 
@@ -30,7 +31,7 @@ initializeSocket(httpServer);
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: allowedOrigins,
   credentials: true,
 }));
 app.use(express.json({ limit: '10kb' }));

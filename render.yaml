@@ -14,8 +14,9 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      # Comma-separated allowed origins; first entry is used for links in emails
       - key: CLIENT_URL
-        value: https://fcc-transport-client.onrender.com
+        value: https://fcctransport.com,https://www.fcctransport.com,https://fcc-transport-client.onrender.com
       - key: LOG_LEVEL
         value: info
 

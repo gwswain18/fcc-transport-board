@@ -5,6 +5,7 @@ import nodemailer from 'nodemailer';
 import { query } from '../config/database.js';
 import crypto from 'crypto';
 import logger from '../utils/logger.js';
+import { primaryClientUrl } from '../utils/origins.js';
 
 // HTML escape function to prevent XSS in email templates
 const escapeHtml = (text: string): string => {
@@ -136,7 +137,7 @@ export const sendPasswordResetEmail = async (
     [userId, token, expiresAt.toISOString()]
   );
 
-  const resetUrl = `${process.env.CLIENT_URL}/reset-password/${token}`;
+  const resetUrl = `${primaryClientUrl}/reset-password/${token}`;
 
   const html = `
     <h2>Password Reset Request</h2>

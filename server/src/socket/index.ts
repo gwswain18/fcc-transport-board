@@ -6,6 +6,7 @@ import { query } from '../config/database.js';
 import { acknowledgeDelay } from '../services/cycleTimeService.js';
 import { logStatusChange } from '../services/auditService.js';
 import logger from '../utils/logger.js';
+import { allowedOrigins } from '../utils/origins.js';
 
 let io: Server | null = null;
 
@@ -110,7 +111,7 @@ export const broadcastSecretaryChanged = async (): Promise<void> => {
 export const initializeSocket = (httpServer: HTTPServer): Server => {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:5173',
+      origin: allowedOrigins,
       credentials: true,
       methods: ['GET', 'POST'],
     },
