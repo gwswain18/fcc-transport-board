@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
+import { detectPhi } from '../utils/phiDetection';
 import {
   Floor,
   TransportRequest,
@@ -47,6 +48,7 @@ export default function DispatcherView() {
     activeDispatchers,
     dismissCycleAlert,
     refreshData,
+    notesEnabled,
   } = useSocket();
   const [loading, setLoading] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
@@ -218,6 +220,17 @@ export default function DispatcherView() {
   // state in sync after mutations, so no full refetch is needed here
   const handleCreateRequest = useCallback(async (assignTo?: number, autoAssign?: boolean) => {
     if (!formData.room_number) return;
+
+    // Block obvious PHI in notes before it ever leaves the browser (server
+    // enforces the same rule as a backstop)
+    if (formData.notes?.trim()) {
+      const phi = detectPhi(formData.notes);
+      if (phi.flagged) {
+        setActionError(phi.reason || 'Please remove patient identifiers from the notes.');
+        return;
+      }
+    }
+
     setLoading(true);
 
     const response = await api.createRequest({
@@ -604,18 +617,23 @@ export default function DispatcherView() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="label">Notes (optional)</label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, notes: e.target.value }))
-                    }
-                    className="input"
-                    rows={2}
-                    placeholder="Additional instructions..."
-                  />
-                </div>
+                {notesEnabled && (
+                  <div>
+                    <label className="label">Notes (optional)</label>
+                    <textarea
+                      value={formData.notes}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, notes: e.target.value }))
+                      }
+                      className="input"
+                      rows={2}
+                      placeholder="Additional instructions..."
+                    />
+                    <p className="mt-1 text-xs text-amber-600">
+                      Do not enter patient names, MRNs, dates of birth, or other identifiers.
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex gap-2 pt-2">
                   <button

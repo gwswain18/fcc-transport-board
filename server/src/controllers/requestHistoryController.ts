@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { query } from '../config/database.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import { logPhiAccess } from '../services/auditService.js';
+import { getAuditContext } from '../middleware/auditMiddleware.js';
 import logger from '../utils/logger.js';
 
 export const getRequestHistory = async (
@@ -8,6 +10,11 @@ export const getRequestHistory = async (
   res: Response
 ): Promise<void> => {
   try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
     const { id } = req.params;
 
     // Get the request with creator/assignee info
@@ -30,6 +37,20 @@ export const getRequestHistory = async (
     }
 
     const row = requestResult.rows[0];
+
+    // Object-level authorization: dispatch staff may view any request's
+    // history (PHI); lower roles only requests they created or are assigned to.
+    // Prevents enumeration of every patient transport by sequential ID.
+    const isDispatchStaff = ['dispatcher', 'supervisor', 'manager'].includes(req.user.role);
+    const isInvolved = row.created_by === req.user.id || row.assigned_to === req.user.id;
+    if (!isDispatchStaff && !isInvolved) {
+      res.status(403).json({ error: 'You do not have access to this request' });
+      return;
+    }
+
+    // HIPAA access audit: record that this user viewed this transport record
+    const { ipAddress, userAgent } = getAuditContext(req);
+    await logPhiAccess(req.user.id, 'transport_request', row.id, { view: 'history' }, ipAddress, userAgent);
     const request = {
       ...row,
       creator: {

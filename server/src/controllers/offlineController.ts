@@ -59,7 +59,9 @@ export const syncOfflineActions = async (req: AuthenticatedRequest, res: Respons
 
         response.processed++;
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        // Log the detail server-side; return a generic message so raw DB/SQL
+        // error text doesn't leak schema details to the client
+        logger.error(`Offline action ${i} (${action.action_type}) failed:`, error);
 
         // Mark as failed
         await query(
@@ -70,7 +72,7 @@ export const syncOfflineActions = async (req: AuthenticatedRequest, res: Respons
         );
 
         response.failed++;
-        response.errors.push({ index: i, error: errorMessage });
+        response.errors.push({ index: i, error: 'Action could not be processed' });
       }
     }
 
@@ -114,6 +116,13 @@ const processStatusUpdate = async (
   payload: Record<string, unknown>
 ): Promise<void> => {
   const { status, explanation } = payload;
+
+  // Same enum allowlist the live endpoint enforces (statusController), so the
+  // offline path can't write arbitrary status values
+  const validStatuses = ['available', 'on_break', 'other', 'offline'];
+  if (!validStatuses.includes(status as string)) {
+    throw new Error(`Invalid status: ${status}`);
+  }
 
   await query(
     `UPDATE transporter_status

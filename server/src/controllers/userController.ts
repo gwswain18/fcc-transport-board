@@ -84,6 +84,14 @@ export const createUser = async (
       return;
     }
 
+    // Enforce the same password policy as reset/change (was missing here, so
+    // admin-created accounts could get weak PHI-access passwords)
+    const passwordValidation = validatePasswordStrength(password);
+    if (!passwordValidation.valid) {
+      res.status(400).json({ error: passwordValidation.errors.join('. ') });
+      return;
+    }
+
     // Check if email already exists
     const existing = await query('SELECT id FROM users WHERE email = $1', [
       email.toLowerCase(),
@@ -628,9 +636,18 @@ export const endUserSession = async (
     const { id } = req.params;
     const userId = parseInt(id);
 
-    // Set lockout for 1 hour
+    if (!Number.isInteger(userId)) {
+      res.status(400).json({ error: 'Invalid user id' });
+      return;
+    }
+
+    // Invalidate all outstanding JWTs immediately (durable revocation) and set
+    // a lockout that outlasts the token lifetime as a second layer
     await query(
-      `UPDATE users SET lockout_until = NOW() + INTERVAL '1 hour' WHERE id = $1`,
+      `UPDATE users
+       SET sessions_invalidated_at = NOW(),
+           lockout_until = NOW() + INTERVAL '1 hour'
+       WHERE id = $1`,
       [userId]
     );
 

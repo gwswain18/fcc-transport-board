@@ -6,6 +6,7 @@ import {
   setConfigValue,
   getAllConfigValues,
   deleteConfigValue,
+  getNotesEnabledValue,
 } from '../controllers/configController.js';
 
 const router = express.Router();
@@ -19,6 +20,9 @@ router.get('/alert_settings', (req, res) => {
   (req.params as Record<string, string>).key = 'alert_settings';
   getConfigValue(req, res);
 });
+
+// Notes-enabled flag readable by all authenticated users (create / delay forms)
+router.get('/notes_enabled', getNotesEnabledValue);
 
 // Get config (supervisor+)
 router.get('/', canViewReports, getAllConfigValues);

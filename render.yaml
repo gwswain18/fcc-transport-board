@@ -14,11 +14,30 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      # Supabase CA cert (PEM). Set this so the DB connection verifies the
+      # server certificate (rejectUnauthorized:true) instead of accepting any
+      # cert — required to protect PHI in transit. See config/database.ts.
+      - key: DATABASE_CA_CERT
+        sync: false
       # Comma-separated allowed origins; first entry is used for links in emails
       - key: CLIENT_URL
         value: https://fcctransport.com,https://www.fcctransport.com,https://fcc-transport-client.onrender.com
       - key: LOG_LEVEL
         value: info
+      # Email (Gmail SMTP) for password-reset and notification emails. All five
+      # must be present or the app disables email. SMTP_PASS is the Gmail app
+      # password — keep it secret (sync:false), set it in the Render dashboard,
+      # and never commit it.
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: fcc.transport.board@gmail.com
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        value: "FCC Transport <fcc.transport.board@gmail.com>"
 
   # Frontend
   - type: web

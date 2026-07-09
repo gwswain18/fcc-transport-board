@@ -9,6 +9,8 @@ import {
 } from '../types/index.js';
 import { getIO, emitToUser } from '../socket/index.js';
 import { validateFloorRoom } from '../utils/validation.js';
+import { detectPhi } from '../utils/phiDetection.js';
+import { getNotesEnabled } from '../services/configService.js';
 import { autoAssignRequest } from '../services/autoAssignService.js';
 import { sendJobAssignmentSMS } from '../services/twilioService.js';
 import { logCreate, logStatusChange, logReassignment } from '../services/auditService.js';
@@ -203,6 +205,21 @@ export const createRequest = async (
     if (!validation.is_valid) {
       res.status(400).json({ error: validation.error });
       return;
+    }
+
+    // Notes are the only free-text (and thus only potential PHI) field on a
+    // request. Reject them outright if an admin disabled notes, and otherwise
+    // block anything that looks like a patient identifier.
+    if (notes && String(notes).trim()) {
+      if (!(await getNotesEnabled())) {
+        res.status(400).json({ error: 'Notes are disabled by your administrator' });
+        return;
+      }
+      const phi = detectPhi(String(notes));
+      if (phi.flagged) {
+        res.status(400).json({ error: phi.reason });
+        return;
+      }
     }
 
     let initialStatus: RequestStatus = 'pending';
@@ -708,6 +725,13 @@ export const claimRequest = async (
   try {
     if (!req.user) {
       res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    // Claiming self-assigns the caller as the transporter, so only
+    // transporters may claim (secretaries create; dispatchers assign)
+    if (req.user.role !== 'transporter') {
+      res.status(403).json({ error: 'Only transporters can claim jobs' });
       return;
     }
 

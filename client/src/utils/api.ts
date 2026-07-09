@@ -7,6 +7,15 @@ interface ApiResponse<T> {
   error?: string;
 }
 
+// CSRF token bound to the current session's JWT. The API and SPA are on
+// different origins, so the SPA can't read the httpOnly auth cookie; the
+// server returns this value in login/me/change-password bodies and we echo it
+// in X-CSRF-Token. Kept in memory (module scope), re-hydrated by me() on load.
+let csrfToken: string | null = null;
+export function setCsrfToken(token: string | null | undefined): void {
+  csrfToken = token ?? null;
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -16,6 +25,7 @@ async function request<T>(
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         ...options.headers,
       },
       credentials: 'include',
@@ -66,17 +76,17 @@ function buildQuery(params?: Record<string, unknown>): string {
 export const api = {
   // Auth
   login: (email: string, password: string) =>
-    request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; isPending?: boolean; isSecretary?: boolean; message: string }>('/auth/login', {
+    request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; csrfToken?: string; isPending?: boolean; isSecretary?: boolean; message: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
 
   logout: () => request('/auth/logout', { method: 'POST' }),
 
-  me: () => request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; secretarySession?: { session_first_name: string; session_last_name: string; phone_extension?: string }; needsSecretarySession?: boolean }>('/auth/me'),
+  me: () => request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; secretarySession?: { session_first_name: string; session_last_name: string; phone_extension?: string }; needsSecretarySession?: boolean; csrfToken?: string }>('/auth/me'),
 
   changePassword: (current_password: string, new_password: string) =>
-    request<{ message: string }>('/auth/change-password', {
+    request<{ message: string; csrfToken?: string }>('/auth/change-password', {
       method: 'POST',
       body: JSON.stringify({ current_password, new_password }),
     }),
@@ -102,7 +112,7 @@ export const api = {
   heartbeat: () => request<{ message: string; timestamp: string }>('/auth/heartbeat', { method: 'POST' }),
 
   oauthLogin: (provider: string, id_token: string) =>
-    request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; isPending?: boolean; isSecretary?: boolean; message: string }>('/auth/oauth', {
+    request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; csrfToken?: string; isPending?: boolean; isSecretary?: boolean; message: string }>('/auth/oauth', {
       method: 'POST',
       body: JSON.stringify({ provider, id_token }),
     }),
@@ -390,6 +400,10 @@ export const api = {
 
   getConfigByKey: (key: string) =>
     request<{ key: string; value: unknown }>(`/config/${key}`),
+
+  // Resolved notes-enabled flag (always a boolean), readable by any approved user
+  getNotesEnabled: () =>
+    request<{ notesEnabled: boolean }>('/config/notes_enabled'),
 
   updateConfig: (key: string, value: unknown) =>
     request<{ message: string }>(`/config/${key}`, {

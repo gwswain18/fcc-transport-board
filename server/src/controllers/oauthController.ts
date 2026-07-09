@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database.js';
-import { generateToken } from '../utils/jwt.js';
+import { generateToken, getTokenCsrf } from '../utils/jwt.js';
 import { verifyOAuthToken } from '../utils/oauth.js';
 import { logLogin } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
@@ -128,6 +128,7 @@ export const oauthLogin = async (req: Request, res: Response): Promise<void> => 
     res.json({
       user: safeUser,
       activeShift,
+      csrfToken: getTokenCsrf(token),
       isPending: user.approval_status === 'pending',
       message: user.approval_status === 'pending' ? 'Account pending approval' : 'Login successful',
     });

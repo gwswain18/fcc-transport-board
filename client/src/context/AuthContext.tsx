@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, ShiftLog } from '../types';
-import { api } from '../utils/api';
+import { api, setCsrfToken } from '../utils/api';
 
 interface AuthContextType {
   user: User | null;
@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = async () => {
     const response = await api.me();
     if (response.data?.user) {
+      setCsrfToken(response.data.csrfToken);
       const userData = { ...response.data.user };
       // Merge secretary session names into user object
       if (response.data.secretarySession) {
@@ -47,8 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
-  const handleLoginResponse = (response: { data?: { user: User; activeShift?: ShiftLog; isPending?: boolean; isSecretary?: boolean }; error?: string }) => {
+  const handleLoginResponse = (response: { data?: { user: User; activeShift?: ShiftLog; csrfToken?: string; isPending?: boolean; isSecretary?: boolean }; error?: string }) => {
     if (response.data?.user) {
+      setCsrfToken(response.data.csrfToken);
       setUser(response.data.user);
 
       // Check if pending approval
@@ -88,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     await api.logout();
+    setCsrfToken(null);
     setUser(null);
     setActiveShift(null);
     setNeedsSecretarySession(false);
@@ -100,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshUser = async () => {
     const response = await api.me();
     if (response.data?.user) {
+      setCsrfToken(response.data.csrfToken);
       const userData = { ...response.data.user };
       if (response.data.secretarySession) {
         userData.first_name = response.data.secretarySession.session_first_name;

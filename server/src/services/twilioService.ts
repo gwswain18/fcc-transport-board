@@ -100,8 +100,11 @@ export const sendJobAssignmentSMS = async (
     return false;
   }
 
+  // Do NOT put floor/room in the SMS — a room tied to a facility is PHI, and
+  // SMS traverses carrier networks in the clear (and Twilio would be a BA).
+  // Keep patient location in the authenticated app only.
   const priorityText = priority === 'stat' ? 'STAT ' : '';
-  const message = `FCC Transport: ${priorityText}Job assigned - ${originFloor} Room ${roomNumber}. Please accept in the app.`;
+  const message = `FCC Transport: New ${priorityText}job assigned. Open the app to view details and accept.`;
 
   const result = await sendSMS(userResult.rows[0].phone_number, message);
   return result.success;

@@ -19,7 +19,7 @@ export const authenticate = async (
     const payload = verifyToken(token);
 
     const result = await query(
-      'SELECT id, email, first_name, last_name, role, is_active, auth_provider, approval_status, lockout_until, password_changed_at, created_at, updated_at FROM users WHERE id = $1',
+      'SELECT id, email, first_name, last_name, role, is_active, auth_provider, approval_status, lockout_until, password_changed_at, sessions_invalidated_at, created_at, updated_at FROM users WHERE id = $1',
       [payload.userId]
     );
 
@@ -40,14 +40,13 @@ export const authenticate = async (
       return;
     }
 
-    // Tokens issued before the last password change are no longer valid.
-    // 2s grace window because iat has second precision and a re-issued token
-    // can share the second of the change itself.
-    if (
-      user.password_changed_at &&
-      payload.iat &&
-      (payload.iat + 2) * 1000 < new Date(user.password_changed_at).getTime()
-    ) {
+    // Tokens issued before a password change OR an explicit session
+    // invalidation (manager ended the session) are rejected. 2s grace because
+    // iat has second precision and a re-issued token can share that second.
+    const revocationTimes = [user.password_changed_at, user.sessions_invalidated_at]
+      .filter(Boolean)
+      .map((t) => new Date(t as string).getTime());
+    if (payload.iat && revocationTimes.some((t) => (payload.iat! + 2) * 1000 < t)) {
       res.status(401).json({ error: 'Session expired. Please log in again.' });
       return;
     }

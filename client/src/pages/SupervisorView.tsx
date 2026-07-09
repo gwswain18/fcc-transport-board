@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { api } from '../utils/api';
+import { detectPhi } from '../utils/phiDetection';
 import {
   Floor,
   TransportRequest,
@@ -23,8 +24,9 @@ const OTHER_FLOORS: Floor[] = ['1WC', 'HRP', 'L&D', 'OTF'];
 const DESTINATIONS = ['Atrium', 'Radiology', 'Lab', 'OR', 'NICU', 'Other'];
 
 export default function SupervisorView() {
-  const { transporterStatuses, requests, activeSecretaries, refreshData } = useSocket();
+  const { transporterStatuses, requests, activeSecretaries, refreshData, notesEnabled } = useSocket();
   const [loading, setLoading] = useState(false);
+  const [notesError, setNotesError] = useState('');
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<TransportRequest | null>(null);
   const [showOtherFloors, setShowOtherFloors] = useState(false);
@@ -105,6 +107,16 @@ export default function SupervisorView() {
 
   const handleCreateRequest = async (assignTo?: number) => {
     if (!formData.room_number) return;
+
+    // Block obvious PHI in notes before submit (server enforces the same rule)
+    if (formData.notes?.trim()) {
+      const phi = detectPhi(formData.notes);
+      if (phi.flagged) {
+        setNotesError(phi.reason || 'Please remove patient identifiers from the notes.');
+        return;
+      }
+    }
+    setNotesError('');
     setLoading(true);
 
     await api.createRequest({
@@ -448,18 +460,27 @@ export default function SupervisorView() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="label">Notes (optional)</label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, notes: e.target.value }))
-                    }
-                    className="input"
-                    rows={2}
-                    placeholder="Additional instructions..."
-                  />
-                </div>
+                {notesEnabled && (
+                  <div>
+                    <label className="label">Notes (optional)</label>
+                    <textarea
+                      value={formData.notes}
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, notes: e.target.value }));
+                        if (notesError) setNotesError('');
+                      }}
+                      className="input"
+                      rows={2}
+                      placeholder="Additional instructions..."
+                    />
+                    <p className="mt-1 text-xs text-amber-600">
+                      Do not enter patient names, MRNs, dates of birth, or other identifiers.
+                    </p>
+                    {notesError && (
+                      <p className="mt-1 text-xs text-red-600">{notesError}</p>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex gap-2 pt-2">
                   <button

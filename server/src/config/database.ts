@@ -12,7 +12,14 @@ const ssl = process.env.DATABASE_CA_CERT
   : { rejectUnauthorized: false };
 
 if (!process.env.DATABASE_CA_CERT) {
-  logger.warn('DATABASE_CA_CERT not set — TLS certificate verification is disabled');
+  const msg =
+    'DATABASE_CA_CERT not set — DB TLS certificate verification is DISABLED. ' +
+    'PHI in transit is exposed to man-in-the-middle. Set the Supabase CA cert in production.';
+  if (process.env.NODE_ENV === 'production') {
+    logger.error(msg);
+  } else {
+    logger.warn(msg);
+  }
 }
 
 const pool = new Pool({

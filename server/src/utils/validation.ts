@@ -120,8 +120,10 @@ export const validatePasswordStrength = (
 ): { valid: boolean; errors: string[] } => {
   const errors: string[] = [];
 
-  if (password.length < 8) {
-    errors.push('Password must be at least 8 characters long');
+  // 12+ chars aligns with current NIST/industry guidance for accounts with
+  // PHI access
+  if (password.length < 12) {
+    errors.push('Password must be at least 12 characters long');
   }
   if (!/[A-Z]/.test(password)) {
     errors.push('Password must contain at least one uppercase letter');
@@ -131,6 +133,9 @@ export const validatePasswordStrength = (
   }
   if (!/\d/.test(password)) {
     errors.push('Password must contain at least one number');
+  }
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    errors.push('Password must contain at least one symbol');
   }
 
   return {

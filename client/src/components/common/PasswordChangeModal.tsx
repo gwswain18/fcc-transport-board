@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '../../utils/api';
+import { api, setCsrfToken } from '../../utils/api';
 
 interface PasswordChangeModalProps {
   isOpen: boolean;
@@ -40,6 +40,8 @@ export default function PasswordChangeModal({
     if (response.error) {
       setError(response.error);
     } else {
+      // Password change re-issues the session token with a new CSRF value
+      setCsrfToken(response.data?.csrfToken);
       setSuccess(true);
       setTimeout(() => {
         handleClose();

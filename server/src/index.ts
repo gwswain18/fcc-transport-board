@@ -1,3 +1,6 @@
+// Must be first: sets IPv4-first DNS resolution before any DB pool is created
+import './bootstrap.js';
+
 import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
@@ -16,6 +19,7 @@ import { initializeTwilio } from './services/twilioService.js';
 import { initializeEmail } from './services/emailService.js';
 import logger from './utils/logger.js';
 import { allowedOrigins } from './utils/origins.js';
+import { validateCsrf } from './middleware/csrf.js';
 
 dotenv.config();
 
@@ -29,13 +33,19 @@ app.set('trust proxy', 1);
 initializeSocket(httpServer);
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  // PHI app: force HTTPS for a full year, include subdomains, allow preload
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+}));
 app.use(cors({
   origin: allowedOrigins,
   credentials: true,
 }));
 app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
+
+// CSRF: validate the JWT-bound token on state-changing requests
+app.use(validateCsrf);
 
 // Global rate limiting
 const globalLimiter = rateLimit({
@@ -68,6 +78,10 @@ process.on('uncaughtException', (error) => {
 
 // Start server
 const PORT = process.env.PORT || 3001;
+
+// Bound slow-header / slow-body clients (slowloris) — Node defaults are lax
+httpServer.requestTimeout = 30000;   // 30s to send the full request
+httpServer.headersTimeout = 35000;   // 35s to send headers
 
 httpServer.listen(PORT, async () => {
   logger.info(`Server running on port ${PORT}`);

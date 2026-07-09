@@ -13,7 +13,9 @@ type AuditAction =
   | 'password_reset'
   | 'shift_start'
   | 'shift_end'
-  | 'override';
+  | 'override'
+  | 'access'
+  | 'export';
 
 interface AuditLogEntry {
   userId?: number;
@@ -240,6 +242,44 @@ export const logStatusOverride = async (
     oldValues: { status: oldStatus },
     newValues: { status: newStatus, reason, overridden_by: overriderId },
     ipAddress,
+  });
+};
+
+// HIPAA §164.312(b): record who accessed/exported PHI (patient transport
+// records), not just who modified it.
+export const logPhiAccess = async (
+  userId: number,
+  entityType: string,
+  entityId: number | undefined,
+  detail: Record<string, unknown> | undefined,
+  ipAddress?: string,
+  userAgent?: string
+): Promise<void> => {
+  await createAuditLog({
+    userId,
+    action: 'access',
+    entityType,
+    entityId,
+    newValues: detail,
+    ipAddress,
+    userAgent,
+  });
+};
+
+export const logPhiExport = async (
+  userId: number,
+  entityType: string,
+  detail: Record<string, unknown> | undefined,
+  ipAddress?: string,
+  userAgent?: string
+): Promise<void> => {
+  await createAuditLog({
+    userId,
+    action: 'export',
+    entityType,
+    newValues: detail,
+    ipAddress,
+    userAgent,
   });
 };
 

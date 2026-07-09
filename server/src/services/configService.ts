@@ -147,6 +147,15 @@ export const getPhaseThreshold = async (phase: string): Promise<{ minutes: numbe
   }
 };
 
+// Whether the free-text notes fields (request notes + delay notes) are
+// enabled. Defaults to true when unset so existing deployments keep notes; a
+// manager can set 'notes_enabled' to false to remove the only PHI-entry vector
+// besides room number / time / destination.
+export const getNotesEnabled = async (): Promise<boolean> => {
+  const value = await getConfig<boolean>('notes_enabled');
+  return value === null || value === undefined ? true : value !== false;
+};
+
 // Clear cache (useful for testing or forced refresh)
 export const clearConfigCache = (): void => {
   configCache.clear();

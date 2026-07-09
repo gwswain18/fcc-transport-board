@@ -35,6 +35,7 @@ interface SocketContextType {
   alertSettings: AlertSettings | null;
   requireExplanation: boolean;
   requireTransporterExplanation: boolean;
+  notesEnabled: boolean;
   jobRemovedNotification: JobRemovedNotification | null;
   dismissAlert: (requestId: number, explanation?: string) => void;
   dismissCycleAlert: (requestId: number, explanation?: string, phase?: string) => void;
@@ -61,6 +62,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const [activeDispatchers, setActiveDispatchers] = useState<ActiveDispatcher[]>([]);
   const [activeSecretaries, setActiveSecretaries] = useState<ActiveSecretary[]>([]);
   const [alertSettings, setAlertSettings] = useState<AlertSettings | null>(null);
+  // Default enabled; corrected on first refreshData and kept live via socket
+  const [notesEnabled, setNotesEnabled] = useState(true);
   const [jobRemovedNotification, setJobRemovedNotification] = useState<JobRemovedNotification | null>(null);
   const [recentlyCompleted, setRecentlyCompleted] = useState<Map<number, number>>(new Map());
   const [completedAlerts, setCompletedAlerts] = useState<CycleTimeAlert[]>([]);
@@ -305,6 +308,11 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setAlertSettings(settings);
     });
 
+    // Notes-enabled toggle changes (manager flips it in settings)
+    newSocket.on('notes_enabled_changed', (enabled: boolean) => {
+      setNotesEnabled(enabled !== false);
+    });
+
     // Auto-assign timeout
     newSocket.on('auto_assign_timeout', (_data: { request_id: number; old_assignee: number; new_assignee?: number }) => {
       // Auto-assign timeout received — could show a notification here
@@ -346,6 +354,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       newSocket.off('force_logout');
       newSocket.off('job_removed');
       newSocket.off('alert_settings_changed');
+      newSocket.off('notes_enabled_changed');
       newSocket.off('auto_assign_timeout');
       newSocket.disconnect();
       if (heartbeatInterval.current) {
@@ -396,12 +405,13 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshData = useCallback(async () => {
-    const [statusRes, requestRes, dispatcherRes, secretaryRes, alertSettingsRes] = await Promise.all([
+    const [statusRes, requestRes, dispatcherRes, secretaryRes, alertSettingsRes, notesEnabledRes] = await Promise.all([
       api.getStatuses(),
       api.getRequests(),
       api.getActiveDispatchers(),
       api.getActiveSecretaries(),
       api.getConfigByKey('alert_settings'),
+      api.getNotesEnabled(),
     ]);
 
     if (statusRes.data?.statuses) {
@@ -418,6 +428,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
     if (alertSettingsRes.data?.value) {
       setAlertSettings(alertSettingsRes.data.value as AlertSettings);
+    }
+    if (typeof notesEnabledRes.data?.notesEnabled === 'boolean') {
+      setNotesEnabled(notesEnabledRes.data.notesEnabled);
     }
   }, []);
 
@@ -477,6 +490,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       alertSettings,
       requireExplanation,
       requireTransporterExplanation,
+      notesEnabled,
       jobRemovedNotification,
       dismissAlert,
       dismissCycleAlert,
@@ -499,6 +513,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       alertSettings,
       requireExplanation,
       requireTransporterExplanation,
+      notesEnabled,
       jobRemovedNotification,
       dismissAlert,
       dismissCycleAlert,

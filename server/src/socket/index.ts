@@ -140,7 +140,7 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
     try {
       const payload = verifyToken(token);
       const result = await query(
-        'SELECT id, role, is_active, approval_status, lockout_until, password_changed_at FROM users WHERE id = $1',
+        'SELECT id, role, is_active, approval_status, lockout_until, password_changed_at, sessions_invalidated_at FROM users WHERE id = $1',
         [payload.userId]
       );
       const user = result.rows[0];
@@ -151,11 +151,10 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
       if (user.lockout_until && new Date(user.lockout_until) > new Date()) {
         return next(new Error('Account is temporarily locked'));
       }
-      if (
-        user.password_changed_at &&
-        payload.iat &&
-        (payload.iat + 2) * 1000 < new Date(user.password_changed_at).getTime()
-      ) {
+      const revocationTimes = [user.password_changed_at, user.sessions_invalidated_at]
+        .filter(Boolean)
+        .map((t: string) => new Date(t).getTime());
+      if (payload.iat && revocationTimes.some((t: number) => (payload.iat! + 2) * 1000 < t)) {
         return next(new Error('Session expired'));
       }
 

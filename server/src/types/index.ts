@@ -49,6 +49,7 @@ export interface User {
   approval_status: ApprovalStatus;
   lockout_until?: string | null;
   password_changed_at?: string | null;
+  sessions_invalidated_at?: string | null;
   created_at: string;
   updated_at: string;
 }

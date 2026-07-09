@@ -4,6 +4,7 @@ import {
   setConfig,
   getAllConfig,
   deleteConfig,
+  getNotesEnabled,
 } from '../services/configService.js';
 import { getIO } from '../socket/index.js';
 import logger from '../utils/logger.js';
@@ -30,6 +31,19 @@ export const getConfigValue = async (req: Request, res: Response) => {
   }
 };
 
+// Resolved notes-enabled flag, readable by any approved user (the request /
+// delay forms need it to show or hide the free-text fields). Always returns a
+// boolean, defaulting to true when unset.
+export const getNotesEnabledValue = async (_req: Request, res: Response) => {
+  try {
+    const notesEnabled = await getNotesEnabled();
+    res.json({ notesEnabled });
+  } catch (error) {
+    logger.error('Get notes_enabled error:', error);
+    res.status(500).json({ error: 'Failed to get config' });
+  }
+};
+
 // Set a config value (manager only)
 export const setConfigValue = async (req: Request, res: Response) => {
   try {
@@ -51,6 +65,15 @@ export const setConfigValue = async (req: Request, res: Response) => {
       const io = getIO();
       if (io) {
         io.emit('alert_settings_changed', value);
+      }
+    }
+
+    // Broadcast notes-enabled changes so all clients show/hide the free-text
+    // fields immediately, without a re-login
+    if (key === 'notes_enabled') {
+      const io = getIO();
+      if (io) {
+        io.emit('notes_enabled_changed', value !== false);
       }
     }
 

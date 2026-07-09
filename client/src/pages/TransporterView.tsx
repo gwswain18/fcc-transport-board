@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { api } from '../utils/api';
+import { detectPhi } from '../utils/phiDetection';
 import { TransporterStatus, RequestStatus } from '../types';
 import { TransporterStatusBadge } from '../components/common/StatusBadge';
 import PriorityBadge from '../components/common/PriorityBadge';
@@ -21,7 +22,7 @@ import { enqueue } from '../utils/offlineQueue';
 
 export default function TransporterView() {
   const { user, activeShift, setActiveShift, logout } = useAuth();
-  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, jobRemovedNotification, clearJobRemovedNotification, refreshData, requireTransporterExplanation, activeDispatchers } = useSocket();
+  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, jobRemovedNotification, clearJobRemovedNotification, refreshData, requireTransporterExplanation, activeDispatchers, notesEnabled } = useSocket();
   const navigate = useNavigate();
   const [queueOpen, setQueueOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -34,6 +35,7 @@ export default function TransporterView() {
   const [delayReason, setDelayReason] = useState('');
   const [selectedDelayReasons, setSelectedDelayReasons] = useState<Set<string>>(new Set());
   const [customDelayNote, setCustomDelayNote] = useState('');
+  const [delayNoteError, setDelayNoteError] = useState('');
   const [pendingCompletion, setPendingCompletion] = useState(false);
 
   const myStatus = transporterStatuses.find((s) => s.user_id === user?.id);
@@ -120,6 +122,15 @@ export default function TransporterView() {
   const handleDelayNoteSave = async () => {
     if (!currentJob) return;
 
+    // Block obvious PHI in the free-text note before submit (server also enforces)
+    if (customDelayNote.trim()) {
+      const phi = detectPhi(customDelayNote);
+      if (phi.flagged) {
+        setDelayNoteError(phi.reason || 'Please remove patient identifiers from the note.');
+        return;
+      }
+    }
+    setDelayNoteError('');
     setLoading(true);
 
     // Use multi-delay API if checkboxes selected, otherwise fall back to legacy
@@ -157,6 +168,7 @@ export default function TransporterView() {
     setDelayReason('');
     setSelectedDelayReasons(new Set());
     setCustomDelayNote('');
+    setDelayNoteError('');
 
     if (pendingCompletion) {
       setLoading(true);
@@ -520,6 +532,7 @@ export default function TransporterView() {
             setDelayReason('');
             setSelectedDelayReasons(new Set());
             setCustomDelayNote('');
+            setDelayNoteError('');
           }
         }}
         title="Delay Note"
@@ -552,16 +565,27 @@ export default function TransporterView() {
             ))}
           </div>
 
-          <div>
-            <label className="text-sm text-gray-600 mb-1 block">Additional notes (optional)</label>
-            <input
-              type="text"
-              value={customDelayNote}
-              onChange={(e) => setCustomDelayNote(e.target.value)}
-              placeholder="Enter additional details..."
-              className="input w-full"
-            />
-          </div>
+          {notesEnabled && (
+            <div>
+              <label className="text-sm text-gray-600 mb-1 block">Additional notes (optional)</label>
+              <input
+                type="text"
+                value={customDelayNote}
+                onChange={(e) => {
+                  setCustomDelayNote(e.target.value);
+                  if (delayNoteError) setDelayNoteError('');
+                }}
+                placeholder="Enter additional details..."
+                className="input w-full"
+              />
+              <p className="mt-1 text-xs text-amber-600">
+                Do not enter patient names, MRNs, dates of birth, or other identifiers.
+              </p>
+              {delayNoteError && (
+                <p className="mt-1 text-xs text-red-600">{delayNoteError}</p>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button

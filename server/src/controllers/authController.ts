@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database.js';
 import { comparePassword, hashPassword } from '../utils/password.js';
-import { generateToken } from '../utils/jwt.js';
+import { generateToken, getTokenCsrf } from '../utils/jwt.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { logLogin, logLogout, logPasswordChange, logPasswordReset } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
@@ -18,6 +18,9 @@ import { removeHeartbeat } from '../services/heartbeatService.js';
 
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
+// A valid cost-12 bcrypt hash used only to equalize login timing when no real
+// hash is available (missing/OAuth-only/deactivated account). Not a credential.
+const DUMMY_BCRYPT_HASH = '$2b$12$xCLK5myhGNjdn76Rd6E7N.7HEUx4rQX2IsSsPJXt3D1MKPVTsmrs.';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -37,14 +40,22 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       [email.toLowerCase()]
     );
 
+    const user = result.rows[0];
+
+    // Uniform timing: always run one bcrypt comparison so a missing /
+    // OAuth-only / deactivated account takes the same ~time as a wrong
+    // password, preventing account enumeration via response latency. Compare
+    // against the real hash when usable, else a fixed dummy hash.
+    const comparableHash = user?.password_hash || DUMMY_BCRYPT_HASH;
+    const passwordMatches = await comparePassword(password, comparableHash);
+
     if (result.rows.length === 0) {
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
-    const user = result.rows[0];
-
-    // Check lockout before anything else so a locked account can't be probed
+    // Check lockout so a locked account can't be probed (generic to callers
+    // is preferable, but the countdown is a deliberate UX affordance for staff)
     if (user.lockout_until && new Date(user.lockout_until) > new Date()) {
       const remainingMs = new Date(user.lockout_until).getTime() - Date.now();
       const remainingMin = Math.ceil(remainingMs / 60000);
@@ -59,7 +70,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const isValidPassword = await comparePassword(password, user.password_hash);
+    const isValidPassword = passwordMatches;
 
     if (!isValidPassword) {
       // Count the failure; lock the account after too many consecutive misses
@@ -112,6 +123,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     res.json({
       user: safeUser,
       activeShift,
+      csrfToken: getTokenCsrf(token),
       isSecretary: user.role === 'secretary',
       isPending: user.approval_status === 'pending',
       message: user.approval_status === 'pending' ? 'Account pending approval' : 'Login successful',
@@ -212,7 +224,23 @@ export const me = async (req: AuthenticatedRequest, res: Response): Promise<void
       }
     }
 
-    res.json({ user: result.rows[0], activeShift, secretarySession, needsSecretarySession });
+    // Echo the CSRF token bound to the current session so the SPA can attach
+    // it after a page reload (it can't read the httpOnly auth cookie).
+    // Pre-CSRF tokens lack the claim — transparently upgrade them so existing
+    // sessions keep working across this deploy without a forced re-login.
+    let csrfToken: string | undefined;
+    try {
+      csrfToken = req.cookies?.token ? getTokenCsrf(req.cookies.token) : undefined;
+    } catch {
+      csrfToken = undefined;
+    }
+    if (!csrfToken) {
+      const freshToken = generateToken(result.rows[0]);
+      res.cookie('token', freshToken, { ...TOKEN_COOKIE_OPTIONS, maxAge: TOKEN_COOKIE_MAX_AGE_MS });
+      csrfToken = getTokenCsrf(freshToken);
+    }
+
+    res.json({ user: result.rows[0], activeShift, secretarySession, needsSecretarySession, csrfToken });
   } catch (error) {
     logger.error('Me error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -278,7 +306,8 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response): 
     const { ipAddress } = getAuditContext(req);
     await logPasswordChange(req.user.id, ipAddress);
 
-    res.json({ message: 'Password changed successfully' });
+    // Return the new CSRF token (the re-issued JWT has a fresh csrf claim)
+    res.json({ message: 'Password changed successfully', csrfToken: getTokenCsrf(freshToken) });
   } catch (error) {
     logger.error('Change password error:', error);
     res.status(500).json({ error: 'Internal server error' });

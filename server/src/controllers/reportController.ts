@@ -1,6 +1,8 @@
 import { Response } from 'express';
 import { query } from '../config/database.js';
 import { AuthenticatedRequest } from '../types/index.js';
+import { logPhiExport } from '../services/auditService.js';
+import { getAuditContext } from '../middleware/auditMiddleware.js';
 import logger from '../utils/logger.js';
 
 // Reusable filter for queries that don't JOIN users — excludes jobs assigned to users with include_in_analytics = false
@@ -420,6 +422,18 @@ export const exportData = async (
       headers.join(','),
       ...rows.map((row) => row.map(toCsvCell).join(',')),
     ].join('\n');
+
+    // HIPAA audit: bulk PHI export is high-value — record who exported what range
+    if (req.user) {
+      const { ipAddress, userAgent } = getAuditContext(req);
+      await logPhiExport(
+        req.user.id,
+        'transport_request',
+        { row_count: rows.length, start_date, end_date, floor, transporter_id },
+        ipAddress,
+        userAgent
+      );
+    }
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename=transport_requests.csv');

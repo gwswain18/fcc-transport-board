@@ -309,6 +309,10 @@ const checkAutoLogout = async () => {
 export const performFullLogout = async (): Promise<{ dispatchers_ended: number; transporters_offlined: number }> => {
   const io = getIO();
 
+  // Durably revoke every outstanding JWT so "force logout all" actually logs
+  // everyone out rather than letting tokens live to their 12h expiry
+  await query(`UPDATE users SET sessions_invalidated_at = NOW()`);
+
   // End all active dispatcher sessions
   const dispatcherResult = await query(
     `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
@@ -398,12 +402,16 @@ const cleanupOldAuditLogs = async () => {
   lastRetentionCleanupDate = todayStr;
 
   try {
+    // HIPAA requires audit/access records be retained per policy (commonly
+    // 6 years). Configurable via AUDIT_RETENTION_DAYS; defaults to ~6 years.
+    const retentionDays = parseInt(process.env.AUDIT_RETENTION_DAYS || '2192', 10);
     const result = await query(
-      `DELETE FROM audit_logs WHERE timestamp < NOW() - INTERVAL '180 days'`
+      `DELETE FROM audit_logs WHERE timestamp < NOW() - ($1 || ' days')::interval`,
+      [retentionDays]
     );
     const deleted = result.rowCount ?? 0;
     if (deleted > 0) {
-      logger.info(`[Retention] Deleted ${deleted} audit log(s) older than 180 days`);
+      logger.info(`[Retention] Deleted ${deleted} audit log(s) older than ${retentionDays} days`);
     }
   } catch (error) {
     logger.error('[Retention] Failed to clean up audit logs:', error);
