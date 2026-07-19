@@ -13,7 +13,7 @@ import {
 import { validatePasswordStrength } from '../utils/validation.js';
 import { TOKEN_COOKIE_OPTIONS, TOKEN_COOKIE_MAX_AGE_MS } from '../utils/cookies.js';
 import logger from '../utils/logger.js';
-import { getIO, broadcastDispatcherChanged, broadcastSecretaryChanged } from '../socket/index.js';
+import { getIO, broadcastDispatcherChanged, broadcastSecretaryChanged, emitToUser } from '../socket/index.js';
 import { removeHeartbeat } from '../services/heartbeatService.js';
 
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -448,6 +448,55 @@ export const registerSecretarySession = async (req: AuthenticatedRequest, res: R
     res.json({ message: 'Secretary session registered' });
   } catch (error) {
     logger.error('Register secretary session error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Force end a secretary's session (primary dispatcher / supervisor / manager)
+export const endSecretarySession = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const requestingUser = req.user!;
+    const targetUserId = parseInt(req.params.userId, 10);
+
+    if (isNaN(targetUserId)) {
+      res.status(400).json({ error: 'Invalid user ID' });
+      return;
+    }
+
+    // Authorization: dispatchers must be the primary dispatcher
+    if (requestingUser.role === 'dispatcher') {
+      const primaryCheck = await query(
+        `SELECT id FROM active_dispatchers
+         WHERE user_id = $1 AND is_primary = true AND ended_at IS NULL`,
+        [requestingUser.id]
+      );
+      if (primaryCheck.rows.length === 0) {
+        res.status(403).json({ error: 'Only the primary dispatcher can log out secretaries' });
+        return;
+      }
+    }
+    // supervisors and managers are always allowed (canDispatch middleware already checked role)
+
+    const result = await query(
+      `UPDATE active_secretaries SET ended_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1 AND ended_at IS NULL
+       RETURNING id`,
+      [targetUserId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(400).json({ error: 'No active secretary session found for this user' });
+      return;
+    }
+
+    // If the secretary is connected, send them back to the login screen
+    emitToUser(targetUserId, 'force_logout', { message: 'Your session has been ended.' });
+
+    await broadcastSecretaryChanged();
+
+    res.json({ message: 'Secretary session ended' });
+  } catch (error) {
+    logger.error('End secretary session error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

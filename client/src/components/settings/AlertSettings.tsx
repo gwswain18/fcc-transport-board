@@ -267,7 +267,7 @@ export default function AlertSettings() {
           <div>
             <h4 className="font-medium text-gray-900">Auto-Logout All Users</h4>
             <p className="text-sm text-gray-500">
-              Automatically end all dispatcher sessions and transporter shifts at a specified time each day
+              Automatically log out all users — dispatchers, secretaries, transporters, supervisors, and managers — at a specified time each day
             </p>
           </div>
           <Toggle
@@ -284,6 +284,7 @@ export default function AlertSettings() {
               onChange={(e) => setSettings((prev) => ({ ...prev, auto_logout_time: e.target.value }))}
               className="text-sm border border-gray-300 rounded px-2 py-1"
             />
+            <span className="text-xs text-gray-500">Eastern Time</span>
           </div>
         )}
 
@@ -293,7 +294,7 @@ export default function AlertSettings() {
             <div>
               <p className="text-sm font-medium text-gray-700">Log Off All Users Now</p>
               <p className="text-xs text-gray-500">
-                Immediately end all dispatcher sessions, transporter shifts, and set everyone offline
+                Immediately log out every user (all roles, including you) and set everyone offline
               </p>
             </div>
             <div className="flex items-center gap-2">

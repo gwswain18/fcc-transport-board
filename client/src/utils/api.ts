@@ -141,6 +141,9 @@ export const api = {
   getActiveSecretaries: () =>
     request<{ secretaries: import('../types').ActiveSecretary[] }>('/auth/active-secretaries'),
 
+  endSecretarySession: (userId: number) =>
+    request<{ message: string }>(`/auth/secretary-session/${userId}/end`, { method: 'PUT' }),
+
   getActiveUsers: () =>
     request<{ users: Array<{ id: number; email: string; first_name: string; last_name: string; role: string; is_temp_account: boolean; login_time: string; phone_extension?: string }> }>('/users/active'),
 

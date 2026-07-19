@@ -3,6 +3,7 @@ import { useSocket } from '../context/SocketContext';
 import { api } from '../utils/api';
 import { detectPhi } from '../utils/phiDetection';
 import {
+  ActiveSecretary,
   Floor,
   TransportRequest,
   TransporterStatusRecord,
@@ -87,6 +88,15 @@ export default function SupervisorView() {
     if (!confirm(`End ${userName}'s shift? They will be set to offline.`)) return;
     setLoading(true);
     await api.forceEndShift(userId);
+    await refreshData();
+    setLoading(false);
+  };
+
+  const handleEndSecretarySession = async (sec: ActiveSecretary) => {
+    const name = `${sec.session_first_name} ${sec.session_last_name}`;
+    if (!confirm(`Log out ${name}? They will need to sign in again.`)) return;
+    setLoading(true);
+    await api.endSecretarySession(sec.user_id);
     await refreshData();
     setLoading(false);
   };
@@ -280,7 +290,10 @@ export default function SupervisorView() {
             </div>
 
             {/* Active Secretaries Card */}
-            <ActiveSecretaryCard secretaries={activeSecretaries} />
+            <ActiveSecretaryCard
+              secretaries={activeSecretaries}
+              onEndSession={handleEndSecretarySession}
+            />
           </div>
 
           {/* Center Panel - Active Jobs */}

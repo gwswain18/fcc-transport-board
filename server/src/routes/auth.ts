@@ -10,11 +10,13 @@ import {
   recoverUsername,
   heartbeat,
   registerSecretarySession,
+  endSecretarySession,
   getActiveSecretaries,
 } from '../controllers/authController.js';
 import { oauthLogin } from '../controllers/oauthController.js';
 import { getProfile, updateProfile, linkOAuthAccount } from '../controllers/profileController.js';
 import { authenticate } from '../middleware/auth.js';
+import { canDispatch } from '../middleware/roleAuth.js';
 
 const router = Router();
 
@@ -40,6 +42,7 @@ router.get('/me', authenticate, me);
 router.post('/change-password', authenticate, authLimiter, changePassword);
 router.post('/heartbeat', authenticate, heartbeat);
 router.post('/secretary-session', authenticate, registerSecretarySession);
+router.put('/secretary-session/:userId/end', authenticate, canDispatch, endSecretarySession);
 router.get('/active-secretaries', authenticate, getActiveSecretaries);
 
 // Profile routes

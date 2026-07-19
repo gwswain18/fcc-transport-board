@@ -320,13 +320,13 @@ const emitDispatcherChange = async () => {
   await broadcastDispatcherChanged();
 };
 
-// Force logout all users (dispatchers + transporters)
+// Force logout all users (all roles)
 export const forceLogoutAll = async (_req: AuthenticatedRequest, res: Response) => {
   try {
     const result = await performFullLogout();
-    logger.info(`[ForceLogoutAll] Force logout triggered: ${result.dispatchers_ended} dispatchers, ${result.transporters_offlined} transporters`);
+    logger.info(`[ForceLogoutAll] Force logout triggered: ${result.dispatchers_ended} dispatchers, ${result.secretaries_ended} secretaries, ${result.transporters_offlined} transporters`);
     res.json({
-      message: `All users logged out. ${result.dispatchers_ended} dispatcher sessions ended, ${result.transporters_offlined} transporters set offline.`,
+      message: `All users logged out. ${result.dispatchers_ended} dispatcher sessions ended, ${result.secretaries_ended} secretary sessions ended, ${result.transporters_offlined} transporters set offline.`,
     });
   } catch (error) {
     logger.error('Force logout all error:', error);

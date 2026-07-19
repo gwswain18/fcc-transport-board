@@ -1,10 +1,35 @@
 import { query } from '../config/database.js';
-import { getIO, broadcastDispatcherChanged } from '../socket/index.js';
+import { getIO, broadcastDispatcherChanged, broadcastSecretaryChanged } from '../socket/index.js';
 import { getAlertSettings, getAlertTiming } from './configService.js';
 import { logStatusChange } from './auditService.js';
 import logger from '../utils/logger.js';
 
 const CHECK_INTERVAL_MS = 30000; // 30 seconds
+
+// auto_logout_time is interpreted in this timezone, not the server's local
+// clock (Render runs in UTC)
+const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/New_York';
+
+const getLocalNow = (): { dateStr: string; seconds: number } => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00';
+  return {
+    dateStr: `${get('year')}-${get('month')}-${get('day')}`,
+    seconds:
+      parseInt(get('hour'), 10) * 3600 +
+      parseInt(get('minute'), 10) * 60 +
+      parseInt(get('second'), 10),
+  };
+};
 
 let intervalId: NodeJS.Timeout | null = null;
 let heartbeatCheckCount = 0;
@@ -240,77 +265,33 @@ const checkAutoLogout = async () => {
     return;
   }
 
-  const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
+  const { dateStr, seconds: currentSeconds } = getLocalNow();
 
   // Don't run more than once per day
-  if (lastAutoLogoutDate === todayStr) return;
+  if (lastAutoLogoutDate === dateStr) return;
 
   const [targetHour, targetMinute] = alertSettings.auto_logout_time.split(':').map(Number);
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
-  const currentSeconds = currentHour * 3600 + currentMinute * 60 + now.getSeconds();
   const targetSeconds = targetHour * 3600 + targetMinute * 60;
 
   // Check if we're within 30 seconds of the target time
   if (Math.abs(currentSeconds - targetSeconds) <= 30) {
-    lastAutoLogoutDate = todayStr;
-    logger.info(`[AutoLogout] Auto-logout triggered at ${alertSettings.auto_logout_time}`);
+    lastAutoLogoutDate = dateStr;
+    logger.info(`[AutoLogout] Auto-logout triggered at ${alertSettings.auto_logout_time} (${APP_TIMEZONE})`);
 
-    // End all active dispatcher sessions
-    await query(
-      `UPDATE active_dispatchers SET ended_at = CURRENT_TIMESTAMP
-       WHERE ended_at IS NULL`
+    const result = await performFullLogout();
+
+    logger.info(
+      `[AutoLogout] ${result.dispatchers_ended} dispatcher sessions ended, ${result.secretaries_ended} secretary sessions ended, ${result.transporters_offlined} transporters set offline`
     );
-
-    // Emit updated dispatcher list (role-filtered)
-    await broadcastDispatcherChanged();
-    // End all active transporter shifts
-    await query(
-      `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP WHERE shift_end IS NULL`
-    );
-
-    // Close open offline periods
-    await query(
-      `UPDATE offline_periods
-       SET online_at = CURRENT_TIMESTAMP,
-           duration_seconds = EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - offline_at))::int
-       WHERE online_at IS NULL`
-    );
-
-    // Set all transporters to offline
-    const affectedTransporters = await query(
-      `UPDATE transporter_status SET status = 'offline', updated_at = CURRENT_TIMESTAMP
-       WHERE status != 'offline'
-       RETURNING user_id`
-    );
-
-    // Emit status change for each affected transporter
-    for (const row of affectedTransporters.rows) {
-      const statusResult = await query(
-        `SELECT ts.*, u.first_name, u.last_name, u.email, u.role
-         FROM transporter_status ts
-         JOIN users u ON ts.user_id = u.id
-         WHERE ts.user_id = $1`,
-        [row.user_id]
-      );
-      if (statusResult.rows[0]) {
-        io.emit('transporter_status_changed', statusResult.rows[0]);
-      }
-    }
-
-    // Remove all heartbeat records
-    await query('DELETE FROM user_heartbeats');
-
-    logger.info(`[AutoLogout] All dispatcher sessions ended, ${affectedTransporters.rows.length} transporters set offline, all shifts ended`);
   }
 };
 
-export const performFullLogout = async (): Promise<{ dispatchers_ended: number; transporters_offlined: number }> => {
+export const performFullLogout = async (): Promise<{ dispatchers_ended: number; secretaries_ended: number; transporters_offlined: number }> => {
   const io = getIO();
 
-  // Durably revoke every outstanding JWT so "force logout all" actually logs
-  // everyone out rather than letting tokens live to their 12h expiry
+  // Durably revoke every outstanding JWT — all roles including supervisors and
+  // managers — so "force logout all" actually logs everyone out rather than
+  // letting tokens live to their 12h expiry
   await query(`UPDATE users SET sessions_invalidated_at = NOW()`);
 
   // End all active dispatcher sessions
@@ -322,6 +303,16 @@ export const performFullLogout = async (): Promise<{ dispatchers_ended: number; 
 
   // Emit updated (empty) dispatcher list
   await broadcastDispatcherChanged();
+
+  // End all active secretary sessions
+  const secretaryResult = await query(
+    `UPDATE active_secretaries SET ended_at = CURRENT_TIMESTAMP
+     WHERE ended_at IS NULL
+     RETURNING id`
+  );
+
+  // Emit updated (empty) secretary list
+  await broadcastSecretaryChanged();
 
   // End all active transporter shifts
   await query(
@@ -362,10 +353,17 @@ export const performFullLogout = async (): Promise<{ dispatchers_ended: number; 
   // Remove all heartbeat records
   await query('DELETE FROM user_heartbeats');
 
-  logger.info(`[ForceLogout] ${dispatcherResult.rows.length} dispatcher sessions ended, ${affectedTransporters.rows.length} transporters set offline`);
+  // Send every connected client — all roles including supervisors and managers —
+  // back to the login screen; their revoked tokens can't re-authenticate
+  if (io) {
+    io.emit('force_logout', { message: 'You have been logged out.' });
+  }
+
+  logger.info(`[ForceLogout] ${dispatcherResult.rows.length} dispatcher sessions ended, ${secretaryResult.rows.length} secretary sessions ended, ${affectedTransporters.rows.length} transporters set offline`);
 
   return {
     dispatchers_ended: dispatcherResult.rows.length,
+    secretaries_ended: secretaryResult.rows.length,
     transporters_offlined: affectedTransporters.rows.length,
   };
 };

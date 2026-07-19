@@ -2,9 +2,10 @@ import { ActiveSecretary } from '../../types';
 
 interface ActiveSecretaryCardProps {
   secretaries: ActiveSecretary[];
+  onEndSession?: (secretary: ActiveSecretary) => void;
 }
 
-export default function ActiveSecretaryCard({ secretaries }: ActiveSecretaryCardProps) {
+export default function ActiveSecretaryCard({ secretaries, onEndSession }: ActiveSecretaryCardProps) {
   if (secretaries.length === 0) return null;
 
   return (
@@ -31,9 +32,19 @@ export default function ActiveSecretaryCard({ secretaries }: ActiveSecretaryCard
                 </span>
               )}
             </div>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-              Active
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                Active
+              </span>
+              {onEndSession && (
+                <button
+                  onClick={() => onEndSession(sec)}
+                  className="text-xs text-red-600 hover:text-red-800"
+                >
+                  Log Out
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
