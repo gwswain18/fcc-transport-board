@@ -2,7 +2,7 @@
 
 **Infrastructure compliance requirements & cost estimate**
 
-Prepared: July 10, 2026
+Prepared: July 10, 2026 · Updated: July 19, 2026
 Application: FCC Transport Board (hospital patient-transport tracker)
 
 > **Disclaimer:** This document is a technical/operational summary to support planning. It is **not legal advice**. Vendor pricing and terms change — verify current figures directly with each vendor. The final compliance determination and vendor approvals should be made by Northside's HIPAA/privacy compliance and IT-security teams.
@@ -30,7 +30,7 @@ The FCC Transport Board tracks patient transports on the mother-baby unit. Altho
 |---|---|---|---|---|
 | **Supabase** | Database (PHI at rest) | Yes | **Yes** | Requires Team plan + HIPAA add-on |
 | **Render** | API hosting (PHI in transit/processing) | Yes | **Yes** | Requires Scale/Enterprise plan |
-| **Twilio** | SMS (optional) | Currently no (PHI stripped; likely disabled) | Only if enabled with PHI | SMS messages contain no patient data |
+| **Twilio** | SMS (optional) | No — **not configured** | Not currently | SMS is disabled: the service requires `TWILIO_*` env vars, which are not set in the deployment. Even if enabled, messages contain no patient data (PHI stripped in code). Re-evaluate BAA only if SMS is turned on. |
 | **Google / Gmail** | Email (staff password resets) | No patient PHI | No (for current use) | Consumer Gmail has **no BAA**; do not route PHI through it |
 | **GitHub** | Source code | No | No | No PHI is committed (`.env` is gitignored) |
 | Domain / DNS registrar | Routing | No | No | — |
@@ -97,7 +97,7 @@ The FCC Transport Board tracks patient transports on the mother-baby unit. Altho
 1. **Get the Supabase HIPAA add-on quote** — this is the missing cost number.
 2. **Consult Northside compliance/IT-security** on: (a) approved-vendor status for Supabase & Render, and (b) whether to host on internal hospital infrastructure instead.
 3. If proceeding with vendors: execute the §4 and §5 checklists.
-4. Complete remaining application-side items (temp-account audit; keep PHI out of notes/SMS).
+4. Complete the one remaining application-side item: the **temp-account audit** — remove or disable the seeded test accounts (shared known passwords) in the production database. *(PHI-out-of-notes/SMS guardrails: ✅ done July 2026.)*
 5. Produce a final annual cost figure for budget approval.
 
 ## 9. Application security already in place
@@ -106,6 +106,7 @@ The application has already been hardened for a PHI deployment (completed July 2
 
 - **Encryption in transit:** Verified TLS to the database (certificate pinned via `DATABASE_CA_CERT`); HSTS and strict security headers on client and API.
 - **Access control:** Role-based authorization; object-level access checks (IDOR fixes); CSRF protection; durable session revocation.
+- **Automatic logoff (45 CFR §164.312(a)(2)(iii)):** Configurable daily auto-logout that ends every session across all roles — including supervisors and managers — with durable token revocation, so no login survives past the scheduled time; managers can also force-logout any individual user or secretary session on demand (added July 19, 2026).
 - **Authentication:** bcrypt password hashing (cost 12); 12-character + symbol password policy; constant-time login; account lockout.
 - **PHI minimization:** Patient names excluded by design; PHI stripped from SMS; free-text notes carry an identifier warning, automatic MRN/identifier detection, and an admin toggle to disable notes entirely.
 - **Auditability:** PHI read/export audit logging; ~6-year audit-log retention.
