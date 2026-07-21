@@ -242,7 +242,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
               value="global"
               checked={reportType === 'global'}
               onChange={() => setReportType('global')}
-              className="text-primary focus:ring-primary"
+              className="accent-primary focus:ring-primary"
             />
             <span className="text-sm font-medium text-gray-700">Global (All Transporters)</span>
           </label>
@@ -253,7 +253,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
               value="individual"
               checked={reportType === 'individual'}
               onChange={() => setReportType('individual')}
-              className="text-primary focus:ring-primary"
+              className="accent-primary focus:ring-primary"
             />
             <span className="text-sm font-medium text-gray-700">Individual Transporter</span>
           </label>
@@ -309,7 +309,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
                   type="checkbox"
                   checked={selectedFloors.includes(floor)}
                   onChange={() => toggleFloor(floor)}
-                  className="rounded text-primary focus:ring-primary"
+                  className="rounded accent-primary focus:ring-primary"
                 />
                 <span className="text-sm text-gray-700">{floor}</span>
               </label>
@@ -337,7 +337,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
                 type="checkbox"
                 checked={metrics[key]}
                 onChange={() => toggleMetric(key)}
-                className="rounded text-primary focus:ring-primary"
+                className="rounded accent-primary focus:ring-primary"
               />
               <span className="text-sm text-gray-700">{label}</span>
             </label>
@@ -364,7 +364,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
                 type="checkbox"
                 checked={charts[key]}
                 onChange={() => toggleChart(key)}
-                className="rounded text-primary focus:ring-primary"
+                className="rounded accent-primary focus:ring-primary"
               />
               <span className="text-sm text-gray-700">{label}</span>
             </label>

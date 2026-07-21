@@ -488,6 +488,9 @@ export default function ManagerDashboard() {
                         Jobs Completed
                       </th>
                       <th className="text-right py-3 px-4 font-medium text-gray-600">
+                        Missed Jobs
+                      </th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-600">
                         Avg Pickup
                       </th>
                       <th className="text-right py-3 px-4 font-medium text-gray-600">
@@ -524,6 +527,9 @@ export default function ManagerDashboard() {
                           <td className="py-3 px-4 text-right text-gray-600">
                             {t.jobs_completed}
                           </td>
+                          <td className={`py-3 px-4 text-right ${(t.missed_jobs ?? 0) > 0 ? 'text-amber-600 font-medium' : 'text-gray-600'}`}>
+                            {t.missed_jobs ?? 0}
+                          </td>
                           <td className="py-3 px-4 text-right text-gray-600">
                             {formatMinutes(t.avg_pickup_time_minutes)}
                           </td>
@@ -551,7 +557,7 @@ export default function ManagerDashboard() {
                     {transporterStats.length === 0 && (
                       <tr>
                         <td
-                          colSpan={9}
+                          colSpan={10}
                           className="py-8 text-center text-gray-500"
                         >
                           No data available

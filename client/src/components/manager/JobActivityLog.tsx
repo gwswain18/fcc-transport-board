@@ -24,7 +24,7 @@ interface CompletedJob {
   creator: { first_name: string; last_name: string } | null;
   assignee: { first_name: string; last_name: string } | null;
   assigner: { first_name: string; last_name: string } | null;
-  reassignments: Array<{ from_name: string; to_name: string; timestamp: string }>;
+  reassignments: Array<{ from_name: string; to_name: string; timestamp: string; reason?: string }>;
   delays: Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>;
   cancelled_by: { first_name: string; last_name: string } | null;
 }
@@ -134,7 +134,7 @@ function TimelineSteps({ job }: { job: CompletedJob }) {
   // Build a list of all timeline events (phase steps + reassignments) sorted by time
   type TimelineEvent =
     | { type: 'phase'; label: string; time: string | null; duration?: string; isCancelled?: boolean; subtitle?: string }
-    | { type: 'reassignment'; from_name: string; to_name: string; time: string };
+    | { type: 'reassignment'; from_name: string; to_name: string; time: string; reason?: string };
 
   const events: TimelineEvent[] = [];
 
@@ -163,6 +163,7 @@ function TimelineSteps({ job }: { job: CompletedJob }) {
       from_name: r.from_name,
       to_name: r.to_name,
       time: r.timestamp,
+      reason: r.reason,
     });
   }
 
@@ -237,7 +238,7 @@ function TimelineSteps({ job }: { job: CompletedJob }) {
           return (
             <TimelineStep
               key={`reassign-${i}`}
-              label={`Reassigned`}
+              label={event.reason === 'acceptance_timeout' ? 'Reassigned (timed out)' : 'Reassigned'}
               time={event.time}
               isReassignment
               subtitle={`${event.from_name} → ${event.to_name}`}

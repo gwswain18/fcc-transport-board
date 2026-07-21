@@ -10,6 +10,7 @@ import {
   getFloorAnalysis,
   getTimeMetrics,
   getDelayReport,
+  getReassignments,
   getCycleTimeAverages,
   getActivityLog,
   getCompletedJobs,
@@ -46,6 +47,7 @@ router.get('/staffing-by-floor', canViewReports, getStaffingByFloor);
 router.get('/floor-analysis', canViewReports, getFloorAnalysis);
 router.get('/time-metrics', canViewReports, getTimeMetrics);
 router.get('/delays', canViewReports, getDelayReport);
+router.get('/reassignments', canViewReports, getReassignments);
 router.get('/cycle-time-averages', canViewReports, getCycleTimeAverages);
 router.get('/activity-log', canViewReports, getActivityLog);
 router.get('/completed-jobs', canViewReports, getCompletedJobs);

@@ -196,6 +196,45 @@ export const getByTransporter = async (
       });
     }
 
+    // Missed jobs (auto-reassigned after acceptance timeout) per transporter.
+    // user_notifications has one missed_job row per (request, user).
+    let missedWhereClause = "WHERE un.type = 'missed_job' AND u.include_in_analytics = true";
+    const missedParams: unknown[] = [];
+    let missedParamIndex = 1;
+
+    if (start_date) {
+      missedWhereClause += ` AND un.created_at >= $${missedParamIndex++}`;
+      missedParams.push(start_date);
+    }
+    if (end_date) {
+      missedWhereClause += ` AND un.created_at <= $${missedParamIndex++}`;
+      missedParams.push(end_date);
+    }
+    let missedFloorJoin = '';
+    if (floor) {
+      missedFloorJoin = `JOIN transport_requests tr ON (un.payload->>'request_id')::int = tr.id AND tr.origin_floor = $${missedParamIndex++}`;
+      missedParams.push(floor);
+    }
+
+    const missedResult = await query(
+      `SELECT un.user_id, u.first_name, u.last_name, COUNT(*) as missed_jobs
+       FROM user_notifications un
+       JOIN users u ON un.user_id = u.id
+       ${missedFloorJoin}
+       ${missedWhereClause}
+       GROUP BY un.user_id, u.first_name, u.last_name`,
+      missedParams
+    );
+
+    const missedMap = new Map<number, { first_name: string; last_name: string; missed_jobs: number }>();
+    for (const row of missedResult.rows) {
+      missedMap.set(row.user_id, {
+        first_name: row.first_name,
+        last_name: row.last_name,
+        missed_jobs: parseInt(row.missed_jobs),
+      });
+    }
+
     const transporters = result.rows.map((row) => {
       const shift = shiftMap.get(row.user_id);
       return {
@@ -209,8 +248,30 @@ export const getByTransporter = async (
         idle_time_minutes: 0, // Would need more complex calculation
         earliest_shift_start: shift?.earliest_shift_start || null,
         latest_shift_end: shift?.latest_shift_end || null,
+        missed_jobs: missedMap.get(row.user_id)?.missed_jobs ?? 0,
       };
     });
+
+    // A transporter who only missed jobs in range (completed none) still gets a row
+    const listed = new Set(transporters.map((t) => t.user_id));
+    for (const [userId, missed] of missedMap) {
+      if (listed.has(userId)) continue;
+      const shift = shiftMap.get(userId);
+      transporters.push({
+        user_id: userId,
+        first_name: missed.first_name,
+        last_name: missed.last_name,
+        jobs_completed: 0,
+        avg_pickup_time_minutes: 0,
+        avg_transport_time_minutes: 0,
+        avg_job_time_minutes: 0,
+        idle_time_minutes: 0,
+        earliest_shift_start: shift?.earliest_shift_start || null,
+        latest_shift_end: shift?.latest_shift_end || null,
+        missed_jobs: missed.missed_jobs,
+      });
+    }
+    transporters.sort((a, b) => b.jobs_completed - a.jobs_completed);
 
     res.json({ transporters });
   } catch (error) {
@@ -1030,6 +1091,80 @@ export const getDelayReport = async (
   }
 };
 
+// Reassignment events (auto acceptance-timeout + manual dispatcher moves)
+// from audit_logs. PHI-safe: floor/room/destination only, never notes.
+export const getReassignments = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { start_date, end_date } = req.query;
+
+    let whereClause = `WHERE al.action = 'reassignment' AND al.entity_type = 'transport_request'
+      AND (old_u.id IS NULL OR old_u.include_in_analytics = true)`;
+    const params: unknown[] = [];
+    let paramIndex = 1;
+
+    if (start_date) {
+      whereClause += ` AND al.timestamp >= $${paramIndex++}`;
+      params.push(start_date);
+    }
+
+    if (end_date) {
+      whereClause += ` AND al.timestamp <= $${paramIndex++}`;
+      params.push(end_date);
+    }
+
+    const result = await query(
+      `SELECT al.id, al.entity_id AS request_id, al.timestamp,
+              al.old_values->>'reason' AS reason,
+              tr.origin_floor, tr.room_number, tr.destination,
+              old_u.first_name AS from_first_name, old_u.last_name AS from_last_name,
+              new_u.first_name AS to_first_name, new_u.last_name AS to_last_name,
+              actor.first_name AS actor_first_name, actor.last_name AS actor_last_name,
+              un.acknowledged_at
+       FROM audit_logs al
+       JOIN transport_requests tr ON tr.id = al.entity_id
+       LEFT JOIN users old_u ON (al.old_values->>'assigned_to')::int = old_u.id
+       LEFT JOIN users new_u ON (al.new_values->>'assigned_to')::int = new_u.id
+       LEFT JOIN users actor ON al.user_id = actor.id
+       LEFT JOIN user_notifications un
+              ON un.type = 'missed_job'
+             AND (un.payload->>'request_id')::int = al.entity_id
+             AND un.user_id = (al.old_values->>'assigned_to')::int
+       ${whereClause}
+       ORDER BY al.timestamp DESC
+       LIMIT 200`,
+      params
+    );
+
+    const reassignments = result.rows.map((row) => ({
+      id: row.id,
+      request_id: row.request_id,
+      timestamp: row.timestamp,
+      type: row.reason === 'acceptance_timeout' ? 'timed_out' : 'manual',
+      origin_floor: row.origin_floor,
+      room_number: row.room_number,
+      destination: row.destination,
+      from: row.from_first_name
+        ? { first_name: row.from_first_name, last_name: row.from_last_name }
+        : null,
+      to: row.to_first_name
+        ? { first_name: row.to_first_name, last_name: row.to_last_name }
+        : null,
+      actor: row.actor_first_name
+        ? { first_name: row.actor_first_name, last_name: row.actor_last_name }
+        : null,
+      acknowledged_at: row.acknowledged_at || null,
+    }));
+
+    res.json({ reassignments });
+  } catch (error) {
+    logger.error('Get reassignments error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 // Get detailed floor analysis
 export const getFloorAnalysis = async (
   req: AuthenticatedRequest,
@@ -1175,7 +1310,7 @@ export const getCompletedJobs = async (
     // Get reassignment history and delays for these jobs
     const jobIds = jobsResult.rows.map((r: { id: number }) => r.id);
 
-    let reassignments: Record<number, Array<{ from_name: string; to_name: string; timestamp: string }>> = {};
+    let reassignments: Record<number, Array<{ from_name: string; to_name: string; timestamp: string; reason?: string }>> = {};
     let delays: Record<number, Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>> = {};
     let cancelledByMap: Record<number, { first_name: string; last_name: string }> = {};
 
@@ -1185,16 +1320,21 @@ export const getCompletedJobs = async (
         `SELECT al.entity_id as request_id, al.timestamp,
                 al.old_values->>'assigned_to' as old_assignee,
                 al.new_values->>'assigned_to' as new_assignee,
+                al.old_values->>'reason' as reason,
                 old_user.first_name || ' ' || old_user.last_name as from_name,
                 new_user.first_name || ' ' || new_user.last_name as to_name
          FROM audit_logs al
          LEFT JOIN users old_user ON (al.old_values->>'assigned_to')::int = old_user.id
          LEFT JOIN users new_user ON (al.new_values->>'assigned_to')::int = new_user.id
          WHERE al.entity_type = 'transport_request'
-           AND al.action IN ('status_change', 'reassignment')
            AND al.old_values->>'assigned_to' IS NOT NULL
-           AND al.new_values->>'assigned_to' IS NOT NULL
-           AND al.old_values->>'assigned_to' != al.new_values->>'assigned_to'
+           AND (
+             (al.action IN ('status_change', 'reassignment')
+              AND al.new_values->>'assigned_to' IS NOT NULL
+              AND al.old_values->>'assigned_to' != al.new_values->>'assigned_to')
+             -- timed-out reassignment with nobody available: job went back to pending
+             OR (al.action = 'reassignment' AND al.new_values->>'assigned_to' IS NULL)
+           )
            AND al.entity_id = ANY($1)
          ORDER BY al.timestamp ASC`,
         [jobIds]
@@ -1205,8 +1345,9 @@ export const getCompletedJobs = async (
         if (!reassignments[rid]) reassignments[rid] = [];
         reassignments[rid].push({
           from_name: row.from_name || 'Unknown',
-          to_name: row.to_name || 'Unknown',
+          to_name: row.new_assignee ? row.to_name || 'Unknown' : 'Pending',
           timestamp: row.timestamp,
+          reason: row.reason || undefined,
         });
       }
 

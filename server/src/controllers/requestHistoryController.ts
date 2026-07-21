@@ -69,11 +69,11 @@ export const getRequestHistory = async (
 
     // Get status history
     const statusHistoryResult = await query(
-      `SELECT sh.*, u.first_name, u.last_name
+      `SELECT sh.*, sh.timestamp AS changed_at, u.first_name, u.last_name
        FROM status_history sh
        LEFT JOIN users u ON sh.user_id = u.id
        WHERE sh.request_id = $1
-       ORDER BY sh.changed_at ASC`,
+       ORDER BY sh.timestamp ASC`,
       [id]
     );
 

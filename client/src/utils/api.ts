@@ -517,6 +517,26 @@ export const api = {
     }>(`/reports/delays${query}`);
   },
 
+  // Reassignment events (auto acceptance-timeout + manual), supervisor+
+  getReassignments: (params?: { start_date?: string; end_date?: string }) => {
+    const query = buildQuery(params);
+    return request<{
+      reassignments: Array<{
+        id: number;
+        request_id: number;
+        timestamp: string;
+        type: 'timed_out' | 'manual';
+        origin_floor: string;
+        room_number: string;
+        destination: string;
+        from: { first_name: string; last_name: string } | null;
+        to: { first_name: string; last_name: string } | null;
+        actor: { first_name: string; last_name: string } | null;
+        acknowledged_at: string | null;
+      }>;
+    }>(`/reports/reassignments${query}`);
+  },
+
   getActivityLog: (params?: {
     start_date?: string;
     end_date?: string;
@@ -585,7 +605,7 @@ export const api = {
         creator: { first_name: string; last_name: string } | null;
         assignee: { first_name: string; last_name: string } | null;
         assigner: { first_name: string; last_name: string } | null;
-        reassignments: Array<{ from_name: string; to_name: string; timestamp: string }>;
+        reassignments: Array<{ from_name: string; to_name: string; timestamp: string; reason?: string }>;
         delays: Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>;
         cancelled_by: { first_name: string; last_name: string } | null;
       }>;

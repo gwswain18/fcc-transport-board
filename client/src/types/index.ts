@@ -149,6 +149,7 @@ export interface TransporterStats {
   idle_time_minutes: number;
   earliest_shift_start?: string | null;
   latest_shift_end?: string | null;
+  missed_jobs?: number;
 }
 
 export interface AlertData {

@@ -23,6 +23,20 @@ interface DelayByTransporter {
   reasons: { reason: string; count: number }[];
 }
 
+interface Reassignment {
+  id: number;
+  request_id: number;
+  timestamp: string;
+  type: 'timed_out' | 'manual';
+  origin_floor: string;
+  room_number: string;
+  destination: string;
+  from: { first_name: string; last_name: string } | null;
+  to: { first_name: string; last_name: string } | null;
+  actor: { first_name: string; last_name: string } | null;
+  acknowledged_at: string | null;
+}
+
 interface DelayReportProps {
   dateRange?: {
     start_date: string;
@@ -33,6 +47,7 @@ interface DelayReportProps {
 export default function DelayReport({ dateRange }: DelayReportProps) {
   const [byReason, setByReason] = useState<DelayByReason[]>([]);
   const [byTransporter, setByTransporter] = useState<DelayByTransporter[]>([]);
+  const [reassignments, setReassignments] = useState<Reassignment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,10 +56,16 @@ export default function DelayReport({ dateRange }: DelayReportProps) {
 
   const loadDelayReport = async () => {
     setLoading(true);
-    const response = await api.getDelayReport(dateRange);
-    if (response.data) {
-      setByReason(response.data.byReason);
-      setByTransporter(response.data.byTransporter);
+    const [delayRes, reassignRes] = await Promise.all([
+      api.getDelayReport(dateRange),
+      api.getReassignments(dateRange),
+    ]);
+    if (delayRes.data) {
+      setByReason(delayRes.data.byReason);
+      setByTransporter(delayRes.data.byTransporter);
+    }
+    if (reassignRes.data) {
+      setReassignments(reassignRes.data.reassignments);
     }
     setLoading(false);
   };
@@ -60,7 +81,7 @@ export default function DelayReport({ dateRange }: DelayReportProps) {
     );
   }
 
-  if (byReason.length === 0 && byTransporter.length === 0) {
+  if (byReason.length === 0 && byTransporter.length === 0 && reassignments.length === 0) {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Delay Report</h3>
@@ -135,6 +156,69 @@ export default function DelayReport({ dateRange }: DelayReportProps) {
           </table>
         </div>
       </div>
+
+      {/* Reassignments Table */}
+      {reassignments.length > 0 && (
+        <div className="card">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Reassignments</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">When</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">Job</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">From</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">To</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">Type</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">Acknowledged</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reassignments.map((r) => (
+                  <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-3 px-4 text-gray-600 whitespace-nowrap">
+                      {new Date(r.timestamp).toLocaleString([], {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </td>
+                    <td className="py-3 px-4 text-gray-900">
+                      {r.origin_floor} Room {r.room_number} → {r.destination}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">
+                      {r.from ? `${r.from.first_name} ${r.from.last_name}` : 'Unassigned'}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">
+                      {r.to ? (
+                        `${r.to.first_name} ${r.to.last_name}`
+                      ) : (
+                        <span className="text-gray-400 italic">Returned to pending</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      {r.type === 'timed_out' ? (
+                        <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-700">
+                          Timed out
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">
+                          Manual
+                          {r.actor ? ` · ${r.actor.first_name} ${r.actor.last_name}` : ''}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">
+                      {r.type === 'timed_out' ? (r.acknowledged_at ? 'Yes' : 'No') : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
