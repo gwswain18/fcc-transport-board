@@ -575,7 +575,7 @@ export default function TransporterView() {
                   type="checkbox"
                   checked={selectedDelayReasons.has(reason)}
                   onChange={() => toggleDelayReason(reason)}
-                  className="rounded border-gray-300 text-primary focus:ring-primary"
+                  className="rounded border-gray-300 accent-primary focus:ring-primary"
                 />
                 <span className="text-sm font-medium text-gray-700">{reason}</span>
               </label>

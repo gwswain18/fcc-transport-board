@@ -638,7 +638,7 @@ export default function UserManagement() {
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, is_active: e.target.checked }))
                   }
-                  className="rounded border-gray-300"
+                  className="rounded border-gray-300 accent-primary focus:ring-primary"
                 />
                 <label htmlFor="is_active" className="text-sm text-gray-700">
                   Active
@@ -653,7 +653,7 @@ export default function UserManagement() {
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, include_in_analytics: e.target.checked }))
                 }
-                className="rounded border-gray-300"
+                className="rounded border-gray-300 accent-primary focus:ring-primary"
               />
               <label htmlFor="include_in_analytics" className="text-sm text-gray-700">
                 Include in Analytics
