@@ -12,6 +12,21 @@ import { AuthenticatedRequest } from '../types/index.js';
 import { getIO } from '../socket/index.js';
 import logger from '../utils/logger.js';
 
+// Deep equality for config values (objects, arrays, primitives). Used to
+// skip audit rows for no-op writes — the settings save buttons re-PUT every
+// key, so most writes don't actually change anything.
+const deepEquals = (a: unknown, b: unknown): boolean => {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== typeof b) return false;
+  if (typeof a !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const aObj = a as Record<string, unknown>;
+  const bObj = b as Record<string, unknown>;
+  const aKeys = Object.keys(aObj);
+  if (aKeys.length !== Object.keys(bObj).length) return false;
+  return aKeys.every((key) => deepEquals(aObj[key], bObj[key]));
+};
+
 // Get a config value
 export const getConfigValue = async (req: Request, res: Response) => {
   try {
@@ -63,17 +78,20 @@ export const setConfigValue = async (req: AuthenticatedRequest, res: Response) =
 
     await setConfig(key, value);
 
-    const { ipAddress, userAgent } = getAuditContext(req);
-    await createAuditLog({
-      userId: req.user?.id,
-      action: 'update',
-      entityType: 'system_config',
-      // entity_id is INTEGER but config keys are varchar; the key lives in the values
-      oldValues: { key, value: oldValue },
-      newValues: { key, value },
-      ipAddress,
-      userAgent,
-    });
+    // Only audit real changes — the settings save buttons re-PUT unchanged keys
+    if (!deepEquals(oldValue, value)) {
+      const { ipAddress, userAgent } = getAuditContext(req);
+      await createAuditLog({
+        userId: req.user?.id,
+        action: 'update',
+        entityType: 'system_config',
+        // entity_id is INTEGER but config keys are varchar; the key lives in the values
+        oldValues: { key, value: oldValue },
+        newValues: { key, value },
+        ipAddress,
+        userAgent,
+      });
+    }
 
     if (key === 'alert_settings') {
       logger.info(`[Config] SET alert_settings: master_enabled=${value?.master_enabled}`);

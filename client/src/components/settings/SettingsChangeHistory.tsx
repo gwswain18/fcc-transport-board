@@ -156,10 +156,13 @@ function LogEntry({ log }: { log: SettingsAuditLog }) {
   );
 }
 
-// Manager-only card showing who changed which setting, when, old -> new
+// Manager-only collapsible card showing who changed which setting, when,
+// old -> new. Collapsed by default; history loads on first expand.
 export default function SettingsChangeHistory() {
+  const [open, setOpen] = useState(false);
   const [logs, setLogs] = useState<SettingsAuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,11 +179,14 @@ export default function SettingsChangeHistory() {
   }, []);
 
   useEffect(() => {
+    if (!open || loaded) return;
     (async () => {
+      setLoading(true);
       await loadPage(0);
       setLoading(false);
+      setLoaded(true);
     })();
-  }, [loadPage]);
+  }, [open, loaded, loadPage]);
 
   const handleLoadMore = async () => {
     setLoadingMore(true);
@@ -188,40 +194,60 @@ export default function SettingsChangeHistory() {
     setLoadingMore(false);
   };
 
-  if (loading) {
-    return (
-      <div className="card">
-        <div className="animate-pulse space-y-4">
-          <div className="h-6 bg-gray-200 rounded w-1/3"></div>
-          <div className="h-10 bg-gray-200 rounded"></div>
-          <div className="h-10 bg-gray-200 rounded"></div>
-        </div>
-      </div>
-    );
-  }
+  // Hide no-op rows (re-saves that changed nothing) recorded before the
+  // server started skipping them
+  const visibleLogs = logs.filter(
+    (log) =>
+      log.action === 'delete' ||
+      diffValues(log.old_values?.value, log.new_values?.value).length > 0
+  );
 
   return (
     <div className="card">
-      <h3 className="text-lg font-semibold text-gray-900 mb-6">Settings Change History</h3>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between text-left"
+      >
+        <h3 className="text-lg font-semibold text-gray-900">Settings Change History</h3>
+        <svg
+          className={`w-5 h-5 text-gray-500 transform transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
 
-      {error && <div className="mb-4 p-3 rounded bg-red-100 text-red-700">{error}</div>}
+      {open && (
+        <div className="mt-6">
+          {error && <div className="mb-4 p-3 rounded bg-red-100 text-red-700">{error}</div>}
 
-      {logs.length === 0 && !error ? (
-        <p className="text-sm text-gray-400 italic">No settings changes recorded yet.</p>
-      ) : (
-        <div>
-          {logs.map((log) => (
-            <LogEntry key={log.id} log={log} />
-          ))}
-          {hasMore && (
-            <div className="mt-4 flex justify-center">
-              <button
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                className="text-sm px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
-              >
-                {loadingMore ? 'Loading...' : 'Load More'}
-              </button>
+          {loading ? (
+            <div className="animate-pulse space-y-4">
+              <div className="h-10 bg-gray-200 rounded"></div>
+              <div className="h-10 bg-gray-200 rounded"></div>
+            </div>
+          ) : visibleLogs.length === 0 && !error ? (
+            <p className="text-sm text-gray-400 italic">No settings changes recorded yet.</p>
+          ) : (
+            <div>
+              {visibleLogs.map((log) => (
+                <LogEntry key={log.id} log={log} />
+              ))}
+              {hasMore && (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    onClick={handleLoadMore}
+                    disabled={loadingMore}
+                    className="text-sm px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-100"
+                  >
+                    {loadingMore ? 'Loading...' : 'Load More'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
