@@ -372,9 +372,11 @@ export const updateRequest = async (
         }
       }
 
-      const updates: string[] = [];
-      const params: unknown[] = [];
-      let paramIndex = 1;
+      // Keyed by column so a request carrying both status and assigned_to
+      // can't produce duplicate assignments in the UPDATE (Postgres rejects
+      // "SET status = $1, status = $2"). Later writes win, so the
+      // reassignment branch's status/timestamps override the status branch's.
+      const columnUpdates = new Map<string, unknown>();
 
       // Handle status change
       if (status && status !== currentRequest.status) {
@@ -396,8 +398,7 @@ export const updateRequest = async (
           };
         }
 
-        updates.push(`status = $${paramIndex++}`);
-        params.push(status);
+        columnUpdates.set('status', status);
 
         // Set timestamp based on status
         const timestampFields: Record<string, string> = {
@@ -411,8 +412,7 @@ export const updateRequest = async (
         const timestampField = timestampFields[status];
 
         if (timestampField) {
-          updates.push(`${timestampField} = $${paramIndex++}`);
-          params.push(new Date().toISOString());
+          columnUpdates.set(timestampField, new Date().toISOString());
         }
 
         // Record status history
@@ -477,30 +477,31 @@ export const updateRequest = async (
 
       // Handle delay_reason update
       if (delay_reason !== undefined) {
-        updates.push(`delay_reason = $${paramIndex++}`);
-        params.push(delay_reason);
+        columnUpdates.set('delay_reason', delay_reason);
       }
 
       // Handle assignment change
       if (assigned_to !== undefined && assigned_to !== currentRequest.assigned_to) {
-        updates.push(`assigned_to = $${paramIndex++}`);
-        params.push(assigned_to || null);
-        updates.push(`assignment_method = $${paramIndex++}`);
-        params.push('manual');
-        updates.push(`assigned_by = $${paramIndex++}`);
-        params.push(user.id);
+        // True when the status branch above already recorded this same
+        // transition — avoids a duplicate status_history row if the body
+        // carried both status: 'assigned' and assigned_to
+        const assignedHistoryRecorded = status === 'assigned' && status !== currentRequest.status;
+
+        columnUpdates.set('assigned_to', assigned_to || null);
+        columnUpdates.set('assignment_method', 'manual');
+        columnUpdates.set('assigned_by', user.id);
 
         if (assigned_to && !currentRequest.assigned_to) {
-          updates.push(`status = $${paramIndex++}`);
-          params.push('assigned');
-          updates.push(`assigned_at = $${paramIndex++}`);
-          params.push(new Date().toISOString());
+          columnUpdates.set('status', 'assigned');
+          columnUpdates.set('assigned_at', new Date().toISOString());
 
-          await client.query(
-            `INSERT INTO status_history (request_id, user_id, from_status, to_status)
-             VALUES ($1, $2, $3, $4)`,
-            [id, user.id, currentRequest.status, 'assigned']
-          );
+          if (!assignedHistoryRecorded) {
+            await client.query(
+              `INSERT INTO status_history (request_id, user_id, from_status, to_status)
+               VALUES ($1, $2, $3, $4)`,
+              [id, user.id, currentRequest.status, 'assigned']
+            );
+          }
 
           // Update new transporter status
           await client.query(
@@ -548,23 +549,20 @@ export const updateRequest = async (
             );
 
             // Reset status and timestamps for new transporter (Fix B)
-            updates.push(`status = $${paramIndex++}`);
-            params.push('assigned');
-            updates.push(`assigned_at = $${paramIndex++}`);
-            params.push(new Date().toISOString());
-            updates.push(`accepted_at = $${paramIndex++}`);
-            params.push(null);
-            updates.push(`en_route_at = $${paramIndex++}`);
-            params.push(null);
-            updates.push(`with_patient_at = $${paramIndex++}`);
-            params.push(null);
+            columnUpdates.set('status', 'assigned');
+            columnUpdates.set('assigned_at', new Date().toISOString());
+            columnUpdates.set('accepted_at', null);
+            columnUpdates.set('en_route_at', null);
+            columnUpdates.set('with_patient_at', null);
 
             // Record status history for the reassignment
-            await client.query(
-              `INSERT INTO status_history (request_id, user_id, from_status, to_status)
-               VALUES ($1, $2, $3, $4)`,
-              [id, user.id, currentRequest.status, 'assigned']
-            );
+            if (!assignedHistoryRecorded) {
+              await client.query(
+                `INSERT INTO status_history (request_id, user_id, from_status, to_status)
+                 VALUES ($1, $2, $3, $4)`,
+                [id, user.id, currentRequest.status, 'assigned']
+              );
+            }
 
             // Update new transporter's status to 'assigned'
             await client.query(
@@ -587,13 +585,16 @@ export const updateRequest = async (
         }
       }
 
-      if (updates.length === 0) {
+      if (columnUpdates.size === 0) {
         return { code: 400, error: 'No valid updates provided' };
       }
 
+      const columns = [...columnUpdates.keys()];
+      const setClause = columns.map((col, i) => `${col} = $${i + 1}`).join(', ');
+      const params: unknown[] = columns.map((col) => columnUpdates.get(col));
       params.push(id);
       await client.query(
-        `UPDATE transport_requests SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+        `UPDATE transport_requests SET ${setClause} WHERE id = $${columns.length + 1}`,
         params
       );
 
