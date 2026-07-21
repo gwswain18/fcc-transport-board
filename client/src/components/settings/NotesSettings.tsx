@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
+import Toggle from '../common/Toggle';
 
 // Manager control for the free-text notes fields (request notes + delay notes).
 // Disabling removes the only PHI-entry vector besides room number, transport
@@ -36,34 +37,48 @@ export default function NotesSettings() {
     setSaving(false);
   };
 
-  return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">Free-text notes</h3>
-      <p className="text-sm text-gray-600 mb-4">
-        Notes on transport requests and delays are the only free-text fields in
-        the app. Disable them to guarantee that no patient identifiers can be
-        entered — only room number, transport time, and destination are recorded.
-      </p>
+  if (loading) {
+    return (
+      <div className="card">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 bg-gray-200 rounded w-1/3"></div>
+          <div className="h-10 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
-      {loading ? (
-        <p className="text-sm text-gray-500">Loading…</p>
-      ) : (
-        <label className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            checked={enabled}
-            disabled={saving}
-            onChange={(e) => handleToggle(e.target.checked)}
-            className="rounded border-gray-300 text-primary focus:ring-primary"
-          />
-          <span className="text-sm font-medium text-gray-700">
-            {enabled ? 'Notes are enabled' : 'Notes are disabled'}
-          </span>
-        </label>
+  return (
+    <div className="card">
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">Free-text Notes</h3>
+
+      {error && (
+        <div className="mb-4 p-3 rounded bg-red-100 text-red-700">{error}</div>
+      )}
+      {success && (
+        <div className="mb-4 p-3 rounded bg-green-100 text-green-700">{success}</div>
       )}
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      {success && <p className="mt-3 text-sm text-green-600">{success}</p>}
+      <div className="p-4 bg-gray-50 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex-1 pr-4">
+            <h4 className="font-medium text-gray-900">
+              {enabled ? 'Notes are enabled' : 'Notes are disabled'}
+            </h4>
+            <p className="text-sm text-gray-500">
+              Notes on transport requests and delays are the only free-text fields in
+              the app. Disable them to guarantee that no patient identifiers can be
+              entered — only room number, transport time, and destination are recorded.
+            </p>
+          </div>
+          <Toggle
+            enabled={enabled}
+            disabled={saving}
+            onChange={handleToggle}
+            ariaLabel="Free-text notes"
+          />
+        </div>
+      </div>
     </div>
   );
 }

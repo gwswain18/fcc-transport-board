@@ -18,11 +18,13 @@ export default function AlertBanners() {
     cycleTimeAlerts,
     breakAlerts,
     offlineAlerts,
+    reassignmentNotices,
     requireExplanation,
     dismissAlert,
     dismissCycleAlert,
     dismissBreakAlert,
     dismissOfflineAlert,
+    dismissReassignmentNotice,
   } = useSocket();
   const [dismissalModal, setDismissalModal] = useState<PendingDismissal | null>(null);
 
@@ -160,6 +162,28 @@ export default function AlertBanners() {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-Reassignment Notices */}
+      {reassignmentNotices.length > 0 && (
+        <div className="bg-orange-500 text-white px-4 py-2">
+          <div className="max-w-7xl mx-auto space-y-1">
+            {reassignmentNotices.map((notice) => (
+              <div key={notice.id} className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <span className="font-bold">REASSIGNED:</span>
+                  <span>{notice.message}</span>
+                </div>
+                <button
+                  onClick={() => dismissReassignmentNotice(notice.id)}
+                  className="bg-orange-600 hover:bg-orange-700 px-3 py-1 rounded text-sm"
+                >
+                  Dismiss
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}

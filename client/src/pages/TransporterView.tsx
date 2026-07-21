@@ -22,7 +22,7 @@ import { enqueue } from '../utils/offlineQueue';
 
 export default function TransporterView() {
   const { user, activeShift, setActiveShift, logout } = useAuth();
-  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, jobRemovedNotification, clearJobRemovedNotification, refreshData, requireTransporterExplanation, activeDispatchers, notesEnabled } = useSocket();
+  const { transporterStatuses, requests, cycleTimeAlerts, dismissCycleAlert, jobRemovedNotification, clearJobRemovedNotification, missedJobNotifications, removeMissedJobNotification, refreshData, requireTransporterExplanation, activeDispatchers, notesEnabled } = useSocket();
   const navigate = useNavigate();
   const [queueOpen, setQueueOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -37,6 +37,23 @@ export default function TransporterView() {
   const [customDelayNote, setCustomDelayNote] = useState('');
   const [delayNoteError, setDelayNoteError] = useState('');
   const [pendingCompletion, setPendingCompletion] = useState(false);
+  const [ackLoading, setAckLoading] = useState(false);
+
+  // Oldest first; acknowledging one reveals the next automatically
+  const missedJobNotification = missedJobNotifications[0] ?? null;
+
+  const handleAcknowledgeMissedJob = async () => {
+    if (!missedJobNotification) return;
+    setAckLoading(true);
+    const response = await api.acknowledgeNotification(missedJobNotification.id);
+    // 404 = already acknowledged elsewhere (another tab); clear it locally either way
+    if (!response.error || response.error === 'Notification not found') {
+      removeMissedJobNotification(missedJobNotification.id);
+    } else {
+      setError(response.error);
+    }
+    setAckLoading(false);
+  };
 
   const myStatus = transporterStatuses.find((s) => s.user_id === user?.id);
   const currentJob = requests.find(
@@ -657,6 +674,40 @@ export default function TransporterView() {
               className={`w-full py-3 text-white font-bold rounded-xl ${jobRemovedNotification.action === 'cancelled' ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'}`}
             >
               Acknowledge
+            </button>
+          </div>
+        )}
+      </Modal>
+
+      {/* Missed Job Notification Modal (job reassigned while unavailable/offline) */}
+      <Modal
+        isOpen={!jobRemovedNotification && !!missedJobNotification}
+        onClose={() => {}}
+        title="Missed Job"
+      >
+        {missedJobNotification && (
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg bg-orange-50 border border-orange-200">
+              <p className="font-medium text-orange-800">
+                While you were unavailable, a job assigned to you was not accepted within{' '}
+                {missedJobNotification.payload.timed_out_after_minutes} minute
+                {missedJobNotification.payload.timed_out_after_minutes === 1 ? '' : 's'} and was
+                reassigned.
+              </p>
+              <p className="text-sm text-gray-600 mt-2">
+                <span className="font-medium">Job:</span> {missedJobNotification.payload.job_summary}
+              </p>
+              <p className="text-sm text-gray-600 mt-1">
+                <span className="font-medium">When:</span>{' '}
+                {new Date(missedJobNotification.payload.occurred_at).toLocaleString()}
+              </p>
+            </div>
+            <button
+              onClick={handleAcknowledgeMissedJob}
+              disabled={ackLoading}
+              className="w-full py-3 text-white font-bold rounded-xl bg-orange-600 hover:bg-orange-700 disabled:opacity-50"
+            >
+              {ackLoading ? 'Acknowledging...' : 'Acknowledge'}
             </button>
           </div>
         )}

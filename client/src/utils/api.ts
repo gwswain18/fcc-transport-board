@@ -414,6 +414,19 @@ export const api = {
       body: JSON.stringify({ value }),
     }),
 
+  // Settings change history (manager only)
+  getConfigAuditHistory: (limit = 20, offset = 0) =>
+    request<{ logs: import('../types').SettingsAuditLog[] }>(
+      `/config/audit/history?limit=${limit}&offset=${offset}`
+    ),
+
+  // Persistent notifications (missed jobs etc.)
+  getMyNotifications: () =>
+    request<{ notifications: import('../types').UserNotification[] }>('/notifications'),
+
+  acknowledgeNotification: (id: number) =>
+    request<{ message: string }>(`/notifications/${id}/ack`, { method: 'PUT' }),
+
   // Reports
   getReportSummary: (params?: {
     start_date?: string;

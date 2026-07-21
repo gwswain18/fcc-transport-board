@@ -1,8 +1,14 @@
 import { PoolClient } from 'pg';
 import { query, withTransaction } from '../config/database.js';
-import { getIO } from '../socket/index.js';
-import { getAutoAssignTimeoutMs } from './configService.js';
-import { logStatusChange } from './auditService.js';
+import { getIO, emitToUser } from '../socket/index.js';
+import { getAutoReassignSettings } from './configService.js';
+import { logStatusChange, createAuditLog } from './auditService.js';
+import {
+  createNotification,
+  getMissedUserIdsForRequest,
+  markDelivered,
+} from './notificationService.js';
+import { sendJobAssignmentSMS } from './twilioService.js';
 import { Floor, TransportRequest } from '../types/index.js';
 import logger from '../utils/logger.js';
 
@@ -186,20 +192,23 @@ export const findBestTransporter = async (
   return { user_id: selected.user_id, reason };
 };
 
-// Check for auto-assigned requests that have timed out without acceptance
+// Check for assigned requests that have timed out without acceptance.
+// Covers all assignment methods (auto, manual, claim); gated by the
+// manager-controlled auto_reassign_enabled setting.
 const checkAutoAssignTimeouts = async () => {
   const io = getIO();
   if (!io) return;
 
-  const timeoutMs = await getAutoAssignTimeoutMs();
-  const cutoffTime = new Date(Date.now() - timeoutMs).toISOString();
+  const { enabled, timeoutMinutes } = await getAutoReassignSettings();
+  if (!enabled) return;
 
-  // Find auto-assigned requests that haven't been accepted
+  const cutoffTime = new Date(Date.now() - timeoutMinutes * 60000).toISOString();
+
+  // Find assigned requests that haven't been accepted in time
   const result = await query(
-    `SELECT id, assigned_to, origin_floor
+    `SELECT id, assigned_to, origin_floor, room_number, destination, priority, assignment_method
      FROM transport_requests
      WHERE status = 'assigned'
-     AND assignment_method = 'auto'
      AND assigned_at < $1`,
     [cutoffTime]
   );
@@ -207,15 +216,18 @@ const checkAutoAssignTimeouts = async () => {
   for (const request of result.rows) {
     const oldAssignee = request.assigned_to;
 
+    // Transporters who already missed this request never get it bounced back
+    const priorMissers = await getMissedUserIdsForRequest(request.id);
+
     // Reassign atomically: re-verify under lock so a transporter who accepted
     // between the scan and now keeps their job
     const reassignment = await withTransaction<{ newAssignee: number | null } | null>(async (client) => {
       const current = await client.query(
         `SELECT id, origin_floor FROM transport_requests
-         WHERE id = $1 AND status = 'assigned' AND assignment_method = 'auto'
+         WHERE id = $1 AND status = 'assigned' AND assigned_to = $3
            AND assigned_at < $2
          FOR UPDATE`,
-        [request.id, cutoffTime]
+        [request.id, cutoffTime, oldAssignee]
       );
       if (current.rows.length === 0) return null;
 
@@ -234,8 +246,9 @@ const checkAutoAssignTimeouts = async () => {
         [request.id]
       );
 
-      // Try another transporter, excluding the one who timed out
-      const excluded = [oldAssignee];
+      // Try another transporter, excluding the one who timed out and anyone
+      // who missed this request before
+      const excluded = Array.from(new Set([oldAssignee, ...priorMissers]));
       for (let attempt = 0; attempt < 3; attempt++) {
         const newTransporter = await findBestTransporterExcluding(
           request.origin_floor,
@@ -281,11 +294,80 @@ const checkAutoAssignTimeouts = async () => {
       'auto_assign_timeout'
     );
 
+    // PHI-safe summary (floor/room/destination/priority only — never notes)
+    const jobSummary = `${request.origin_floor} Room ${request.room_number} → ${request.destination}${request.priority === 'stat' ? ' (STAT)' : ''}`;
+
+    let newAssigneeName: string | null = null;
+    if (reassignment.newAssignee) {
+      const nameResult = await query(
+        'SELECT first_name, last_name FROM users WHERE id = $1',
+        [reassignment.newAssignee]
+      );
+      if (nameResult.rows[0]) {
+        newAssigneeName = `${nameResult.rows[0].first_name} ${nameResult.rows[0].last_name}`;
+      }
+    }
+
+    // Audit the reassignment (system-initiated, so no userId)
+    await createAuditLog({
+      action: 'reassignment',
+      entityType: 'transport_request',
+      entityId: request.id,
+      oldValues: {
+        assigned_to: oldAssignee,
+        assignment_method: request.assignment_method,
+        reason: 'acceptance_timeout',
+      },
+      newValues: { assigned_to: reassignment.newAssignee },
+    });
+
+    // Durable missed-job notice for the transporter who didn't respond;
+    // delivered now if they're connected, otherwise on next connect
+    const notification = await createNotification(oldAssignee, 'missed_job', {
+      request_id: request.id,
+      job_summary: jobSummary,
+      assignment_method: request.assignment_method,
+      timed_out_after_minutes: timeoutMinutes,
+      new_assignee_name: newAssigneeName,
+      occurred_at: new Date().toISOString(),
+    });
+    if (emitToUser(oldAssignee, 'missed_job_notification', { notification })) {
+      await markDelivered([notification.id]);
+    }
+
     io.emit('auto_assign_timeout', {
       request_id: request.id,
       old_assignee: oldAssignee,
       new_assignee: reassignment.newAssignee,
+      assignment_method: request.assignment_method,
+      job_summary: jobSummary,
     });
+
+    // Notify the new assignee through the normal assignment channels
+    if (reassignment.newAssignee) {
+      const updatedRequest = await getRequestWithRelations(request.id);
+      if (updatedRequest) {
+        io.emit('request_assigned', updatedRequest);
+      }
+      sendJobAssignmentSMS(
+        reassignment.newAssignee,
+        request.id,
+        request.origin_floor,
+        request.room_number,
+        request.priority
+      ).catch((error) => logger.error('Reassignment SMS error:', error));
+
+      const newStatusResult = await query(
+        `SELECT ts.*, u.first_name, u.last_name, u.email, u.role
+         FROM transporter_status ts
+         JOIN users u ON ts.user_id = u.id
+         WHERE ts.user_id = $1`,
+        [reassignment.newAssignee]
+      );
+      if (newStatusResult.rows[0]) {
+        io.emit('transporter_status_changed', newStatusResult.rows[0]);
+      }
+    }
 
     // Emit status change for old assignee
     const statusResult = await query(

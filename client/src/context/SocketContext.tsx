@@ -13,6 +13,7 @@ import {
   ActiveSecretary,
   AlertSettings,
   JobRemovedNotification,
+  UserNotification,
 } from '../types';
 import {
   playJobAssignmentBeep,
@@ -37,11 +38,15 @@ interface SocketContextType {
   requireTransporterExplanation: boolean;
   notesEnabled: boolean;
   jobRemovedNotification: JobRemovedNotification | null;
+  missedJobNotifications: UserNotification[];
+  reassignmentNotices: { id: number; message: string }[];
   dismissAlert: (requestId: number, explanation?: string) => void;
   dismissCycleAlert: (requestId: number, explanation?: string, phase?: string) => void;
   dismissBreakAlert: (userId: number, explanation?: string) => void;
   dismissOfflineAlert: (userId: number, explanation?: string) => void;
   clearJobRemovedNotification: () => void;
+  removeMissedJobNotification: (id: number) => void;
+  dismissReassignmentNotice: (id: number) => void;
   refreshData: () => void;
 }
 
@@ -65,6 +70,10 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   // Default enabled; corrected on first refreshData and kept live via socket
   const [notesEnabled, setNotesEnabled] = useState(true);
   const [jobRemovedNotification, setJobRemovedNotification] = useState<JobRemovedNotification | null>(null);
+  // Persistent missed-job notices (delivered on connect; cleared only by acknowledge)
+  const [missedJobNotifications, setMissedJobNotifications] = useState<UserNotification[]>([]);
+  // Transient dispatcher-facing banners for auto-reassigned jobs
+  const [reassignmentNotices, setReassignmentNotices] = useState<{ id: number; message: string }[]>([]);
   const [recentlyCompleted, setRecentlyCompleted] = useState<Map<number, number>>(new Map());
   const [completedAlerts, setCompletedAlerts] = useState<CycleTimeAlert[]>([]);
   const heartbeatInterval = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -77,6 +86,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   const requireTransporterExplanation = alertSettings?.require_transporter_explanation_on_dismiss ?? true;
 
   const userId = user?.id;
+  const userRole = user?.role;
 
   useEffect(() => {
     if (!userId) {
@@ -313,9 +323,39 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       setNotesEnabled(enabled !== false);
     });
 
-    // Auto-assign timeout
-    newSocket.on('auto_assign_timeout', (_data: { request_id: number; old_assignee: number; new_assignee?: number }) => {
-      // Auto-assign timeout received — could show a notification here
+    // Auto-assign timeout — show dispatch-side banner that a job was reassigned
+    newSocket.on(
+      'auto_assign_timeout',
+      (data: { request_id: number; old_assignee: number; new_assignee?: number | null; job_summary?: string }) => {
+        if (userRole === 'transporter') return;
+        const message = data.new_assignee
+          ? `Job ${data.job_summary ?? `#${data.request_id}`} reassigned after acceptance timeout`
+          : `Job ${data.job_summary ?? `#${data.request_id}`} returned to pending after acceptance timeout (no transporter available)`;
+        setReassignmentNotices((prev) => [...prev, { id: data.request_id, message }]);
+        // Auto-clear after 30 seconds; the event is also in the audit log
+        const timeoutId = setTimeout(() => {
+          pendingTimeouts.current.delete(timeoutId);
+          setReassignmentNotices((prev) => prev.filter((n) => n.id !== data.request_id));
+        }, 30000);
+        pendingTimeouts.current.add(timeoutId);
+      }
+    );
+
+    // Persistent notifications delivered on (re)connect
+    newSocket.on('pending_notifications', (data: { notifications: UserNotification[] }) => {
+      const missed = (data.notifications || []).filter((n) => n.type === 'missed_job');
+      setMissedJobNotifications((prev) => {
+        const known = new Set(prev.map((n) => n.id));
+        return [...prev, ...missed.filter((n) => !known.has(n.id))];
+      });
+    });
+
+    // Live missed-job notice (user was connected when the timeout fired)
+    newSocket.on('missed_job_notification', (data: { notification: UserNotification }) => {
+      setMissedJobNotifications((prev) => {
+        if (prev.some((n) => n.id === data.notification.id)) return prev;
+        return [...prev, data.notification];
+      });
     });
 
     setSocket(newSocket);
@@ -356,6 +396,8 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       newSocket.off('alert_settings_changed');
       newSocket.off('notes_enabled_changed');
       newSocket.off('auto_assign_timeout');
+      newSocket.off('pending_notifications');
+      newSocket.off('missed_job_notification');
       newSocket.disconnect();
       if (heartbeatInterval.current) {
         clearInterval(heartbeatInterval.current);
@@ -366,9 +408,9 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       pendingTimeouts.current.clear();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-    // Key on the id, not the object: auth refreshes rebuild the user object and
-    // must not tear down the socket
-  }, [userId]);
+    // Key on id + role, not the object: auth refreshes rebuild the user object
+    // and must not tear down the socket
+  }, [userId, userRole]);
 
   const dismissAlert = useCallback((requestId: number, explanation?: string) => {
     dismissedAlertsRef.current.add(requestId);
@@ -404,14 +446,23 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     setJobRemovedNotification(null);
   }, []);
 
+  const removeMissedJobNotification = useCallback((id: number) => {
+    setMissedJobNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
+  const dismissReassignmentNotice = useCallback((id: number) => {
+    setReassignmentNotices((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
   const refreshData = useCallback(async () => {
-    const [statusRes, requestRes, dispatcherRes, secretaryRes, alertSettingsRes, notesEnabledRes] = await Promise.all([
+    const [statusRes, requestRes, dispatcherRes, secretaryRes, alertSettingsRes, notesEnabledRes, notificationsRes] = await Promise.all([
       api.getStatuses(),
       api.getRequests(),
       api.getActiveDispatchers(),
       api.getActiveSecretaries(),
       api.getConfigByKey('alert_settings'),
       api.getNotesEnabled(),
+      api.getMyNotifications(),
     ]);
 
     if (statusRes.data?.statuses) {
@@ -431,6 +482,15 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     }
     if (typeof notesEnabledRes.data?.notesEnabled === 'boolean') {
       setNotesEnabled(notesEnabledRes.data.notesEnabled);
+    }
+    // Fallback for pending notifications in case the socket connected before
+    // login state settled (socket delivery marks them delivered, not acknowledged)
+    if (notificationsRes.data?.notifications) {
+      const missed = notificationsRes.data.notifications.filter((n) => n.type === 'missed_job');
+      setMissedJobNotifications((prev) => {
+        const known = new Set(prev.map((n) => n.id));
+        return [...prev, ...missed.filter((n) => !known.has(n.id))];
+      });
     }
   }, []);
 
@@ -492,11 +552,15 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       requireTransporterExplanation,
       notesEnabled,
       jobRemovedNotification,
+      missedJobNotifications,
+      reassignmentNotices,
       dismissAlert,
       dismissCycleAlert,
       dismissBreakAlert,
       dismissOfflineAlert,
       clearJobRemovedNotification,
+      removeMissedJobNotification,
+      dismissReassignmentNotice,
       refreshData,
     }),
     [
@@ -515,11 +579,15 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       requireTransporterExplanation,
       notesEnabled,
       jobRemovedNotification,
+      missedJobNotifications,
+      reassignmentNotices,
       dismissAlert,
       dismissCycleAlert,
       dismissBreakAlert,
       dismissOfflineAlert,
       clearJobRemovedNotification,
+      removeMissedJobNotification,
+      dismissReassignmentNotice,
       refreshData,
     ]
   );

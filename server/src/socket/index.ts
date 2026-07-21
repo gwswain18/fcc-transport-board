@@ -5,6 +5,7 @@ import { recordHeartbeat, removeHeartbeat } from '../services/heartbeatService.j
 import { query } from '../config/database.js';
 import { acknowledgeDelay } from '../services/cycleTimeService.js';
 import { logStatusChange } from '../services/auditService.js';
+import { getPendingNotifications, markDelivered } from '../services/notificationService.js';
 import logger from '../utils/logger.js';
 import { allowedOrigins } from '../utils/origins.js';
 
@@ -198,6 +199,18 @@ export const initializeSocket = (httpServer: HTTPServer): Server => {
         });
       } catch (error) {
         logger.error('Error sending initial data:', error);
+      }
+
+      // Deliver any pending (unacknowledged) notifications, e.g. missed jobs
+      // that were reassigned while this user was offline
+      try {
+        const pending = await getPendingNotifications(userId);
+        if (pending.length > 0) {
+          socket.emit('pending_notifications', { notifications: pending });
+          await markDelivered(pending.map((n) => n.id));
+        }
+      } catch (error) {
+        logger.error('Error delivering pending notifications:', error);
       }
 
       // Close any open offline_periods on reconnection (always, regardless of shift/job)

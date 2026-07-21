@@ -6,6 +6,9 @@ import {
   deleteConfig,
   getNotesEnabled,
 } from '../services/configService.js';
+import { createAuditLog, getAuditLogs } from '../services/auditService.js';
+import { getAuditContext } from '../middleware/auditMiddleware.js';
+import { AuthenticatedRequest } from '../types/index.js';
 import { getIO } from '../socket/index.js';
 import logger from '../utils/logger.js';
 
@@ -45,7 +48,7 @@ export const getNotesEnabledValue = async (_req: Request, res: Response) => {
 };
 
 // Set a config value (manager only)
-export const setConfigValue = async (req: Request, res: Response) => {
+export const setConfigValue = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { key } = req.params;
     const { value } = req.body;
@@ -54,7 +57,23 @@ export const setConfigValue = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Value is required' });
     }
 
+    // Capture the previous value before overwriting so the settings change
+    // history can show old -> new
+    const oldValue = await getConfig(key);
+
     await setConfig(key, value);
+
+    const { ipAddress, userAgent } = getAuditContext(req);
+    await createAuditLog({
+      userId: req.user?.id,
+      action: 'update',
+      entityType: 'system_config',
+      // entity_id is INTEGER but config keys are varchar; the key lives in the values
+      oldValues: { key, value: oldValue },
+      newValues: { key, value },
+      ipAddress,
+      userAgent,
+    });
 
     if (key === 'alert_settings') {
       logger.info(`[Config] SET alert_settings: master_enabled=${value?.master_enabled}`);
@@ -77,10 +96,32 @@ export const setConfigValue = async (req: Request, res: Response) => {
       }
     }
 
+    // Keep other managers' settings pages fresh when auto-reassign changes
+    if (key === 'auto_reassign_enabled' || key === 'auto_reassign_timeout_minutes') {
+      const io = getIO();
+      if (io) {
+        io.emit('auto_reassign_settings_changed', { key, value });
+      }
+    }
+
     res.json({ key, value, message: 'Config updated' });
   } catch (error) {
     logger.error('Set config error:', error);
     res.status(500).json({ error: 'Failed to set config' });
+  }
+};
+
+// Settings change history (manager only) — audit rows for system_config
+export const getConfigAuditHistory = async (req: Request, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(String(req.query.limit ?? '20'), 10) || 20, 100);
+    const offset = parseInt(String(req.query.offset ?? '0'), 10) || 0;
+
+    const logs = await getAuditLogs({ entityType: 'system_config', limit, offset });
+    res.json({ logs });
+  } catch (error) {
+    logger.error('Get config audit history error:', error);
+    res.status(500).json({ error: 'Failed to get settings history' });
   }
 };
 
@@ -96,15 +137,26 @@ export const getAllConfigValues = async (_req: Request, res: Response) => {
 };
 
 // Delete a config value (manager only)
-export const deleteConfigValue = async (req: Request, res: Response) => {
+export const deleteConfigValue = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { key } = req.params;
 
+    const oldValue = await getConfig(key);
     const deleted = await deleteConfig(key);
 
     if (!deleted) {
       return res.status(404).json({ error: 'Config key not found' });
     }
+
+    const { ipAddress, userAgent } = getAuditContext(req);
+    await createAuditLog({
+      userId: req.user?.id,
+      action: 'delete',
+      entityType: 'system_config',
+      oldValues: { key, value: oldValue },
+      ipAddress,
+      userAgent,
+    });
 
     res.json({ message: 'Config deleted' });
   } catch (error) {

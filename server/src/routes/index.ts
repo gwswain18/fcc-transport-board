@@ -8,6 +8,7 @@ import shiftRoutes from './shifts.js';
 import dispatcherRoutes from './dispatchers.js';
 import configRoutes from './config.js';
 import offlineRoutes from './offline.js';
+import notificationRoutes from './notifications.js';
 import { query } from '../config/database.js';
 
 const router = Router();
@@ -21,6 +22,7 @@ router.use('/shifts', shiftRoutes);
 router.use('/dispatchers', dispatcherRoutes);
 router.use('/config', configRoutes);
 router.use('/offline', offlineRoutes);
+router.use('/notifications', notificationRoutes);
 
 // Health check with database connectivity
 router.get('/health', async (_req, res) => {

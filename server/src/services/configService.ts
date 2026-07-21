@@ -122,8 +122,24 @@ export const getHeartbeatTimeoutMs = async (): Promise<number> => {
 };
 
 export const getAutoAssignTimeoutMs = async (): Promise<number> => {
+  // Prefer the manager-editable minutes key (045); fall back to the legacy ms key
+  const minutes = await getConfig<string | number>('auto_reassign_timeout_minutes');
+  if (minutes !== null && minutes !== undefined) {
+    const parsed = typeof minutes === 'number' ? minutes : parseFloat(minutes);
+    if (!Number.isNaN(parsed) && parsed > 0) return Math.round(parsed * 60000);
+  }
   const value = await getConfig<string>('auto_assign_acceptance_timeout_ms');
   return value ? parseInt(value, 10) : 120000;
+};
+
+// Auto-reassign settings: when enabled, ANY assigned job (auto, manual, or
+// claim) not accepted within the timeout is reassigned to the next available
+// transporter. Disabled = no automatic reassignment at all.
+export const getAutoReassignSettings = async (): Promise<{ enabled: boolean; timeoutMinutes: number }> => {
+  const enabledValue = await getConfig<boolean>('auto_reassign_enabled');
+  const enabled = enabledValue === null || enabledValue === undefined ? true : enabledValue !== false;
+  const timeoutMinutes = (await getAutoAssignTimeoutMs()) / 60000;
+  return { enabled, timeoutMinutes };
 };
 
 export const getBreakAlertMinutes = async (): Promise<number> => {

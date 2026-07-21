@@ -232,6 +232,41 @@ export interface JobRemovedNotification {
   job_summary: string;
 }
 
+// Missed-job payload inside a persistent user notification
+export interface MissedJobPayload {
+  request_id: number;
+  job_summary: string;
+  assignment_method: string;
+  timed_out_after_minutes: number;
+  new_assignee_name: string | null;
+  occurred_at: string;
+}
+
+// Persistent server-to-user notification (delivered on socket connect)
+export interface UserNotification {
+  id: number;
+  user_id: number;
+  type: string;
+  payload: MissedJobPayload;
+  created_at: string;
+  delivered_at: string | null;
+  acknowledged_at: string | null;
+}
+
+// Audit row for the settings change history card
+export interface SettingsAuditLog {
+  id: number;
+  user_id: number | null;
+  action: string;
+  entity_type: string;
+  old_values: { key?: string; value?: unknown } | null;
+  new_values: { key?: string; value?: unknown } | null;
+  timestamp: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+}
+
 // Alert settings
 export interface AlertSettings {
   master_enabled: boolean;

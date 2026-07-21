@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../utils/api';
+import Toggle from '../common/Toggle';
 
 interface PhaseThreshold {
   minutes: number;
@@ -153,15 +154,19 @@ export default function CycleTimeThresholdSettings() {
 
   if (loading) {
     return (
-      <div className="p-6 bg-white rounded-lg shadow">
-        <p className="text-gray-500">Loading thresholds...</p>
+      <div className="card">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 bg-gray-200 rounded w-1/3"></div>
+          <div className="h-10 bg-gray-200 rounded"></div>
+          <div className="h-10 bg-gray-200 rounded"></div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">
+    <div className="card">
+      <h3 className="text-lg font-semibold text-gray-900 mb-6">
         Cycle Time Alert Thresholds
       </h3>
       <p className="text-sm text-gray-600 mb-6">
@@ -179,7 +184,7 @@ export default function CycleTimeThresholdSettings() {
               value="rolling_average"
               checked={alertMode === 'rolling_average'}
               onChange={() => { setAlertMode('rolling_average'); setSuccess(null); }}
-              className="text-primary focus:ring-primary"
+              className="accent-primary focus:ring-primary"
             />
             <div>
               <span className="text-sm font-medium text-gray-700">Rolling Average (auto)</span>
@@ -193,7 +198,7 @@ export default function CycleTimeThresholdSettings() {
               value="manual_threshold"
               checked={alertMode === 'manual_threshold'}
               onChange={() => { setAlertMode('manual_threshold'); setSuccess(null); }}
-              className="text-primary focus:ring-primary"
+              className="accent-primary focus:ring-primary"
             />
             <div>
               <span className="text-sm font-medium text-gray-700">Manual Thresholds</span>
@@ -224,7 +229,7 @@ export default function CycleTimeThresholdSettings() {
             rollingAverages.map((avg) => (
               <div
                 key={avg.phase}
-                className="p-4 bg-blue-50 rounded-lg border border-blue-100"
+                className="p-4 bg-primary-50 rounded-lg border border-primary-100"
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-700">
@@ -266,30 +271,27 @@ export default function CycleTimeThresholdSettings() {
               key={key}
               className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
             >
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={thresholds[key].enabled}
-                    onChange={(e) => handleThresholdChange(key, 'enabled', e.target.checked)}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <span className="text-sm font-medium text-gray-700">
-                    {PHASE_LABELS[key]}
-                  </span>
-                </label>
+              <div className="flex-1 pr-4">
+                <p className="text-sm font-medium text-gray-700">{PHASE_LABELS[key]}</p>
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={thresholds[key].minutes}
-                  onChange={(e) => handleThresholdChange(key, 'minutes', parseInt(e.target.value) || 0)}
-                  disabled={!thresholds[key].enabled}
-                  className="w-20 px-3 py-1 border border-gray-300 rounded-lg text-sm disabled:bg-gray-100 disabled:text-gray-400"
-                  min={1}
-                  max={60}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={thresholds[key].minutes}
+                    onChange={(e) => handleThresholdChange(key, 'minutes', parseInt(e.target.value) || 0)}
+                    disabled={!thresholds[key].enabled}
+                    className="w-16 text-center text-sm border border-gray-300 rounded px-1 py-1 disabled:bg-gray-100 disabled:text-gray-400"
+                    min={1}
+                    max={60}
+                  />
+                  <span className="text-xs text-gray-400">min</span>
+                </div>
+                <Toggle
+                  enabled={thresholds[key].enabled}
+                  onChange={(v) => handleThresholdChange(key, 'enabled', v)}
+                  ariaLabel={PHASE_LABELS[key]}
                 />
-                <span className="text-sm text-gray-500">minutes</span>
               </div>
             </div>
           ))}
