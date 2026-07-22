@@ -114,6 +114,15 @@ export const setConfigValue = async (req: AuthenticatedRequest, res: Response) =
       }
     }
 
+    // Sign-in provider toggles: broadcast so open settings pages stay fresh.
+    // The login page has no socket pre-auth; it reads GET /auth/providers on load
+    if (key === 'google_auth_enabled' || key === 'microsoft_auth_enabled') {
+      const io = getIO();
+      if (io) {
+        io.emit('auth_providers_changed', { key, value: value !== false });
+      }
+    }
+
     // Keep other managers' settings pages fresh when auto-reassign changes
     if (key === 'auto_reassign_enabled' || key === 'auto_reassign_timeout_minutes') {
       const io = getIO();

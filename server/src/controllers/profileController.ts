@@ -3,6 +3,7 @@ import { query } from '../config/database.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { isValidEmail, isValidPhoneNumber } from '../utils/validation.js';
 import { verifyOAuthToken } from '../utils/oauth.js';
+import { getAuthProviderFlags } from '../services/configService.js';
 import logger from '../utils/logger.js';
 
 export const getProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -110,6 +111,18 @@ export const linkOAuthAccount = async (req: AuthenticatedRequest, res: Response)
 
     if (!provider || !id_token) {
       res.status(400).json({ error: 'Provider and id_token are required' });
+      return;
+    }
+
+    if (provider !== 'google' && provider !== 'microsoft') {
+      res.status(400).json({ error: 'Invalid OAuth provider' });
+      return;
+    }
+
+    // Manager toggle — linking counts as using the provider
+    const providerFlags = await getAuthProviderFlags();
+    if (!providerFlags[provider as 'google' | 'microsoft']) {
+      res.status(403).json({ error: 'Linking this provider is currently disabled' });
       return;
     }
 

@@ -24,6 +24,9 @@ export default function Login() {
   const [hasPrimaryDispatcher, setHasPrimaryDispatcher] = useState(false);
   const [primaryDispatcherName, setPrimaryDispatcherName] = useState<string | undefined>();
   const [oauthLoading, setOauthLoading] = useState(false);
+  // null = flags not loaded yet; buttons stay hidden until the server confirms
+  // which providers a manager has enabled (fail closed)
+  const [authProviders, setAuthProviders] = useState<{ google: boolean; microsoft: boolean } | null>(null);
   const { login, oauthLogin, user, setActiveShift, needsSecretarySession, clearNeedsSecretarySession } = useAuth();
   const { instance: msalInstance } = useMsal();
   const navigate = useNavigate();
@@ -65,6 +68,19 @@ export default function Login() {
       navigate(roleRoutes[user.role] || '/');
     }
   }, [user, navigate, showShiftModal, showDispatcherModal, showSecretaryModal, loading, needsSecretarySession]);
+
+  useEffect(() => {
+    (async () => {
+      const response = await api.getAuthProviders();
+      if (response.data) {
+        setAuthProviders(response.data);
+      }
+    })();
+  }, []);
+
+  const googleAvailable = !!authProviders?.google;
+  const microsoftAvailable =
+    !!authProviders?.microsoft && !!import.meta.env.VITE_MICROSOFT_CLIENT_ID;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -299,55 +315,59 @@ export default function Login() {
           </Link>
         </div>
 
-        {/* OAuth Divider */}
-        <div className="mt-6 flex items-center">
-          <div className="flex-1 border-t border-gray-300"></div>
-          <span className="px-3 text-sm text-gray-500">Or continue with</span>
-          <div className="flex-1 border-t border-gray-300"></div>
-        </div>
-
-        {/* OAuth Buttons */}
-        <div className="mt-4 flex flex-col items-center gap-3">
-          {oauthLoading ? (
-            <div className="flex items-center justify-center py-4">
-              <svg
-                className="animate-spin h-6 w-6 text-primary"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
+        {/* Third-party sign-in — hidden entirely when managers disable all providers */}
+        {(googleAvailable || microsoftAvailable) && (
+          <>
+            <div className="mt-6 flex items-center">
+              <div className="flex-1 border-t border-gray-300"></div>
+              <span className="px-3 text-sm text-gray-500">Or continue with</span>
+              <div className="flex-1 border-t border-gray-300"></div>
             </div>
-          ) : (
-            <>
-              <GoogleLogin
-                onSuccess={handleGoogleLogin}
-                onError={() => setError('Google sign-in failed')}
-                text="signin_with"
-                shape="rectangular"
-                width="300"
-              />
-              {/* Microsoft sign-in — set VITE_ENABLE_MICROSOFT_LOGIN=true to re-enable */}
-              {import.meta.env.VITE_ENABLE_MICROSOFT_LOGIN === 'true' && (
-              <button
-                onClick={handleMicrosoftLogin}
-                disabled={loading}
-                className="w-[300px] inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 21 21">
-                  <rect x="1" y="1" width="9" height="9" fill="#f25022" />
-                  <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
-                  <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
-                  <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
-                </svg>
-                Sign in with Microsoft
-              </button>
+
+            <div className="mt-4 flex flex-col items-center gap-3">
+              {oauthLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <svg
+                    className="animate-spin h-6 w-6 text-primary"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                </div>
+              ) : (
+                <>
+                  {googleAvailable && (
+                    <GoogleLogin
+                      onSuccess={handleGoogleLogin}
+                      onError={() => setError('Google sign-in failed')}
+                      text="signin_with"
+                      shape="rectangular"
+                      width="300"
+                    />
+                  )}
+                  {microsoftAvailable && (
+                    <button
+                      onClick={handleMicrosoftLogin}
+                      disabled={loading}
+                      className="w-[300px] inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                    >
+                      <svg className="w-5 h-5" viewBox="0 0 21 21">
+                        <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+                        <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+                        <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+                        <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+                      </svg>
+                      Sign in with Microsoft
+                    </button>
+                  )}
+                </>
               )}
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
 
         <div className="mt-6 pt-6 border-t border-gray-200">
           <p className="text-sm text-gray-500 text-center">

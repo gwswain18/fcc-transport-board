@@ -172,6 +172,19 @@ export const getNotesEnabled = async (): Promise<boolean> => {
   return value === null || value === undefined ? true : value !== false;
 };
 
+// Third-party sign-in provider toggles. Managers can disable Google /
+// Microsoft sign-in from Settings (e.g. hidden during the pilot). Google
+// defaults on (pre-toggle behavior); Microsoft defaults off. Must be enforced
+// in oauthLogin/linkOAuthAccount — hiding the buttons alone is not a cutoff.
+export const getAuthProviderFlags = async (): Promise<{ google: boolean; microsoft: boolean }> => {
+  const google = await getConfig<boolean>('google_auth_enabled');
+  const microsoft = await getConfig<boolean>('microsoft_auth_enabled');
+  return {
+    google: google === null || google === undefined ? true : google !== false,
+    microsoft: microsoft === null || microsoft === undefined ? false : microsoft !== false,
+  };
+};
+
 // Clear cache (useful for testing or forced refresh)
 export const clearConfigCache = (): void => {
   configCache.clear();

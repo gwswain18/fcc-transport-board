@@ -111,6 +111,11 @@ export const api = {
 
   heartbeat: () => request<{ message: string; timestamp: string }>('/auth/heartbeat', { method: 'POST' }),
 
+  // Which third-party sign-in providers are enabled (public — the login page
+  // needs it before authentication to decide which buttons to show)
+  getAuthProviders: () =>
+    request<{ google: boolean; microsoft: boolean }>('/auth/providers'),
+
   oauthLogin: (provider: string, id_token: string) =>
     request<{ user: import('../types').User; activeShift?: import('../types').ShiftLog; csrfToken?: string; isPending?: boolean; isSecretary?: boolean; message: string }>('/auth/oauth', {
       method: 'POST',

@@ -13,7 +13,7 @@ import {
   endSecretarySession,
   getActiveSecretaries,
 } from '../controllers/authController.js';
-import { oauthLogin } from '../controllers/oauthController.js';
+import { oauthLogin, getAuthProviders } from '../controllers/oauthController.js';
 import { getProfile, updateProfile, linkOAuthAccount } from '../controllers/profileController.js';
 import { authenticate } from '../middleware/auth.js';
 import { canDispatch } from '../middleware/roleAuth.js';
@@ -32,6 +32,8 @@ const authLimiter = rateLimit({
 // Public routes
 router.post('/login', authLimiter, login);
 router.post('/oauth', authLimiter, oauthLogin);
+// Cheap cached read on every login-page load — must not share the 5/15min limiter
+router.get('/providers', getAuthProviders);
 router.post('/logout', logout);
 router.post('/forgot-password', authLimiter, forgotPassword);
 router.post('/reset-password/:token', authLimiter, resetPassword);

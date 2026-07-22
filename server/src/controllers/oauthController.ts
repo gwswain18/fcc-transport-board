@@ -2,11 +2,23 @@ import { Request, Response } from 'express';
 import { query } from '../config/database.js';
 import { generateToken, getTokenCsrf } from '../utils/jwt.js';
 import { verifyOAuthToken } from '../utils/oauth.js';
+import { getAuthProviderFlags } from '../services/configService.js';
 import { logLogin } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import { AuthenticatedRequest } from '../types/index.js';
 import { TOKEN_COOKIE_OPTIONS, TOKEN_COOKIE_MAX_AGE_MS } from '../utils/cookies.js';
 import logger from '../utils/logger.js';
+
+// Which third-party sign-in providers are currently enabled. Public — the
+// login page needs it before authentication to decide which buttons to show.
+export const getAuthProviders = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    res.json(await getAuthProviderFlags());
+  } catch (error) {
+    logger.error('Get auth providers error:', error);
+    res.status(500).json({ error: 'Failed to get auth providers' });
+  }
+};
 
 export const oauthLogin = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -19,6 +31,14 @@ export const oauthLogin = async (req: Request, res: Response): Promise<void> => 
 
     if (!['google', 'microsoft'].includes(provider)) {
       res.status(400).json({ error: 'Invalid OAuth provider' });
+      return;
+    }
+
+    // Manager toggle — the buttons are hidden client-side, but the endpoint
+    // must reject too or the cutoff is cosmetic
+    const providerFlags = await getAuthProviderFlags();
+    if (!providerFlags[provider as 'google' | 'microsoft']) {
+      res.status(403).json({ error: 'Sign-in with this provider is currently disabled' });
       return;
     }
 
