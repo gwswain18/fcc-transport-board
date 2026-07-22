@@ -85,6 +85,9 @@ export interface TransportRequest {
   assignment_method: AssignmentMethod;
   created_by: number;
   assigned_to?: number;
+  // The assignee's covered floor (shift floor, else profile floor) snapshotted
+  // at assignment time — compared against origin_floor in reports
+  assignee_floor?: Floor | null;
   created_at: string;
   assigned_at?: string;
   accepted_at?: string;

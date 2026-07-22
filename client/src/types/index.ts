@@ -92,6 +92,7 @@ export interface TransportRequest {
   assignment_method?: AssignmentMethod;
   created_by: number;
   assigned_to?: number;
+  assignee_floor?: Floor | null;
   created_at: string;
   assigned_at?: string;
   accepted_at?: string;
@@ -143,6 +144,10 @@ export interface TransporterStats {
   first_name: string;
   last_name: string;
   jobs_completed: number;
+  // Jobs with a recorded assignee floor (rows predating floor tracking are
+  // excluded from the denominator)
+  floor_tracked_jobs?: number;
+  on_floor_jobs?: number;
   avg_pickup_time_minutes: number;
   avg_transport_time_minutes: number;
   avg_job_time_minutes: number;

@@ -490,6 +490,9 @@ export default function ManagerDashboard() {
                       <th className="text-right py-3 px-4 font-medium text-gray-600">
                         Missed Jobs
                       </th>
+                      <th className="text-right py-3 px-4 font-medium text-gray-600" title="Completed jobs picked up on the floor the transporter was covering that day. Only counts jobs since floor tracking began.">
+                        On-Floor Pickups
+                      </th>
                       <th className="text-right py-3 px-4 font-medium text-gray-600">
                         Avg Pickup
                       </th>
@@ -529,6 +532,11 @@ export default function ManagerDashboard() {
                           </td>
                           <td className={`py-3 px-4 text-right ${(t.missed_jobs ?? 0) > 0 ? 'text-amber-600 font-medium' : 'text-gray-600'}`}>
                             {t.missed_jobs ?? 0}
+                          </td>
+                          <td className="py-3 px-4 text-right text-gray-600">
+                            {(t.floor_tracked_jobs ?? 0) > 0
+                              ? `${t.on_floor_jobs ?? 0}/${t.floor_tracked_jobs} (${Math.round(((t.on_floor_jobs ?? 0) / t.floor_tracked_jobs!) * 100)}%)`
+                              : '—'}
                           </td>
                           <td className="py-3 px-4 text-right text-gray-600">
                             {formatMinutes(t.avg_pickup_time_minutes)}

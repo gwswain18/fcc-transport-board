@@ -147,6 +147,10 @@ export const getByTransporter = async (
         u.first_name,
         u.last_name,
         COUNT(*) as jobs_completed,
+        -- Floor tracking: assignee_floor snapshots the transporter's covered
+        -- floor at assignment time (NULL on rows predating migration 047)
+        COUNT(*) FILTER (WHERE tr.assignee_floor IS NOT NULL) as floor_tracked_jobs,
+        COUNT(*) FILTER (WHERE tr.assignee_floor = tr.origin_floor) as on_floor_jobs,
         AVG(EXTRACT(EPOCH FROM (tr.with_patient_at - tr.created_at)) / 60) as avg_pickup_time,
         AVG(EXTRACT(EPOCH FROM (tr.completed_at - tr.with_patient_at)) / 60) as avg_transport_time,
         AVG(EXTRACT(EPOCH FROM (tr.completed_at - tr.created_at)) / 60) as avg_job_time
@@ -242,6 +246,8 @@ export const getByTransporter = async (
         first_name: row.first_name,
         last_name: row.last_name,
         jobs_completed: parseInt(row.jobs_completed),
+        floor_tracked_jobs: parseInt(row.floor_tracked_jobs) || 0,
+        on_floor_jobs: parseInt(row.on_floor_jobs) || 0,
         avg_pickup_time_minutes: parseFloat(row.avg_pickup_time) || 0,
         avg_transport_time_minutes: parseFloat(row.avg_transport_time) || 0,
         avg_job_time_minutes: parseFloat(row.avg_job_time) || 0,
@@ -262,6 +268,8 @@ export const getByTransporter = async (
         first_name: missed.first_name,
         last_name: missed.last_name,
         jobs_completed: 0,
+        floor_tracked_jobs: 0,
+        on_floor_jobs: 0,
         avg_pickup_time_minutes: 0,
         avg_transport_time_minutes: 0,
         avg_job_time_minutes: 0,

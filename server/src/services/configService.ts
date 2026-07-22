@@ -142,6 +142,14 @@ export const getAutoReassignSettings = async (): Promise<{ enabled: boolean; tim
   return { enabled, timeoutMinutes };
 };
 
+// Auto-assign algorithm. True (default) = prefer the transporter covering the
+// request's floor that day (shift floor_assignment, falling back to
+// users.primary_floor); false = pure workload balancing regardless of floor.
+export const getAutoAssignFloorFirst = async (): Promise<boolean> => {
+  const value = await getConfig<boolean>('auto_assign_floor_first');
+  return value === null || value === undefined ? true : value !== false;
+};
+
 export const getBreakAlertMinutes = async (): Promise<number> => {
   const value = await getConfig<string>('break_alert_minutes');
   return value ? parseInt(value, 10) : 30;

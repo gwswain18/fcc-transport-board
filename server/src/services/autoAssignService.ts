@@ -1,7 +1,7 @@
 import { PoolClient } from 'pg';
 import { query, withTransaction } from '../config/database.js';
 import { getIO, emitToUser } from '../socket/index.js';
-import { getAutoReassignSettings } from './configService.js';
+import { getAutoReassignSettings, getAutoAssignFloorFirst } from './configService.js';
 import { logStatusChange, createAuditLog } from './auditService.js';
 import {
   createNotification,
@@ -92,9 +92,9 @@ export const autoAssignRequest = async (
       await client.query(
         `UPDATE transport_requests
          SET assigned_to = $1, status = 'assigned', assigned_at = CURRENT_TIMESTAMP,
-             assignment_method = 'auto', assigned_by = $3
+             assignment_method = 'auto', assigned_by = $3, assignee_floor = $4
          WHERE id = $2 AND status = 'pending'`,
-        [transporter.user_id, requestId, assignedBy || null]
+        [transporter.user_id, requestId, assignedBy || null, transporter.active_floor]
       );
 
       return { success: true, assignedTo: transporter.user_id, reason: transporter.reason };
@@ -130,67 +130,37 @@ export const autoAssignRequest = async (
   return outcome;
 };
 
-// Find best transporter using tie-breaker rules
+// The floor a transporter is covering right now: their open shift's
+// floor_assignment (chosen at shift start), falling back to the static
+// profile primary_floor. Used to stamp transport_requests.assignee_floor at
+// every assignment point so reports can compare pickup floor vs covered floor.
+export const getActiveFloorForUser = async (
+  userId: number,
+  client?: PoolClient
+): Promise<Floor | null> => {
+  const result = await runQuery(client)(
+    `SELECT COALESCE(sl.floor_assignment, u.primary_floor) AS active_floor
+     FROM users u
+     LEFT JOIN LATERAL (
+       SELECT floor_assignment FROM shift_logs
+       WHERE user_id = u.id AND shift_end IS NULL
+       ORDER BY shift_start DESC LIMIT 1
+     ) sl ON true
+     WHERE u.id = $1`,
+    [userId]
+  );
+  return result.rows[0]?.active_floor ?? null;
+};
+
+// Find best transporter using tie-breaker rules. Floor preference is the
+// manager-controlled auto_assign_floor_first toggle: when on, the transporter
+// covering the request's floor today wins; when off, workload balance alone
+// decides. active_floor comes back so callers can stamp assignee_floor.
 export const findBestTransporter = async (
   originFloor: Floor,
   client?: PoolClient
-): Promise<{ user_id: number; reason: string } | null> => {
-  // Get all available transporters with their stats
-  const result = await runQuery(client)(
-    `WITH transporter_jobs AS (
-       SELECT
-         ts.user_id,
-         u.first_name,
-         u.last_name,
-         u.primary_floor,
-         COUNT(tr.id) as total_jobs,
-         MAX(tr.completed_at) as last_completed_at
-       FROM transporter_status ts
-       JOIN users u ON ts.user_id = u.id
-       LEFT JOIN transport_requests tr ON ts.user_id = tr.assigned_to
-         AND tr.status = 'complete'
-         AND tr.completed_at >= CURRENT_DATE
-       WHERE ts.status = 'available'
-       AND u.is_active = true
-       AND u.role = 'transporter'
-       GROUP BY ts.user_id, u.first_name, u.last_name, u.primary_floor
-     )
-     SELECT
-       user_id,
-       first_name,
-       last_name,
-       primary_floor,
-       COALESCE(total_jobs, 0) as jobs_today,
-       last_completed_at
-     FROM transporter_jobs
-     ORDER BY
-       -- Tie-breaker 1: Prefer transporter assigned to the floor
-       CASE WHEN primary_floor = $1 THEN 0 ELSE 1 END,
-       -- Tie-breaker 2: Fewer jobs completed today
-       COALESCE(total_jobs, 0) ASC,
-       -- Tie-breaker 3: Longest time since last job (NULL = never, highest priority)
-       COALESCE(last_completed_at, '1970-01-01'::timestamp) ASC
-     LIMIT 1`,
-    [originFloor]
-  );
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  const selected = result.rows[0];
-  let reason = 'Selected based on availability';
-
-  if (selected.primary_floor === originFloor) {
-    reason = `Assigned to ${originFloor} floor`;
-  } else if (selected.jobs_today === 0) {
-    reason = 'No jobs completed today';
-  } else {
-    reason = `Fewest jobs today (${selected.jobs_today})`;
-  }
-
-  return { user_id: selected.user_id, reason };
-};
+): Promise<{ user_id: number; active_floor: Floor | null; reason: string } | null> =>
+  findBestTransporterExcluding(originFloor, [], client);
 
 // Check for assigned requests that have timed out without acceptance.
 // Covers all assignment methods (auto, manual, claim); gated by the
@@ -241,7 +211,8 @@ const checkAutoAssignTimeouts = async () => {
       // Reset request to pending temporarily
       await client.query(
         `UPDATE transport_requests
-         SET status = 'pending', assigned_to = NULL, assigned_at = NULL
+         SET status = 'pending', assigned_to = NULL, assigned_at = NULL,
+             assignee_floor = NULL
          WHERE id = $1`,
         [request.id]
       );
@@ -270,9 +241,9 @@ const checkAutoAssignTimeouts = async () => {
         await client.query(
           `UPDATE transport_requests
            SET assigned_to = $1, status = 'assigned', assigned_at = CURRENT_TIMESTAMP,
-               assignment_method = 'auto'
+               assignment_method = 'auto', assignee_floor = $3
            WHERE id = $2`,
-          [newTransporter.user_id, request.id]
+          [newTransporter.user_id, request.id, newTransporter.active_floor]
         );
         return { newAssignee: newTransporter.user_id };
       }
@@ -388,20 +359,23 @@ const findBestTransporterExcluding = async (
   originFloor: Floor,
   excludeUserIds: number[],
   client?: PoolClient
-): Promise<{ user_id: number; reason: string } | null> => {
-  if (excludeUserIds.length === 0) {
-    return findBestTransporter(originFloor, client);
-  }
+): Promise<{ user_id: number; active_floor: Floor | null; reason: string } | null> => {
+  const floorFirst = await getAutoAssignFloorFirst();
 
   const result = await runQuery(client)(
     `WITH transporter_jobs AS (
        SELECT
          ts.user_id,
-         u.primary_floor,
+         COALESCE(sl.floor_assignment, u.primary_floor) AS active_floor,
          COUNT(tr.id) as total_jobs,
          MAX(tr.completed_at) as last_completed_at
        FROM transporter_status ts
        JOIN users u ON ts.user_id = u.id
+       LEFT JOIN LATERAL (
+         SELECT floor_assignment FROM shift_logs
+         WHERE user_id = ts.user_id AND shift_end IS NULL
+         ORDER BY shift_start DESC LIMIT 1
+       ) sl ON true
        LEFT JOIN transport_requests tr ON ts.user_id = tr.assigned_to
          AND tr.status = 'complete'
          AND tr.completed_at >= CURRENT_DATE
@@ -409,16 +383,20 @@ const findBestTransporterExcluding = async (
        AND u.is_active = true
        AND u.role = 'transporter'
        AND ts.user_id != ALL($2)
-       GROUP BY ts.user_id, u.primary_floor
+       GROUP BY ts.user_id, sl.floor_assignment, u.primary_floor
      )
-     SELECT user_id, primary_floor, COALESCE(total_jobs, 0) as jobs_today
+     SELECT user_id, active_floor, COALESCE(total_jobs, 0) as jobs_today, last_completed_at
      FROM transporter_jobs
      ORDER BY
-       CASE WHEN primary_floor = $1 THEN 0 ELSE 1 END,
+       -- Tie-breaker 1 (only in floor-first mode): prefer the transporter
+       -- covering this floor today
+       CASE WHEN $3::boolean AND active_floor = $1 THEN 0 ELSE 1 END,
+       -- Tie-breaker 2: Fewer jobs completed today
        COALESCE(total_jobs, 0) ASC,
+       -- Tie-breaker 3: Longest time since last job (NULL = never, highest priority)
        COALESCE(last_completed_at, '1970-01-01'::timestamp) ASC
      LIMIT 1`,
-    [originFloor, excludeUserIds]
+    [originFloor, excludeUserIds, floorFirst]
   );
 
   if (result.rows.length === 0) {
@@ -426,12 +404,17 @@ const findBestTransporterExcluding = async (
   }
 
   const selected = result.rows[0];
-  const reason =
-    selected.primary_floor === originFloor
-      ? `Reassigned to ${originFloor} floor transporter`
-      : 'Reassigned to next available';
+  let reason = 'Selected based on availability';
 
-  return { user_id: selected.user_id, reason };
+  if (floorFirst && selected.active_floor === originFloor) {
+    reason = `Covering ${originFloor} today`;
+  } else if (selected.jobs_today === 0) {
+    reason = 'No jobs completed today';
+  } else {
+    reason = `Fewest jobs today (${selected.jobs_today})`;
+  }
+
+  return { user_id: selected.user_id, active_floor: selected.active_floor, reason };
 };
 
 // Helper to get request with relations
@@ -464,6 +447,7 @@ const getRequestWithRelations = async (requestId: number) => {
     assignment_method: row.assignment_method,
     created_by: row.created_by,
     assigned_to: row.assigned_to,
+    assignee_floor: row.assignee_floor,
     created_at: row.created_at,
     assigned_at: row.assigned_at,
     accepted_at: row.accepted_at,

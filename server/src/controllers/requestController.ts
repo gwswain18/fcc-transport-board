@@ -11,7 +11,7 @@ import { getIO, emitToUser } from '../socket/index.js';
 import { validateFloorRoom } from '../utils/validation.js';
 import { detectPhi } from '../utils/phiDetection.js';
 import { getNotesEnabled } from '../services/configService.js';
-import { autoAssignRequest } from '../services/autoAssignService.js';
+import { autoAssignRequest, getActiveFloorForUser } from '../services/autoAssignService.js';
 import { sendJobAssignmentSMS } from '../services/twilioService.js';
 import { logCreate, logStatusChange, logReassignment } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
@@ -234,11 +234,16 @@ export const createRequest = async (
     const userId = req.user.id;
 
     const requestId = await withTransaction(async (client) => {
+      const assigneeFloor = finalAssignedTo
+        ? await getActiveFloorForUser(finalAssignedTo, client)
+        : null;
+
       const result = await client.query(
         `INSERT INTO transport_requests
          (origin_floor, room_number, destination, priority, notes, status,
-          created_by, assigned_to, assigned_at, assignment_method, assigned_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          created_by, assigned_to, assigned_at, assignment_method, assigned_by,
+          assignee_floor)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          RETURNING *`,
         [
           origin_floor,
@@ -252,6 +257,7 @@ export const createRequest = async (
           finalAssignedTo ? new Date().toISOString() : null,
           assignmentMethod,
           finalAssignedTo ? userId : null,
+          assigneeFloor,
         ]
       );
 
@@ -490,6 +496,10 @@ export const updateRequest = async (
         columnUpdates.set('assigned_to', assigned_to || null);
         columnUpdates.set('assignment_method', 'manual');
         columnUpdates.set('assigned_by', user.id);
+        columnUpdates.set(
+          'assignee_floor',
+          assigned_to ? await getActiveFloorForUser(assigned_to, client) : null
+        );
 
         if (assigned_to && !currentRequest.assigned_to) {
           columnUpdates.set('status', 'assigned');
@@ -765,12 +775,14 @@ export const claimRequest = async (
         return { code: 400, error: 'You already have an active job' };
       }
 
+      const claimerFloor = await getActiveFloorForUser(userId, client);
+
       const updated = await client.query(
         `UPDATE transport_requests
          SET status = 'assigned', assigned_to = $1, assigned_at = CURRENT_TIMESTAMP,
-             assignment_method = 'claim'
+             assignment_method = 'claim', assignee_floor = $3
          WHERE id = $2 AND status = 'pending'`,
-        [userId, id]
+        [userId, id, claimerFloor]
       );
 
       if (updated.rowCount === 0) {
@@ -906,7 +918,8 @@ export const assignToPCT = async (
          SET status = 'transferred_to_pct',
              pct_assigned_at = CURRENT_TIMESTAMP,
              pct_auto_close_at = $1,
-             assigned_to = NULL
+             assigned_to = NULL,
+             assignee_floor = NULL
          WHERE id = $2`,
         [autoCloseAt.toISOString(), id]
       );
