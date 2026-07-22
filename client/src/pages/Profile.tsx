@@ -208,8 +208,11 @@ export default function Profile() {
                     value={formData.phone_number}
                     onChange={(e) => setFormData((prev) => ({ ...prev, phone_number: e.target.value }))}
                     className="input"
-                    placeholder="e.g., +1234567890"
+                    placeholder="e.g., +1234567890 or ext. 1234"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Full number for SMS notifications, or a 4-digit internal extension
+                  </p>
                 </div>
 
                 <button type="submit" disabled={saving} className="btn-primary">

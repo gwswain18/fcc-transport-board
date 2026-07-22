@@ -9,6 +9,9 @@ interface ActiveUser {
   role: string;
   is_temp_account: boolean;
   login_time: string;
+  // False for transporters on an open shift whose connection dropped
+  // (phone screen off) — still logged in, so still listed here
+  is_online?: boolean;
   phone_extension?: string;
 }
 
@@ -80,7 +83,7 @@ export default function ActiveUsersTab() {
         <h2 className="text-lg font-semibold text-gray-900">
           Active Users
           <span className="ml-2 text-sm font-normal text-gray-500">
-            ({users.length} online)
+            ({users.length} active)
           </span>
         </h2>
         <button
@@ -100,6 +103,7 @@ export default function ActiveUsersTab() {
               <tr className="border-b border-gray-200 text-left text-gray-500">
                 <th className="pb-2 font-medium">Name</th>
                 <th className="pb-2 font-medium">Role</th>
+                <th className="pb-2 font-medium">Status</th>
                 <th className="pb-2 font-medium">Login Time</th>
                 <th className="pb-2 font-medium">Duration</th>
                 <th className="pb-2 font-medium text-right">Action</th>
@@ -120,6 +124,20 @@ export default function ActiveUsersTab() {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}>
                         {badge.label}
                       </span>
+                    </td>
+                    <td className="py-3">
+                      {user.is_online !== false ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                          Online
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"
+                          title="On shift but not connected (e.g. phone screen off)"
+                        >
+                          Offline
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 text-gray-600">{formatTime(user.login_time)}</td>
                     <td className="py-3 text-gray-600">{formatDuration(user.login_time)}</td>

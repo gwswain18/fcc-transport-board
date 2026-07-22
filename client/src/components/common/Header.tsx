@@ -173,8 +173,8 @@ export default function Header() {
                 className="flex items-center space-x-3 focus:outline-none"
                 aria-label="User menu"
               >
-                <div className="text-right">
-                  <p className="text-sm font-medium text-white">
+                <div className="text-right min-w-0">
+                  <p className="text-sm font-medium text-white truncate max-w-[40vw]">
                     {user.first_name} {user.last_name}
                   </p>
                   <p className="text-xs text-secondary-200 capitalize">{user.role}</p>

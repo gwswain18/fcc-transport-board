@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../utils/api';
+import PasswordInput from '../components/common/PasswordInput';
 
 export default function ResetPassword() {
   const { token } = useParams<{ token: string }>();
@@ -81,13 +82,13 @@ export default function ResetPassword() {
               >
                 New Password
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 id="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={setPassword}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
                 placeholder="Enter new password"
+                autoComplete="new-password"
                 required
                 minLength={8}
               />
@@ -100,13 +101,13 @@ export default function ResetPassword() {
               >
                 Confirm Password
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 id="confirmPassword"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={setConfirmPassword}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
                 placeholder="Confirm new password"
+                autoComplete="new-password"
                 required
               />
             </div>

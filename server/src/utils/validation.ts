@@ -110,8 +110,9 @@ export const isValidEmail = (email: string): boolean => {
 export const isValidPhoneNumber = (phone: string): boolean => {
   // Remove common formatting characters
   const cleaned = phone.replace(/[\s\-\(\)\+\.]/g, '');
-  // Check if it's all digits and reasonable length
-  return /^\d{10,15}$/.test(cleaned);
+  // Full number (10-15 digits, SMS-capable) or an internal hospital
+  // extension (3-6 digits, display-only — SMS sends are skipped for these)
+  return /^(\d{3,6}|\d{10,15})$/.test(cleaned);
 };
 
 // Validate password strength

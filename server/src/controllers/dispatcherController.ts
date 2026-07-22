@@ -146,6 +146,18 @@ export const takeBreak = async (req: AuthenticatedRequest, res: Response) => {
 
     const wasPrimary = currentResult.rows[0].is_primary;
 
+    // Validate the replacement before mutating anything
+    if (wasPrimary && replacement_user_id) {
+      const validUser = await query(
+        `SELECT id FROM users
+         WHERE id = $1 AND is_active = true AND role IN ('dispatcher', 'supervisor', 'manager')`,
+        [replacement_user_id]
+      );
+      if (validUser.rows.length === 0) {
+        return res.status(400).json({ error: 'Invalid replacement user' });
+      }
+    }
+
     // Mark as on break (don't end the session)
     await query(
       `UPDATE active_dispatchers
@@ -154,19 +166,15 @@ export const takeBreak = async (req: AuthenticatedRequest, res: Response) => {
       [currentResult.rows[0].id, replacement_user_id || null, relief_info || null]
     );
 
-    // If was primary, ensure someone takes over the primary role
+    // If was primary, hand the primary role to someone else. The break-taker
+    // is demoted ONLY when a new primary is actually installed — exactly one
+    // is_primary row must exist at any time, or the Active Dispatchers card
+    // shows the on-break original as primary and the designee vanishes
+    // (it filters assistants to !is_primary).
     if (wasPrimary) {
-      if (replacement_user_id) {
-        // Validate replacement is an active user with dispatcher/supervisor/manager role
-        const validUser = await query(
-          `SELECT id FROM users
-           WHERE id = $1 AND is_active = true AND role IN ('dispatcher', 'supervisor', 'manager')`,
-          [replacement_user_id]
-        );
-        if (validUser.rows.length === 0) {
-          return res.status(400).json({ error: 'Invalid replacement user' });
-        }
+      let newPrimaryInstalled = false;
 
+      if (replacement_user_id) {
         // Check if replacement is already a dispatcher
         const replacementResult = await query(
           `SELECT id FROM active_dispatchers
@@ -186,9 +194,10 @@ export const takeBreak = async (req: AuthenticatedRequest, res: Response) => {
             [replacement_user_id]
           );
         }
+        newPrimaryInstalled = true;
       } else {
         // No replacement specified — auto-promote the oldest active non-break assistant
-        await query(
+        const promoted = await query(
           `UPDATE active_dispatchers SET is_primary = true
            WHERE id = (
              SELECT id FROM active_dispatchers
@@ -197,7 +206,17 @@ export const takeBreak = async (req: AuthenticatedRequest, res: Response) => {
              LIMIT 1
            )`
         );
+        newPrimaryInstalled = (promoted.rowCount ?? 0) > 0;
       }
+
+      if (newPrimaryInstalled) {
+        await query(
+          `UPDATE active_dispatchers SET is_primary = false WHERE id = $1`,
+          [currentResult.rows[0].id]
+        );
+      }
+      // No one available to take over: the original stays primary and the
+      // card correctly shows them as "(Unavailable)"
     }
 
     await emitDispatcherChange();

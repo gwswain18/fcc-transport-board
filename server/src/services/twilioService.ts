@@ -63,6 +63,13 @@ export const sendSMS = async (
   try {
     // Format phone number (add +1 if not present for US numbers)
     let formattedTo = to.replace(/[\s\-\(\)\.]/g, '');
+
+    // Internal hospital extensions (<10 digits) are display-only — skip
+    // rather than sending Twilio a number it will reject
+    if (formattedTo.replace(/^\+/, '').length < 10) {
+      return { success: false, error: 'Internal extension — SMS skipped' };
+    }
+
     if (!formattedTo.startsWith('+')) {
       formattedTo = '+1' + formattedTo;
     }

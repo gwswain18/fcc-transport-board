@@ -23,7 +23,9 @@ router.post('/', canCreateRequest, createRequest);
 router.put('/:id', updateRequest);
 router.put('/:id/cancel', canDispatch, cancelRequest);
 router.put('/:id/claim', claimRequest);
-router.post('/:id/auto-assign', canDispatch, autoAssign);
+// canCreateRequest (secretary+): secretaries may auto-assign, matching the
+// auto_assign flag already available to them at creation; transporters may not
+router.post('/:id/auto-assign', canCreateRequest, autoAssign);
 router.put('/:id/assign-pct', canDispatch, assignToPCT);
 router.get('/:id/history', getRequestHistory);
 router.post('/:id/delays', addDelays);

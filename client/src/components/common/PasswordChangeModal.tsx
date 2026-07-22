@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, setCsrfToken } from '../../utils/api';
+import PasswordInput from './PasswordInput';
 
 interface PasswordChangeModalProps {
   isOpen: boolean;
@@ -88,11 +89,10 @@ export default function PasswordChangeModal({
                   >
                     Current Password
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     id="current-password"
                     value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    onChange={setCurrentPassword}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
                     required
                   />
@@ -104,12 +104,12 @@ export default function PasswordChangeModal({
                   >
                     New Password
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     id="new-password"
                     value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
+                    onChange={setNewPassword}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                    autoComplete="new-password"
                     required
                     minLength={8}
                   />
@@ -121,12 +121,12 @@ export default function PasswordChangeModal({
                   >
                     Confirm New Password
                   </label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     id="confirm-password"
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={setConfirmPassword}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+                    autoComplete="new-password"
                     required
                   />
                 </div>

@@ -584,7 +584,10 @@ export const rejectUser = async (
   }
 };
 
-// Get all currently online users
+// Get all currently active users: anyone with a fresh heartbeat (online) PLUS
+// transporters with an open shift whose heartbeat lapsed or whose socket
+// dropped (phone screen off) — they are still logged in and on shift, so they
+// must not vanish from the list. is_online distinguishes the two.
 export const getActiveUsers = async (
   _req: AuthenticatedRequest,
   res: Response
@@ -592,19 +595,21 @@ export const getActiveUsers = async (
   try {
     const onlineUserIds = await getOnlineUsers();
 
-    if (onlineUserIds.length === 0) {
-      res.json({ users: [] });
-      return;
-    }
-
     const result = await query(
       `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.is_temp_account,
-              uh.created_at as login_time,
+              COALESCE(uh.created_at, sl.shift_start) as login_time,
+              (u.id = ANY($1)) as is_online,
               a_s.session_first_name, a_s.session_last_name, a_s.phone_extension
        FROM users u
-       JOIN user_heartbeats uh ON u.id = uh.user_id
+       LEFT JOIN user_heartbeats uh ON u.id = uh.user_id
+       LEFT JOIN LATERAL (
+         SELECT shift_start FROM shift_logs
+         WHERE user_id = u.id AND shift_end IS NULL
+         ORDER BY shift_start DESC LIMIT 1
+       ) sl ON true
        LEFT JOIN active_secretaries a_s ON u.id = a_s.user_id AND a_s.ended_at IS NULL
-       WHERE u.id = ANY($1)
+       WHERE u.is_active = true
+         AND (u.id = ANY($1) OR (u.role = 'transporter' AND sl.shift_start IS NOT NULL))
        ORDER BY u.role, u.last_name, u.first_name`,
       [onlineUserIds]
     );
@@ -617,6 +622,7 @@ export const getActiveUsers = async (
       role: row.role,
       is_temp_account: row.is_temp_account,
       login_time: row.login_time,
+      is_online: row.is_online,
       phone_extension: row.phone_extension,
     }));
 

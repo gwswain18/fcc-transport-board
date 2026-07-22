@@ -76,11 +76,14 @@ export default function DispatcherView() {
   const isPrimaryDispatcher = myDispatcherStatus?.is_primary || false;
   const canEndShift = isPrimaryDispatcher || user?.role === 'supervisor' || user?.role === 'manager';
 
-  // Show dispatcher login modal if user is dispatcher/supervisor but not registered
+  // Show dispatcher login modal if user is a dispatcher but not registered.
+  // Supervisors are observers by default — they opt in from the Active
+  // Dispatchers card ("Join as Assistant" / "Become Primary") when they want
+  // a dispatcher role, so they are never auto-prompted here.
   useEffect(() => {
     if (
       user &&
-      (user.role === 'dispatcher' || user.role === 'supervisor') &&
+      user.role === 'dispatcher' &&
       !myDispatcherStatus &&
       !hasDismissedModal
     ) {
@@ -404,6 +407,7 @@ export default function DispatcherView() {
               onTakeBreak={() => setShowBreakModal(true)}
               onReturnFromBreak={handleReturnFromBreak}
               onSetPrimary={handleSetPrimary}
+              onJoinAsAssistant={!isSecretary ? () => handleDispatcherJoinAsSecondary() : undefined}
             />
 
             <div className="card">
@@ -443,7 +447,7 @@ export default function DispatcherView() {
                         request={request}
                         onAssign={!isSecretary ? openAssignModal : undefined}
                         onCancel={!isSecretary ? handleCancelRequest : undefined}
-                        showAutoAssign={!isSecretary}
+                        showAutoAssign
                         cycleTimeAlert={cycleTimeAlerts.find(a => a.request_id === request.id)}
                         onDismissAlert={dismissCycleAlert}
                         onClickCard={openHistoryModal}
@@ -643,15 +647,13 @@ export default function DispatcherView() {
                   >
                     Post to Queue
                   </button>
-                  {!isSecretary && (
-                    <button
-                      onClick={() => handleCreateRequest(undefined, true)}
-                      disabled={!formData.room_number || loading || availableTransporters.length === 0}
-                      className="flex-1 bg-accent text-white rounded-lg hover:bg-accent-600 disabled:opacity-50 py-2 px-4"
-                    >
-                      Auto-Assign
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleCreateRequest(undefined, true)}
+                    disabled={!formData.room_number || loading || availableTransporters.length === 0}
+                    className="flex-1 bg-accent text-white rounded-lg hover:bg-accent-600 disabled:opacity-50 py-2 px-4"
+                  >
+                    Auto-Assign
+                  </button>
                 </div>
                 {!isSecretary && availableTransporters.length > 0 && (
                   <select
@@ -733,10 +735,10 @@ export default function DispatcherView() {
                       disabled={loading}
                       className="w-full text-left p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
                     >
-                      <div className="flex items-center justify-between">
-                        <span>{t.user?.first_name} {t.user?.last_name}</span>
+                      <div className="flex items-center justify-between gap-2 min-w-0">
+                        <span className="truncate min-w-0">{t.user?.first_name} {t.user?.last_name}</span>
                         {t.shift?.extension && (
-                          <span className="text-xs text-gray-500">Ext: {t.shift.extension}</span>
+                          <span className="text-xs text-gray-500 flex-shrink-0">Ext: {t.shift.extension}</span>
                         )}
                       </div>
                       {t.user?.primary_floor && (
@@ -859,11 +861,13 @@ const TransporterCard = memo(function TransporterCard({
           : 'border-gray-200 bg-gray-50'
       }`}
     >
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-gray-900">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <span className="font-medium text-gray-900 truncate min-w-0">
           {transporter.user?.first_name} {transporter.user?.last_name}
         </span>
-        <TransporterStatusBadge status={transporter.status} size="sm" />
+        <span className="flex-shrink-0">
+          <TransporterStatusBadge status={transporter.status} size="sm" />
+        </span>
       </div>
       {transporter.shift?.extension && (
         <p className="text-xs text-gray-500 mt-1">Ext: {transporter.shift.extension}</p>

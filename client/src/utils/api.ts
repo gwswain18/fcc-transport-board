@@ -150,7 +150,7 @@ export const api = {
     request<{ message: string }>(`/auth/secretary-session/${userId}/end`, { method: 'PUT' }),
 
   getActiveUsers: () =>
-    request<{ users: Array<{ id: number; email: string; first_name: string; last_name: string; role: string; is_temp_account: boolean; login_time: string; phone_extension?: string }> }>('/users/active'),
+    request<{ users: Array<{ id: number; email: string; first_name: string; last_name: string; role: string; is_temp_account: boolean; login_time: string; is_online?: boolean; phone_extension?: string }> }>('/users/active'),
 
   endUserSession: (userId: number) =>
     request<{ message: string }>(`/users/${userId}/end-session`, { method: 'POST' }),

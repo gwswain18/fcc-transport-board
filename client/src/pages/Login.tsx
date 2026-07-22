@@ -5,6 +5,7 @@ import { api } from '../utils/api';
 import ShiftStartModal from '../components/transporter/ShiftStartModal';
 import DispatcherLoginModal from '../components/dispatcher/DispatcherLoginModal';
 import SecretarySessionModal from '../components/common/SecretarySessionModal';
+import PasswordInput from '../components/common/PasswordInput';
 import { GoogleLogin } from '@react-oauth/google';
 import { useMsal } from '@azure/msal-react';
 import { loginRequest } from '../config/msalConfig';
@@ -53,8 +54,10 @@ export default function Login() {
         setShowSecretaryModal(true);
         return;
       }
-      // Check if dispatcher/supervisor needs to set up (NOT manager)
-      if ((user.role === 'dispatcher' || user.role === 'supervisor') && !loading) {
+      // Check if dispatcher needs to set up (NOT supervisor/manager —
+      // supervisors are observers by default and opt in later from the
+      // Active Dispatchers card)
+      if (user.role === 'dispatcher' && !loading) {
         handleDispatcherLogin();
         return;
       }
@@ -259,12 +262,10 @@ export default function Login() {
             <label htmlFor="password" className="label">
               Password
             </label>
-            <input
-              type="password"
+            <PasswordInput
               id="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="input"
+              onChange={setPassword}
               placeholder="Enter your password"
               required
               autoComplete="current-password"

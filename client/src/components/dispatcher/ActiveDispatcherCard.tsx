@@ -7,6 +7,9 @@ interface ActiveDispatcherCardProps {
   onTakeBreak?: () => void;
   onReturnFromBreak?: (asPrimary?: boolean) => void;
   onSetPrimary?: () => void;
+  // Opt-in for users not in the dispatcher list (e.g. observer supervisors,
+  // who are never auto-prompted with the dispatcher setup modal)
+  onJoinAsAssistant?: () => void;
 }
 
 export default function ActiveDispatcherCard({
@@ -15,6 +18,7 @@ export default function ActiveDispatcherCard({
   onTakeBreak,
   onReturnFromBreak,
   onSetPrimary,
+  onJoinAsAssistant,
 }: ActiveDispatcherCardProps) {
   const [showReturnPrompt, setShowReturnPrompt] = useState(false);
 
@@ -42,6 +46,14 @@ export default function ActiveDispatcherCard({
         {currentUserId && onSetPrimary && (
           <button onClick={onSetPrimary} className="w-full btn-primary text-sm py-2">
             Set Myself as Primary
+          </button>
+        )}
+        {currentUserId && onJoinAsAssistant && (
+          <button
+            onClick={onJoinAsAssistant}
+            className="w-full mt-2 bg-primary-50 text-primary hover:bg-primary-100 py-2 px-3 rounded-lg text-sm font-medium transition-colors"
+          >
+            Join as Assistant
           </button>
         )}
       </div>
@@ -106,6 +118,28 @@ export default function ActiveDispatcherCard({
           <p className="text-sm text-gray-400">None</p>
         )}
       </div>
+
+      {/* Opt-in for observers (not currently in the dispatcher list) */}
+      {currentUserId && !isCurrentUserActive && (onJoinAsAssistant || onSetPrimary) && (
+        <div className="border-t border-gray-100 pt-3 mt-3 space-y-2">
+          {onJoinAsAssistant && (
+            <button
+              onClick={onJoinAsAssistant}
+              className="w-full bg-primary-50 text-primary hover:bg-primary-100 py-2 px-3 rounded-lg text-sm font-medium transition-colors"
+            >
+              Join as Assistant
+            </button>
+          )}
+          {onSetPrimary && (
+            <button
+              onClick={onSetPrimary}
+              className="w-full bg-gray-100 text-gray-700 hover:bg-gray-200 py-2 px-3 rounded-lg text-sm font-medium transition-colors"
+            >
+              Become Primary
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Action Button - Toggle based on break status */}
       {currentUserId && isCurrentUserActive && (

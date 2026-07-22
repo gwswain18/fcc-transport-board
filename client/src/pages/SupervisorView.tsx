@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
 import { detectPhi } from '../utils/phiDetection';
 import {
@@ -18,6 +19,8 @@ import ElapsedTimer from '../components/common/ElapsedTimer';
 import Modal from '../components/common/Modal';
 import AlertBanners from '../components/common/AlertBanners';
 import ActiveSecretaryCard from '../components/common/ActiveSecretaryCard';
+import ActiveDispatcherCard from '../components/dispatcher/ActiveDispatcherCard';
+import BreakModal from '../components/dispatcher/BreakModal';
 import { formatMinutes, formatTime } from '../utils/formatters';
 
 const MAIN_FLOORS: Floor[] = ['FCC1', 'FCC4', 'FCC5', 'FCC6'];
@@ -25,8 +28,46 @@ const OTHER_FLOORS: Floor[] = ['1WC', 'HRP', 'L&D', 'OTF'];
 const DESTINATIONS = ['Atrium', 'Radiology', 'Lab', 'OR', 'NICU', 'Other'];
 
 export default function SupervisorView() {
-  const { transporterStatuses, requests, activeSecretaries, refreshData, notesEnabled } = useSocket();
+  const { transporterStatuses, requests, activeSecretaries, activeDispatchers, refreshData, notesEnabled } = useSocket();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [showBreakModal, setShowBreakModal] = useState(false);
+  const [breakLoading, setBreakLoading] = useState(false);
+
+  const myDispatcherStatus = activeDispatchers.find((d) => d.user_id === user?.id);
+
+  // Dispatcher-role actions — same wiring as the Dashboard tab so the card
+  // behaves identically on both
+  const handleTakeBreak = async (reliefUserId?: number, reliefText?: string) => {
+    setBreakLoading(true);
+    const response = await api.dispatcherTakeBreak(reliefUserId, reliefText);
+    setBreakLoading(false);
+    if (!response.error) {
+      setShowBreakModal(false);
+      await refreshData();
+    }
+  };
+
+  const handleReturnFromBreak = async (asPrimary?: boolean) => {
+    const response = await api.dispatcherReturn(asPrimary);
+    if (!response.error) {
+      await refreshData();
+    }
+  };
+
+  const handleSetPrimary = async () => {
+    const response = await api.setPrimaryDispatcher();
+    if (!response.error) {
+      await refreshData();
+    }
+  };
+
+  const handleJoinAsAssistant = async () => {
+    const response = await api.registerAsDispatcher();
+    if (!response.error) {
+      await refreshData();
+    }
+  };
   const [notesError, setNotesError] = useState('');
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<TransportRequest | null>(null);
@@ -263,6 +304,16 @@ export default function SupervisorView() {
         <div className="grid grid-cols-12 gap-4">
           {/* Left Panel - Transporters */}
           <div className="col-span-3 space-y-4">
+            {/* Active Dispatchers Card — same wiring as the Dashboard tab */}
+            <ActiveDispatcherCard
+              dispatchers={activeDispatchers}
+              currentUserId={user?.id}
+              onTakeBreak={() => setShowBreakModal(true)}
+              onReturnFromBreak={handleReturnFromBreak}
+              onSetPrimary={handleSetPrimary}
+              onJoinAsAssistant={handleJoinAsAssistant}
+            />
+
             <div className="card">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Transporters</h2>
               <div className="space-y-2">
@@ -573,6 +624,14 @@ export default function SupervisorView() {
         )}
       </Modal>
 
+      {/* Break Modal (dispatcher-role action from the Active Dispatchers card) */}
+      <BreakModal
+        isOpen={showBreakModal}
+        onClose={() => setShowBreakModal(false)}
+        onConfirm={handleTakeBreak}
+        loading={breakLoading}
+        isPrimary={myDispatcherStatus?.is_primary || false}
+      />
     </div>
   );
 }
@@ -595,11 +654,13 @@ function TransporterCard({
           : 'border-gray-200 bg-gray-50'
       }`}
     >
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-gray-900">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <span className="font-medium text-gray-900 truncate min-w-0">
           {transporter.user?.first_name} {transporter.user?.last_name}
         </span>
-        <TransporterStatusBadge status={transporter.status} size="sm" />
+        <span className="flex-shrink-0">
+          <TransporterStatusBadge status={transporter.status} size="sm" />
+        </span>
       </div>
       {transporter.current_job && (
         <p className="text-sm text-gray-600 mt-1">
