@@ -58,15 +58,15 @@ export default function Header() {
   return (
     <>
       <header className="bg-primary shadow-lg border-b border-primary-700">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-3">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-2 md:space-x-4 min-w-0">
+            <div className="flex items-center space-x-2 md:space-x-3 min-w-0">
               <img
                 src="/logo.png"
                 alt="Northside Hospital Logo"
-                className="h-10 w-auto bg-white rounded p-1"
+                className="h-8 md:h-10 w-auto bg-white rounded p-1 flex-shrink-0"
               />
-              <h1 className="text-xl font-bold text-white">FCC Transport</h1>
+              <h1 className="text-lg md:text-xl font-bold text-white whitespace-nowrap">FCC Transport</h1>
             </div>
             <div
               role="status"
@@ -142,7 +142,7 @@ export default function Header() {
             )}
           </nav>
 
-          <div className="flex items-center space-x-3 md:space-x-6">
+          <div className="flex items-center space-x-1 md:space-x-6 flex-shrink-0">
             <MuteToggle className="text-secondary-200 hover:text-white" />
             <DarkModeToggle className="text-secondary-200 hover:text-white" />
             <DateTimeDisplay className="hidden md:block text-secondary-200" />
@@ -170,17 +170,32 @@ export default function Header() {
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center space-x-3 focus:outline-none"
+                className="flex items-center space-x-2 md:space-x-3 p-1 focus:outline-none"
                 aria-label="User menu"
               >
-                <div className="text-right min-w-0">
-                  <p className="text-sm font-medium text-white truncate max-w-[40vw]">
+                {/* Phone: person icon only — the full name/role block wider than
+                    the screen was what made every page scroll sideways */}
+                <svg
+                  className="w-6 h-6 text-secondary-200 md:hidden"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <div className="hidden md:block text-right min-w-0">
+                  <p className="text-sm font-medium text-white truncate max-w-[16rem]">
                     {user.first_name} {user.last_name}
                   </p>
                   <p className="text-xs text-secondary-200 capitalize">{user.role}</p>
                 </div>
                 <svg
-                  className={`w-4 h-4 text-secondary-200 transition-transform ${
+                  className={`hidden md:block w-4 h-4 text-secondary-200 transition-transform ${
                     showUserMenu ? 'rotate-180' : ''
                   }`}
                   fill="none"
@@ -202,6 +217,14 @@ export default function Header() {
                     onClick={() => setShowUserMenu(false)}
                   />
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-alabaster py-1 z-20">
+                    {/* On phones the header shows only an icon, so identify the
+                        signed-in user here */}
+                    <div className="md:hidden px-4 py-2 border-b border-alabaster">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {user.first_name} {user.last_name}
+                      </p>
+                      <p className="text-xs text-gray-500 capitalize">{user.role}</p>
+                    </div>
                     <button
                       onClick={() => {
                         setShowUserMenu(false);

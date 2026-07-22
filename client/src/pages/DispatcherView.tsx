@@ -397,9 +397,9 @@ export default function DispatcherView() {
             </button>
           </div>
         )}
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Left Panel - Transporters */}
-          <div className="col-span-3 space-y-4">
+          <div className="lg:col-span-3 space-y-4">
             {/* Active Dispatchers Card */}
             <ActiveDispatcherCard
               dispatchers={activeDispatchers}
@@ -430,7 +430,7 @@ export default function DispatcherView() {
           </div>
 
           {/* Center Panel - Active Jobs */}
-          <div className="col-span-5 space-y-4">
+          <div className="lg:col-span-5 space-y-4">
             <div className="card">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Active Jobs</h2>
 
@@ -508,7 +508,7 @@ export default function DispatcherView() {
           </div>
 
           {/* Right Panel - Create Request Form */}
-          <div className="col-span-4">
+          <div className="lg:col-span-4">
             <div className="card sticky top-4">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">New Request</h2>
 
