@@ -264,9 +264,10 @@ export default function Profile() {
                   {microsoftLinkAvailable && (
                   <button
                     onClick={handleMicrosoftLink}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                    className="relative w-[200px] inline-flex items-center justify-center px-10 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                   >
-                    <svg className="w-5 h-5" viewBox="0 0 21 21">
+                    {/* Icon pinned left, label centered — mirrors the Google button's layout */}
+                    <svg className="absolute left-3 w-5 h-5" viewBox="0 0 21 21">
                       <rect x="1" y="1" width="9" height="9" fill="#f25022" />
                       <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
                       <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
