@@ -128,10 +128,10 @@ export default function ManagerDashboard() {
 
       <main className="max-w-7xl mx-auto p-4">
         {/* Tab Navigation */}
-        <div className="flex border-b border-gray-200 mb-6">
+        <div className="flex border-b border-gray-200 mb-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             onClick={() => setActiveTab('overview')}
-            className={`px-6 py-3 font-medium text-sm ${
+            className={`px-4 md:px-6 py-3 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
               activeTab === 'overview'
                 ? 'border-b-2 border-primary text-primary'
                 : 'text-gray-500 hover:text-gray-700'
@@ -141,7 +141,7 @@ export default function ManagerDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('floors')}
-            className={`px-6 py-3 font-medium text-sm ${
+            className={`px-4 md:px-6 py-3 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
               activeTab === 'floors'
                 ? 'border-b-2 border-primary text-primary'
                 : 'text-gray-500 hover:text-gray-700'
@@ -151,7 +151,7 @@ export default function ManagerDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('delays')}
-            className={`px-6 py-3 font-medium text-sm ${
+            className={`px-4 md:px-6 py-3 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
               activeTab === 'delays'
                 ? 'border-b-2 border-primary text-primary'
                 : 'text-gray-500 hover:text-gray-700'
@@ -161,7 +161,7 @@ export default function ManagerDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('activity')}
-            className={`px-6 py-3 font-medium text-sm ${
+            className={`px-4 md:px-6 py-3 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
               activeTab === 'activity'
                 ? 'border-b-2 border-primary text-primary'
                 : 'text-gray-500 hover:text-gray-700'
@@ -171,7 +171,7 @@ export default function ManagerDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('shifts')}
-            className={`px-6 py-3 font-medium text-sm ${
+            className={`px-4 md:px-6 py-3 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
               activeTab === 'shifts'
                 ? 'border-b-2 border-primary text-primary'
                 : 'text-gray-500 hover:text-gray-700'
@@ -181,7 +181,7 @@ export default function ManagerDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('reports')}
-            className={`px-6 py-3 font-medium text-sm ${
+            className={`px-4 md:px-6 py-3 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
               activeTab === 'reports'
                 ? 'border-b-2 border-primary text-primary'
                 : 'text-gray-500 hover:text-gray-700'
@@ -191,7 +191,7 @@ export default function ManagerDashboard() {
           </button>
           <button
             onClick={() => setActiveTab('active-users')}
-            className={`px-6 py-3 font-medium text-sm ${
+            className={`px-4 md:px-6 py-3 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
               activeTab === 'active-users'
                 ? 'border-b-2 border-primary text-primary'
                 : 'text-gray-500 hover:text-gray-700'
