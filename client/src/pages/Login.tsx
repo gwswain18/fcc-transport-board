@@ -352,9 +352,11 @@ export default function Login() {
                     <button
                       onClick={handleMicrosoftLogin}
                       disabled={loading}
-                      className="relative w-[300px] inline-flex items-center justify-center px-10 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                      className="relative w-[300px] inline-flex items-center justify-center pl-[60px] pr-[20px] py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
                     >
-                      {/* Icon pinned left, label centered — mirrors the Google button's layout */}
+                      {/* Icon pinned left like the Google button; asymmetric padding nudges the
+                          centered label right so both labels start at the same x (the Microsoft
+                          string is ~20px longer than Google's) */}
                       <svg className="absolute left-3 w-5 h-5" viewBox="0 0 21 21">
                         <rect x="1" y="1" width="9" height="9" fill="#f25022" />
                         <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
