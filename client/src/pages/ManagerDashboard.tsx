@@ -53,6 +53,24 @@ export default function ManagerDashboard() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Transporters with shift/break/offline time but zero completed jobs are
+  // absent from byTransporter — synthesize rows for them so their time
+  // columns (especially Down Time) still show in the table
+  const transporterRows: TransporterStats[] = [
+    ...transporterStats,
+    ...(timeMetrics?.transporters ?? [])
+      .filter((tm) => !transporterStats.some((t) => t.user_id === tm.user_id))
+      .map((tm) => ({
+        user_id: tm.user_id,
+        first_name: tm.first_name,
+        last_name: tm.last_name,
+        jobs_completed: 0,
+        avg_pickup_time_minutes: 0,
+        avg_transport_time_minutes: 0,
+        avg_job_time_minutes: 0,
+      })),
+  ];
+
   const [filters, setFilters] = useState({
     start_date: localDateDaysAgo(7),
     end_date: localToday(),
@@ -511,13 +529,13 @@ export default function ManagerDashboard() {
                       <th className="text-right py-3 px-4 font-medium text-gray-600">
                         Offline Time
                       </th>
-                      <th className="text-right py-3 px-4 font-medium text-gray-600">
+                      <th className="text-right py-3 px-4 font-medium text-gray-600" title="Unexplained shift time: shift duration minus job, break, other, and offline time">
                         Down Time
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {transporterStats.map((t) => {
+                    {transporterRows.map((t) => {
                       const tm = timeMetrics?.transporters.find(tm => tm.user_id === t.user_id);
                       return (
                         <tr

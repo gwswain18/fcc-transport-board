@@ -151,7 +151,6 @@ export interface TransporterStats {
   avg_pickup_time_minutes: number;
   avg_transport_time_minutes: number;
   avg_job_time_minutes: number;
-  idle_time_minutes: number;
   earliest_shift_start?: string | null;
   latest_shift_end?: string | null;
   missed_jobs?: number;

@@ -268,7 +268,7 @@ export default function SupervisorView() {
                     <th className="pb-2 font-medium">Jobs</th>
                     <th className="pb-2 font-medium">Avg Pickup</th>
                     <th className="pb-2 font-medium">Avg Transport</th>
-                    <th className="pb-2 font-medium">Avg Job Time</th>
+                    <th className="pb-2 font-medium" title="Full cycle: request created to complete">Avg Cycle Time</th>
                   </tr>
                 </thead>
                 <tbody>

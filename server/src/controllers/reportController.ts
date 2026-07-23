@@ -32,9 +32,10 @@ export const getSummary = async (
     }
 
     if (shift_start && shift_end) {
-      whereClause += ` AND EXTRACT(HOUR FROM created_at) >= $${paramIndex++}`;
+      // Hospital-local hours, matching getJobsByHour/getJobsByDay
+      whereClause += ` AND EXTRACT(HOUR FROM created_at AT TIME ZONE 'America/New_York') >= $${paramIndex++}`;
       params.push(parseInt(shift_start as string));
-      whereClause += ` AND EXTRACT(HOUR FROM created_at) < $${paramIndex++}`;
+      whereClause += ` AND EXTRACT(HOUR FROM created_at AT TIME ZONE 'America/New_York') < $${paramIndex++}`;
       params.push(parseInt(shift_end as string));
     }
 
@@ -128,15 +129,20 @@ export const getByTransporter = async (
     }
 
     if (shift_start && shift_end) {
-      whereClause += ` AND EXTRACT(HOUR FROM tr.created_at) >= $${paramIndex++}`;
+      // Hospital-local hours, matching getJobsByHour/getJobsByDay
+      whereClause += ` AND EXTRACT(HOUR FROM tr.created_at AT TIME ZONE 'America/New_York') >= $${paramIndex++}`;
       params.push(parseInt(shift_start as string));
-      whereClause += ` AND EXTRACT(HOUR FROM tr.created_at) < $${paramIndex++}`;
+      whereClause += ` AND EXTRACT(HOUR FROM tr.created_at AT TIME ZONE 'America/New_York') < $${paramIndex++}`;
       params.push(parseInt(shift_end as string));
     }
 
     if (floor) {
-      whereClause += ` AND tr.origin_floor = $${paramIndex++}`;
-      params.push(floor);
+      if (floor === 'Other') {
+        whereClause += ` AND tr.origin_floor IN ('1WC', 'HRP', 'L&D', 'OTF')`;
+      } else {
+        whereClause += ` AND tr.origin_floor = $${paramIndex++}`;
+        params.push(floor);
+      }
     }
 
     whereClause += ' AND u.include_in_analytics = true';
@@ -172,7 +178,8 @@ export const getByTransporter = async (
       shiftParams.push(start_date);
     }
     if (end_date) {
-      shiftWhereClause += ` AND sl.shift_start < $${shiftParamIndex++}`;
+      // Inclusive, matching every other endpoint's end-boundary handling
+      shiftWhereClause += ` AND sl.shift_start <= $${shiftParamIndex++}`;
       shiftParams.push(end_date);
     }
 
@@ -216,8 +223,12 @@ export const getByTransporter = async (
     }
     let missedFloorJoin = '';
     if (floor) {
-      missedFloorJoin = `JOIN transport_requests tr ON (un.payload->>'request_id')::int = tr.id AND tr.origin_floor = $${missedParamIndex++}`;
-      missedParams.push(floor);
+      if (floor === 'Other') {
+        missedFloorJoin = `JOIN transport_requests tr ON (un.payload->>'request_id')::int = tr.id AND tr.origin_floor IN ('1WC', 'HRP', 'L&D', 'OTF')`;
+      } else {
+        missedFloorJoin = `JOIN transport_requests tr ON (un.payload->>'request_id')::int = tr.id AND tr.origin_floor = $${missedParamIndex++}`;
+        missedParams.push(floor);
+      }
     }
 
     const missedResult = await query(
@@ -251,7 +262,6 @@ export const getByTransporter = async (
         avg_pickup_time_minutes: parseFloat(row.avg_pickup_time) || 0,
         avg_transport_time_minutes: parseFloat(row.avg_transport_time) || 0,
         avg_job_time_minutes: parseFloat(row.avg_job_time) || 0,
-        idle_time_minutes: 0, // Would need more complex calculation
         earliest_shift_start: shift?.earliest_shift_start || null,
         latest_shift_end: shift?.latest_shift_end || null,
         missed_jobs: missedMap.get(row.user_id)?.missed_jobs ?? 0,
@@ -273,7 +283,6 @@ export const getByTransporter = async (
         avg_pickup_time_minutes: 0,
         avg_transport_time_minutes: 0,
         avg_job_time_minutes: 0,
-        idle_time_minutes: 0,
         earliest_shift_start: shift?.earliest_shift_start || null,
         latest_shift_end: shift?.latest_shift_end || null,
         missed_jobs: missed.missed_jobs,
@@ -584,25 +593,27 @@ export const getTimeMetrics = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { start_date, end_date, floor, transporter_id } = req.query;
+    const { start_date, end_date, transporter_id } = req.query;
 
+    // NOTE: time metrics intentionally ignore any floor filter. Down time is
+    // the residual shift_duration - job - break - other - offline; shifts,
+    // breaks, and offline periods are not floor-scoped, so filtering only the
+    // job component by floor would make the residual meaningless.
     let whereClause = "WHERE tr.status = 'complete' AND tr.assigned_to IS NOT NULL";
     const params: unknown[] = [];
     let paramIndex = 1;
 
+    // Filter by created_at to match getSummary/getByTransporter, so the
+    // Transporter Performance table's job columns and time columns describe
+    // the same set of jobs
     if (start_date) {
-      whereClause += ` AND tr.completed_at >= $${paramIndex++}`;
+      whereClause += ` AND tr.created_at >= $${paramIndex++}`;
       params.push(start_date);
     }
 
     if (end_date) {
-      whereClause += ` AND tr.completed_at <= $${paramIndex++}`;
+      whereClause += ` AND tr.created_at <= $${paramIndex++}`;
       params.push(end_date);
-    }
-
-    if (floor) {
-      whereClause += ` AND tr.origin_floor = $${paramIndex++}`;
-      params.push(floor);
     }
 
     if (transporter_id) {
@@ -626,8 +637,10 @@ export const getTimeMetrics = async (
       params
     );
 
-    // Build date filter for shift_logs and audit_logs
-    let shiftWhereClause = 'WHERE sl.shift_end IS NOT NULL';
+    // Build date filter for shift_logs and audit_logs. Open shifts count up
+    // to NOW() — excluding them zeroed shift_duration for anyone currently
+    // working, which floored their down time to 0 all shift long.
+    let shiftWhereClause = 'WHERE 1=1';
     const shiftParams: unknown[] = [];
     let shiftParamIndex = 1;
 
@@ -637,7 +650,7 @@ export const getTimeMetrics = async (
     }
 
     if (end_date) {
-      shiftWhereClause += ` AND sl.shift_end <= $${shiftParamIndex++}`;
+      shiftWhereClause += ` AND sl.shift_start <= $${shiftParamIndex++}`;
       shiftParams.push(end_date);
     }
 
@@ -648,13 +661,13 @@ export const getTimeMetrics = async (
 
     shiftWhereClause += ' AND u.include_in_analytics = true';
 
-    // Get total shift duration per transporter
+    // Get total shift duration per transporter (open shifts count to NOW())
     const shiftTimeResult = await query(
       `SELECT
         sl.user_id,
         u.first_name,
         u.last_name,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (sl.shift_end - sl.shift_start))), 0) as shift_duration_seconds
+        COALESCE(SUM(EXTRACT(EPOCH FROM (COALESCE(sl.shift_end, NOW()) - sl.shift_start))), 0) as shift_duration_seconds
        FROM shift_logs sl
        JOIN users u ON sl.user_id = u.id
        ${shiftWhereClause}
@@ -813,9 +826,6 @@ export const getTimeMetrics = async (
         ), 0) as offline_time_seconds
       FROM offline_periods op
       JOIN users u ON op.user_id = u.id
-      LEFT JOIN shift_logs sl ON op.user_id = sl.user_id
-        AND op.offline_at >= sl.shift_start
-        AND op.offline_at <= COALESCE(sl.shift_end, NOW())
       WHERE u.include_in_analytics = true
         ${offlineDateFilter} ${offlineUserFilter}
       GROUP BY op.user_id, u.first_name, u.last_name`,
@@ -883,7 +893,10 @@ export const getTimeMetrics = async (
       entry.offline_time_seconds = parseFloat(row.offline_time_seconds) || 0;
     }
 
-    // Calculate down time: shift_duration - job_time - break_time - other_time - offline_time
+    // Down time is a RESIDUAL, not a measurement: shift_duration - job -
+    // break - other - offline, floored at 0. Known limitation: a break/other
+    // period taken mid-job overlaps job_time and is subtracted twice, slightly
+    // understating down time; measuring that would require interval merging.
     const transporters = Array.from(userMap.values()).map(t => ({
       ...t,
       down_time_seconds: Math.max(0, t.shift_duration_seconds - t.job_time_seconds - t.break_time_seconds - t.other_time_seconds - t.offline_time_seconds),
@@ -1047,12 +1060,13 @@ export const getDelayReport = async (
       params
     );
 
-    // By transporter
+    // By transporter. NULL-user delays are kept (matching byReason above) —
+    // "u.include_in_analytics = true" alone would silently drop them
     const byTransporterResult = await query(
       `SELECT rd.user_id, u.first_name, u.last_name, rd.reason, COUNT(*) as count
        FROM request_delays rd
        LEFT JOIN users u ON rd.user_id = u.id
-       ${whereClause} AND u.include_in_analytics = true
+       ${whereClause} AND (u.id IS NULL OR u.include_in_analytics = true)
        GROUP BY rd.user_id, u.first_name, u.last_name, rd.reason
        ORDER BY u.last_name, u.first_name`,
       params
@@ -1109,7 +1123,8 @@ export const getReassignments = async (
     const { start_date, end_date } = req.query;
 
     let whereClause = `WHERE al.action = 'reassignment' AND al.entity_type = 'transport_request'
-      AND (old_u.id IS NULL OR old_u.include_in_analytics = true)`;
+      AND (old_u.id IS NULL OR old_u.include_in_analytics = true)
+      AND (new_u.id IS NULL OR new_u.include_in_analytics = true)`;
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -1468,7 +1483,13 @@ export const getActivityLog = async (
       paramIndex++;
     }
 
-    whereClause += ' AND (u.id IS NULL OR u.include_in_analytics = true)';
+    // Exclude analytics-excluded users whether they are the ACTOR of the log
+    // entry or the ASSIGNEE of the underlying request — filtering only the
+    // actor let excluded users' jobs appear whenever an included user acted
+    whereClause += ` AND (u.id IS NULL OR u.include_in_analytics = true)
+      AND (tr.assigned_to IS NULL OR tr.assigned_to NOT IN (
+        SELECT id FROM users WHERE include_in_analytics = false
+      ))`;
 
     const pageNum = Math.max(1, parseInt(page as string) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit as string) || 50));
