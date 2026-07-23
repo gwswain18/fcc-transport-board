@@ -38,6 +38,7 @@ export interface ChartSelection {
   floorAnalysis: boolean;
   transporterTable: boolean;
   reassignments: boolean;
+  shiftLogs: boolean;
 }
 
 export interface TimeMetrics {
@@ -93,6 +94,20 @@ export interface ReassignmentEntry {
   to_name: string | null;
 }
 
+export interface ShiftLogReportRow {
+  user_id: number;
+  first_name: string;
+  last_name: string;
+  shift_date: string;
+  earliest_start: string;
+  latest_end: string | null;
+  is_active: boolean;
+  total_shift_seconds: number;
+  break_time_seconds: number;
+  other_time_seconds: number;
+  segments: Array<{ end_reason: string | null; edited_at: string | null }>;
+}
+
 export interface ReportData {
   summary: ReportSummary | null;
   individualSummary: ReportSummary | null;
@@ -104,4 +119,6 @@ export interface ReportData {
   floorAnalysis: FloorAnalysisData[];
   delayData: DelayData | null;
   reassignments: ReassignmentEntry[] | null;
+  shiftLogs: ShiftLogReportRow[] | null;
+  shiftLogsTotal: number;
 }

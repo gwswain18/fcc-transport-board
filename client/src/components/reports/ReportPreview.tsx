@@ -14,10 +14,13 @@ import { formatMinutes, formatSecondsAsHoursMinutes } from '../../utils/formatte
 interface ReportPreviewProps {
   config: ReportConfig;
   data: ReportData;
+  // Visible mode renders the report on screen (preview modal); hidden mode
+  // keeps the legacy off-screen capture behavior
+  visible?: boolean;
 }
 
 const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
-  ({ config, data }, ref) => {
+  ({ config, data, visible = false }, ref) => {
     const { metrics, charts, reportType } = config;
     const isIndividual = reportType === 'individual';
 
@@ -28,14 +31,18 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
       <div
         ref={ref}
         style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          width: '794px',
-          opacity: 0,
-          pointerEvents: 'none',
-          zIndex: -1,
-          overflow: 'hidden',
+          ...(visible
+            ? { width: '794px', margin: '0 auto' }
+            : {
+                position: 'absolute' as const,
+                left: 0,
+                top: 0,
+                width: '794px',
+                opacity: 0,
+                pointerEvents: 'none' as const,
+                zIndex: -1,
+                overflow: 'hidden',
+              }),
           backgroundColor: '#ffffff',
           color: '#1f2937',
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
@@ -248,6 +255,58 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
           </>
         )}
 
+        {/* Shift Logs Table */}
+        {charts.shiftLogs && data.shiftLogs && data.shiftLogs.length > 0 && (
+          <div data-pdf-section="Shift Logs" style={{ padding: '16px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '12px', color: '#1f2937' }}>
+              Shift Logs
+            </h3>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>Transporter</th>
+                  <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>Date</th>
+                  <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>Start - End</th>
+                  <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Duration</th>
+                  <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Break</th>
+                  <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Other</th>
+                  <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>Ended</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.shiftLogs.map((row) => {
+                  const reasons = [...new Set(row.segments.map((seg) => seg.end_reason).filter(Boolean) as string[])];
+                  const edited = row.segments.some((seg) => seg.edited_at);
+                  const endedLabels = [
+                    ...reasons.map((reason) => SHIFT_END_LABELS[reason] || reason),
+                    ...(edited && !reasons.includes('manager_edit') ? ['Edited'] : []),
+                  ];
+                  return (
+                    <tr key={`${row.user_id}-${row.shift_date}`} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '8px', fontWeight: 500, color: '#1f2937' }}>{row.first_name} {row.last_name}</td>
+                      <td style={{ padding: '8px', color: '#4b5563' }}>{formatShiftDate(row.shift_date)}</td>
+                      <td style={{ padding: '8px', color: '#4b5563' }}>
+                        {formatClock(row.earliest_start)} - {row.is_active ? 'Active' : row.latest_end ? formatClock(row.latest_end) : '-'}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right', color: '#4b5563' }}>{formatSecondsAsHoursMinutes(row.total_shift_seconds)}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', color: '#4b5563' }}>{formatSecondsAsHoursMinutes(row.break_time_seconds)}</td>
+                      <td style={{ padding: '8px', textAlign: 'right', color: '#4b5563' }}>{formatSecondsAsHoursMinutes(row.other_time_seconds)}</td>
+                      <td style={{ padding: '8px', color: reasons.includes('auto_truncated') || edited ? '#b45309' : '#4b5563' }}>
+                        {endedLabels.join(', ') || '-'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {data.shiftLogsTotal > data.shiftLogs.length && (
+              <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '6px' }}>
+                Showing first {data.shiftLogs.length} of {data.shiftLogsTotal} shift days
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Transporter Performance Table */}
         {charts.transporterTable && data.transporterStats.length > 0 && (
           <div data-pdf-section="Transporter Performance" style={{ padding: '16px' }}>
@@ -326,6 +385,25 @@ ReportPreview.displayName = 'ReportPreview';
 export default ReportPreview;
 
 // --- Helper components ---
+
+const SHIFT_END_LABELS: Record<string, string> = {
+  user: 'By user',
+  supervisor: 'By supervisor',
+  manager: 'By manager',
+  auto_logout: 'Auto-logout',
+  auto_truncated: 'Auto-closed at last activity',
+  manager_edit: 'Edited',
+};
+
+// shift_date is a hospital-local calendar date serialized at midnight UTC
+function formatShiftDate(ts: string): string {
+  return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
+function formatClock(ts: string): string {
+  return new Date(ts).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
 
 interface ComparisonRow {
   label: string;

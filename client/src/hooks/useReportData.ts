@@ -38,6 +38,8 @@ export function useReportData() {
       floorAnalysis: [],
       delayData: null,
       reassignments: null,
+      shiftLogs: null,
+      shiftLogsTotal: 0,
     };
 
     try {
@@ -52,6 +54,7 @@ export function useReportData() {
       const needsFloorAnalysis = config.charts.floorAnalysis;
       const needsDelayData = config.charts.delayReasons;
       const needsReassignments = config.charts.reassignments;
+      const needsShiftLogs = config.charts.shiftLogs;
 
       const promises: Promise<void>[] = [];
       const errors: string[] = [];
@@ -167,6 +170,30 @@ export function useReportData() {
                 from_name: r.from ? `${r.from.first_name} ${r.from.last_name}` : null,
                 to_name: r.to ? `${r.to.first_name} ${r.to.last_name}` : null,
               }));
+            }
+          })
+        );
+      }
+
+      // Shift logs (first 100 day-groups; report notes truncation)
+      if (needsShiftLogs) {
+        promises.push(
+          tracked('Shift Logs', api.getShiftLogs({ start_date: params.start_date, end_date: params.end_date, page: 1, limit: 100 })).then((res) => {
+            if (res.data?.shiftLogs) {
+              result.shiftLogs = res.data.shiftLogs.map((row) => ({
+                user_id: row.user_id,
+                first_name: row.first_name,
+                last_name: row.last_name,
+                shift_date: row.shift_date,
+                earliest_start: row.earliest_start,
+                latest_end: row.latest_end,
+                is_active: row.is_active,
+                total_shift_seconds: row.total_shift_seconds,
+                break_time_seconds: row.break_time_seconds,
+                other_time_seconds: row.other_time_seconds,
+                segments: (row.segments ?? []).map((seg) => ({ end_reason: seg.end_reason, edited_at: seg.edited_at })),
+              }));
+              result.shiftLogsTotal = res.data.pagination.total;
             }
           })
         );

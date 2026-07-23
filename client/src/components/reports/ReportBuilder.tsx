@@ -10,6 +10,8 @@ import {
 import { useReportData } from '../../hooks/useReportData';
 import { generatePdf } from '../../utils/pdfGenerator';
 import { formatDate } from '../../utils/formatters';
+import { api } from '../../utils/api';
+import { localDayStart, localDayEnd } from '../../utils/dateRange';
 import ReportPreview from './ReportPreview';
 
 const FLOORS = ['FCC1', 'FCC4', 'FCC5', 'FCC6', 'Other'] as const;
@@ -39,6 +41,7 @@ const ALL_CHARTS: { key: keyof ChartSelection; label: string }[] = [
   { key: 'floorAnalysis', label: 'Floor Analysis' },
   { key: 'transporterTable', label: 'Transporter Performance Table' },
   { key: 'reassignments', label: 'Reassignments' },
+  { key: 'shiftLogs', label: 'Shift Logs' },
 ];
 
 function allTrue(obj: MetricSelection | ChartSelection): boolean {
@@ -57,7 +60,7 @@ function setAllMetrics(val: boolean): MetricSelection {
 function setAllCharts(val: boolean): ChartSelection {
   return {
     jobsByHour: val, jobsByDay: val, delayReasons: val, floorAnalysis: val, transporterTable: val,
-    reassignments: val,
+    reassignments: val, shiftLogs: val,
   };
 }
 
@@ -127,9 +130,11 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
     floorAnalysis: true,
     transporterTable: true,
     reassignments: true,
+    shiftLogs: true,
   });
 
   const [generating, setGenerating] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfProgress, setPdfProgress] = useState('');
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [activeConfig, setActiveConfig] = useState<ReportConfig | null>(null);
@@ -188,39 +193,51 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
 
       setActiveConfig(config);
       setReportData(data);
-
-      // Wait for React to render the preview reliably
-      setPdfProgress('Rendering charts...');
-      await waitForPreviewRender(previewRef);
-
-      if (!previewRef.current) {
-        setError('Preview container not ready. Please try again.');
-        setGenerating(false);
-        return;
-      }
-
-      const dateRangeStr = `${formatDate(config.startDate + 'T00:00:00')} - ${formatDate(config.endDate + 'T00:00:00')}`;
-
-      await generatePdf(previewRef.current, {
-        title: reportType === 'individual'
-          ? `Transporter Report: ${config.transporterName}`
-          : 'FCC Transport Report',
-        dateRange: dateRangeStr,
-        reportType: config.reportType,
-        transporterName: config.transporterName,
-      }, setPdfProgress);
-
-      setPdfProgress('PDF generated successfully!');
-      setTimeout(() => {
-        setGenerating(false);
-        setPdfProgress('');
-      }, 1500);
+      setPreviewOpen(true);
+      setGenerating(false);
+      setPdfProgress('');
     } catch (err) {
-      console.error('PDF generation error:', err);
-      setError('An error occurred while generating the PDF.');
+      console.error('Report generation error:', err);
+      setError('An error occurred while generating the report.');
       setGenerating(false);
       setPdfProgress('');
     }
+  };
+
+  // Download the PDF from the on-screen preview
+  const handleDownloadPdf = async () => {
+    if (!activeConfig || !previewRef.current) return;
+    setGenerating(true);
+    try {
+      await waitForPreviewRender(previewRef);
+      const dateRangeStr = `${formatDate(activeConfig.startDate + 'T00:00:00')} - ${formatDate(activeConfig.endDate + 'T00:00:00')}`;
+      await generatePdf(previewRef.current, {
+        title: activeConfig.reportType === 'individual'
+          ? `Transporter Report: ${activeConfig.transporterName}`
+          : 'FCC Transport Report',
+        dateRange: dateRangeStr,
+        reportType: activeConfig.reportType,
+        transporterName: activeConfig.transporterName,
+      }, setPdfProgress);
+      setPdfProgress('PDF downloaded');
+      setTimeout(() => setPdfProgress(''), 2000);
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      setError('An error occurred while generating the PDF.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // Download the matching raw-data CSV for the same period/filters
+  const handleDownloadCsv = () => {
+    if (!activeConfig) return;
+    api.exportData({
+      start_date: localDayStart(activeConfig.startDate),
+      end_date: localDayEnd(activeConfig.endDate),
+      floor: activeConfig.floors.length === 1 ? activeConfig.floors[0] : undefined,
+      transporter_id: activeConfig.transporterId,
+    });
   };
 
   const allMetricsSelected = allTrue(metrics);
@@ -386,7 +403,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
               Generating...
             </>
           ) : (
-            'Generate PDF Report'
+            'Generate Report'
           )}
         </button>
         {(generating || dataLoading) && (
@@ -396,13 +413,50 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
         )}
       </div>
 
-      {/* Hidden Preview for PDF capture */}
-      {reportData && activeConfig && (
-        <ReportPreview
-          ref={previewRef}
-          config={activeConfig}
-          data={reportData}
-        />
+      {/* Report Preview Modal */}
+      {previewOpen && reportData && activeConfig && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-[900px] max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Report Preview</h3>
+              <div className="flex items-center gap-3">
+                {pdfProgress && <span className="text-sm text-gray-500">{pdfProgress}</span>}
+                <button
+                  onClick={handleDownloadCsv}
+                  className="btn-secondary text-sm py-2 px-4"
+                >
+                  Download CSV
+                </button>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={generating}
+                  className="btn-primary text-sm py-2 px-4 disabled:opacity-50"
+                >
+                  {generating ? 'Generating...' : 'Download PDF'}
+                </button>
+                <button
+                  onClick={() => setPreviewOpen(false)}
+                  className="text-gray-400 hover:text-gray-600 p-1"
+                  aria-label="Close preview"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="overflow-auto p-4 bg-gray-100">
+              <div className="shadow border border-gray-200">
+                <ReportPreview
+                  ref={previewRef}
+                  config={activeConfig}
+                  data={reportData}
+                  visible
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
