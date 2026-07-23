@@ -406,7 +406,7 @@ export default function DispatcherView() {
               currentUserId={user?.id}
               onTakeBreak={() => setShowBreakModal(true)}
               onReturnFromBreak={handleReturnFromBreak}
-              onSetPrimary={handleSetPrimary}
+              onSetPrimary={!isSecretary ? handleSetPrimary : undefined}
               onJoinAsAssistant={!isSecretary ? () => handleDispatcherJoinAsSecondary() : undefined}
             />
 
