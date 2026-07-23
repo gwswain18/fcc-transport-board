@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database.js';
 import { getIO } from '../socket/index.js';
-import { logShiftStart, logShiftEnd } from '../services/auditService.js';
+import { logShiftStart, logShiftEnd, createAuditLog } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import { AuthenticatedRequest, Floor } from '../types/index.js';
 import logger from '../utils/logger.js';
@@ -93,7 +93,7 @@ export const endShift = async (req: AuthenticatedRequest, res: Response) => {
 
     // End the shift
     const result = await query(
-      `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP
+      `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP, end_reason = 'user'
        WHERE id = $1
        RETURNING *`,
       [existingShift.rows[0].id]
@@ -184,7 +184,7 @@ export const forceEndShift = async (req: AuthenticatedRequest, res: Response) =>
 
     // End the shift
     const result = await query(
-      `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP
+      `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP, end_reason = 'supervisor'
        WHERE id = $1
        RETURNING *`,
       [existingShift.rows[0].id]
@@ -339,5 +339,70 @@ export const getShiftHistory = async (req: Request, res: Response) => {
   } catch (error) {
     logger.error('Get shift history error:', error);
     res.status(500).json({ error: 'Failed to get shift history' });
+  }
+};
+
+// Manager correction of a shift's recorded times (forgotten logouts, missed
+// clock-ins). Every edit is audit-logged with old/new values, stamps
+// edited_by/edited_at, and marks end_reason 'manager_edit' when the end
+// changes — the Shift Logs tab surfaces all of this so corrected data stays
+// distinguishable from raw data.
+export const updateShiftLog = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { shift_start, shift_end } = req.body as { shift_start?: string; shift_end?: string };
+
+    if (shift_start === undefined && shift_end === undefined) {
+      return res.status(400).json({ error: 'Provide shift_start and/or shift_end' });
+    }
+
+    const existing = await query('SELECT * FROM shift_logs WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Shift not found' });
+    }
+    const before = existing.rows[0];
+
+    const newStart = shift_start !== undefined ? new Date(shift_start) : new Date(before.shift_start);
+    const newEnd = shift_end !== undefined ? new Date(shift_end) : (before.shift_end ? new Date(before.shift_end) : null);
+
+    if (isNaN(newStart.getTime()) || (newEnd !== null && isNaN(newEnd.getTime()))) {
+      return res.status(400).json({ error: 'Invalid date format' });
+    }
+    if (newEnd !== null && newEnd <= newStart) {
+      return res.status(400).json({ error: 'Shift end must be after shift start' });
+    }
+    const now = Date.now();
+    if (newStart.getTime() > now || (newEnd !== null && newEnd.getTime() > now)) {
+      return res.status(400).json({ error: 'Shift times cannot be in the future' });
+    }
+
+    const result = await query(
+      `UPDATE shift_logs
+       SET shift_start = $1,
+           shift_end = $2,
+           end_reason = CASE WHEN $2::timestamptz IS DISTINCT FROM shift_end THEN 'manager_edit' ELSE end_reason END,
+           edited_by = $3,
+           edited_at = CURRENT_TIMESTAMP
+       WHERE id = $4
+       RETURNING *`,
+      [newStart.toISOString(), newEnd ? newEnd.toISOString() : null, req.user!.id, id]
+    );
+
+    const { ipAddress, userAgent } = getAuditContext(req);
+    await createAuditLog({
+      userId: req.user!.id,
+      action: 'update',
+      entityType: 'shift_log',
+      entityId: parseInt(id, 10),
+      oldValues: { shift_start: before.shift_start, shift_end: before.shift_end, end_reason: before.end_reason },
+      newValues: { shift_start: result.rows[0].shift_start, shift_end: result.rows[0].shift_end, end_reason: result.rows[0].end_reason },
+      ipAddress,
+      userAgent,
+    });
+
+    res.json({ shift: result.rows[0], message: 'Shift updated' });
+  } catch (error) {
+    logger.error('Update shift log error:', error);
+    res.status(500).json({ error: 'Failed to update shift' });
   }
 };

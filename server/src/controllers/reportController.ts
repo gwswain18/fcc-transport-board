@@ -1620,9 +1620,20 @@ export const getShiftLogs = async (
         (COUNT(*) FILTER (WHERE sl.shift_end IS NULL) > 0) as is_active,
         SUM(EXTRACT(EPOCH FROM (COALESCE(sl.shift_end, NOW()) - sl.shift_start))) as total_shift_seconds,
         array_agg(sl.id ORDER BY sl.shift_start) as shift_ids,
-        COUNT(*) as segment_count
+        COUNT(*) as segment_count,
+        json_agg(json_build_object(
+          'id', sl.id,
+          'shift_start', sl.shift_start,
+          'shift_end', sl.shift_end,
+          'end_reason', sl.end_reason,
+          'edited_by', sl.edited_by,
+          'edited_at', sl.edited_at,
+          'editor_first_name', editor.first_name,
+          'editor_last_name', editor.last_name
+        ) ORDER BY sl.shift_start) as segments
       FROM shift_logs sl
       JOIN users u ON sl.user_id = u.id
+      LEFT JOIN users editor ON sl.edited_by = editor.id
       ${whereClause}
       GROUP BY sl.user_id, u.first_name, u.last_name, DATE(sl.shift_start)
       ORDER BY shift_date DESC, earliest_start DESC
@@ -1778,6 +1789,7 @@ export const getShiftLogs = async (
         other_time_seconds: Math.round(otherTimeSeconds),
         shift_ids: row.shift_ids,
         segment_count: parseInt(row.segment_count as string) || 1,
+        segments: row.segments,
         timeline,
       };
     });

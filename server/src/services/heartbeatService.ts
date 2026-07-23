@@ -319,9 +319,37 @@ export const performFullLogout = async (): Promise<{ dispatchers_ended: number; 
   // Emit updated (empty) secretary list
   await broadcastSecretaryChanged();
 
-  // End all active transporter shifts
+  // End all active transporter shifts. Transporters who are OFFLINE at sweep
+  // time forgot to log out — their shift is backdated to their last recorded
+  // activity (last completed job, last status change, or the moment they went
+  // offline) so forgotten logouts don't inflate shift/wait time. Anyone still
+  // online gets the sweep time. end_reason records which happened.
   await query(
-    `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP WHERE shift_end IS NULL`
+    `UPDATE shift_logs sl
+     SET shift_end = x.effective_end, end_reason = x.reason
+     FROM (
+       SELECT sl2.id,
+         CASE WHEN COALESCE(ts.status, 'offline') = 'offline'
+           THEN GREATEST(
+             sl2.shift_start,
+             COALESCE((SELECT MAX(tr.completed_at) FROM transport_requests tr
+                       WHERE tr.assigned_to = sl2.user_id AND tr.completed_at >= sl2.shift_start), sl2.shift_start),
+             COALESCE((SELECT MAX(al.timestamp) FROM audit_logs al
+                       WHERE al.user_id = sl2.user_id AND al.action = 'status_change'
+                         AND al.entity_type = 'transporter_status'
+                         AND al.timestamp >= sl2.shift_start), sl2.shift_start),
+             COALESCE(ts.went_offline_at, sl2.shift_start)
+           )
+           ELSE CURRENT_TIMESTAMP
+         END AS effective_end,
+         CASE WHEN COALESCE(ts.status, 'offline') = 'offline'
+           THEN 'auto_truncated' ELSE 'auto_logout'
+         END AS reason
+       FROM shift_logs sl2
+       LEFT JOIN transporter_status ts ON ts.user_id = sl2.user_id
+       WHERE sl2.shift_end IS NULL
+     ) x
+     WHERE sl.id = x.id`
   );
 
   // Close open offline periods

@@ -676,7 +676,7 @@ export const endUserSession = async (
 
     // End transporter shift
     await query(
-      `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP
+      `UPDATE shift_logs SET shift_end = CURRENT_TIMESTAMP, end_reason = 'manager'
        WHERE user_id = $1 AND shift_end IS NULL`,
       [userId]
     );

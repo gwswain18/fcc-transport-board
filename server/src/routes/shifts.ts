@@ -1,7 +1,7 @@
 import express from 'express';
 import { authenticate, requireApproved } from '../middleware/auth.js';
 import { canViewReports } from '../middleware/roleAuth.js';
-import { canDispatch } from '../middleware/roleAuth.js';
+import { canDispatch, canManageUsers } from '../middleware/roleAuth.js';
 import {
   startShift,
   endShift,
@@ -9,6 +9,7 @@ import {
   updateExtension,
   getCurrentShift,
   getShiftHistory,
+  updateShiftLog,
 } from '../controllers/shiftController.js';
 
 const router = express.Router();
@@ -28,5 +29,8 @@ router.put('/:userId/end', canDispatch, forceEndShift);
 
 // Shift history (supervisor+)
 router.get('/history', canViewReports, getShiftHistory);
+
+// Manager correction of recorded shift times (audit-logged)
+router.put('/:id/times', canManageUsers, updateShiftLog);
 
 export default router;

@@ -402,6 +402,13 @@ export const api = {
   forceLogoutAll: () =>
     request<{ message: string }>('/dispatchers/force-logout-all', { method: 'POST' }),
 
+  // Manager correction of a shift's recorded times (audit-logged server-side)
+  updateShiftTimes: (shiftId: number, data: { shift_start?: string; shift_end?: string }) =>
+    request<{ shift: unknown; message: string }>(`/shifts/${shiftId}/times`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   // Config
   getConfig: () =>
     request<{ config: Record<string, unknown> }>('/config'),
@@ -640,6 +647,16 @@ export const api = {
         other_time_seconds: number;
         shift_ids: number[];
         segment_count: number;
+        segments: Array<{
+          id: number;
+          shift_start: string;
+          shift_end: string | null;
+          end_reason: string | null;
+          edited_by: number | null;
+          edited_at: string | null;
+          editor_first_name: string | null;
+          editor_last_name: string | null;
+        }>;
         timeline: Array<{
           type: 'shift_start' | 'shift_end' | 'status_change';
           timestamp: string;
