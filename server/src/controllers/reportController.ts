@@ -1599,11 +1599,11 @@ export const getShiftLogs = async (
     // Count distinct (user_id, shift_date) groups
     const countResult = await query(
       `SELECT COUNT(*) as total FROM (
-        SELECT sl.user_id, DATE(sl.shift_start) as shift_date
+        SELECT sl.user_id, DATE(sl.shift_start AT TIME ZONE 'America/New_York') as shift_date
         FROM shift_logs sl
         JOIN users u ON sl.user_id = u.id
         ${whereClause}
-        GROUP BY sl.user_id, DATE(sl.shift_start)
+        GROUP BY sl.user_id, DATE(sl.shift_start AT TIME ZONE 'America/New_York')
       ) sub`,
       params
     );
@@ -1613,7 +1613,7 @@ export const getShiftLogs = async (
     const summaryResult = await query(
       `SELECT
         sl.user_id, u.first_name, u.last_name,
-        DATE(sl.shift_start) as shift_date,
+        DATE(sl.shift_start AT TIME ZONE 'America/New_York') as shift_date,
         MIN(sl.shift_start) as earliest_start,
         CASE WHEN COUNT(*) FILTER (WHERE sl.shift_end IS NULL) > 0
              THEN NULL ELSE MAX(sl.shift_end) END as latest_end,
@@ -1635,7 +1635,7 @@ export const getShiftLogs = async (
       JOIN users u ON sl.user_id = u.id
       LEFT JOIN users editor ON sl.edited_by = editor.id
       ${whereClause}
-      GROUP BY sl.user_id, u.first_name, u.last_name, DATE(sl.shift_start)
+      GROUP BY sl.user_id, u.first_name, u.last_name, DATE(sl.shift_start AT TIME ZONE 'America/New_York')
       ORDER BY shift_date DESC, earliest_start DESC
       LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
       [...params, limitNum, offset]

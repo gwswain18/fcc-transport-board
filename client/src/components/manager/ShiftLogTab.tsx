@@ -83,6 +83,19 @@ function formatDate(ts: string): string {
   });
 }
 
+// shift_date is a calendar DATE (already hospital-local from the server);
+// it arrives as midnight UTC, so rendering it in local time would shift it
+// back a day — format the calendar date as-is
+function formatDateOnly(ts: string): string {
+  return new Date(ts).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 const STATUS_LABELS: Record<string, string> = {
   available: 'Available',
   assigned: 'Assigned',
@@ -183,7 +196,7 @@ function ShiftCard({ entry, expanded, onToggle, onEditSegment }: { entry: ShiftL
 
         {/* Date */}
         <div className="flex-shrink-0 w-36 hidden sm:block">
-          <span className="text-sm text-gray-600">{formatDate(entry.shift_date)}</span>
+          <span className="text-sm text-gray-600">{formatDateOnly(entry.shift_date)}</span>
         </div>
 
         {/* Start - End */}
@@ -246,7 +259,7 @@ function ShiftCard({ entry, expanded, onToggle, onEditSegment }: { entry: ShiftL
             <div>
               <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">Shift Summary</h4>
               <div className="space-y-1 text-sm">
-                <div><span className="text-gray-500">Date:</span> <span className="font-medium">{formatDate(entry.shift_date)}</span></div>
+                <div><span className="text-gray-500">Date:</span> <span className="font-medium">{formatDateOnly(entry.shift_date)}</span></div>
                 <div><span className="text-gray-500">Start:</span> <span className="font-medium">{formatTime(entry.earliest_start)}</span></div>
                 <div>
                   <span className="text-gray-500">End:</span>{' '}
