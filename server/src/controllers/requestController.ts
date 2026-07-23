@@ -13,7 +13,7 @@ import { detectPhi } from '../utils/phiDetection.js';
 import { getNotesEnabled } from '../services/configService.js';
 import { autoAssignRequest, getActiveFloorForUser } from '../services/autoAssignService.js';
 import { sendJobAssignmentSMS } from '../services/twilioService.js';
-import { logCreate, logStatusChange, logReassignment } from '../services/auditService.js';
+import { logCreate, logStatusChange, logReassignment, createAuditLog } from '../services/auditService.js';
 import { getAuditContext } from '../middleware/auditMiddleware.js';
 import logger from '../utils/logger.js';
 
@@ -970,6 +970,74 @@ export const assignToPCT = async (
     res.json({ request: updatedRequest, message: 'Request transferred to PCT' });
   } catch (error) {
     logger.error('Assign to PCT error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Manager toggle: exclude a job from all analytics calculations (incident /
+// mis-recorded times) or re-include it. The job record itself is never
+// altered — it stays visible with an "Excluded" badge. Requires a reason
+// when excluding; audit-logged and reversible.
+export const setAnalyticsExclusion = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { excluded, reason } = req.body as { excluded?: boolean; reason?: string };
+
+    if (typeof excluded !== 'boolean') {
+      res.status(400).json({ error: 'excluded (boolean) is required' });
+      return;
+    }
+    if (excluded && !reason?.trim()) {
+      res.status(400).json({ error: 'A reason is required to exclude a job from analytics' });
+      return;
+    }
+    if (excluded && reason) {
+      const phi = detectPhi(reason);
+      if (phi.flagged) {
+        res.status(400).json({ error: phi.reason });
+        return;
+      }
+    }
+
+    const existing = await query(
+      'SELECT id, exclude_from_analytics, exclusion_reason FROM transport_requests WHERE id = $1',
+      [id]
+    );
+    if (existing.rows.length === 0) {
+      res.status(404).json({ error: 'Request not found' });
+      return;
+    }
+    const before = existing.rows[0];
+
+    const result = await query(
+      `UPDATE transport_requests
+       SET exclude_from_analytics = $1,
+           exclusion_reason = $2,
+           excluded_by = $3,
+           excluded_at = CASE WHEN $1 THEN CURRENT_TIMESTAMP ELSE NULL END
+       WHERE id = $4
+       RETURNING id, exclude_from_analytics, exclusion_reason, excluded_at`,
+      [excluded, excluded ? reason!.trim() : null, excluded ? req.user!.id : null, id]
+    );
+
+    const { ipAddress, userAgent } = getAuditContext(req);
+    await createAuditLog({
+      userId: req.user!.id,
+      action: 'analytics_exclusion',
+      entityType: 'transport_request',
+      entityId: parseInt(id, 10),
+      oldValues: { exclude_from_analytics: before.exclude_from_analytics, exclusion_reason: before.exclusion_reason },
+      newValues: { exclude_from_analytics: excluded, exclusion_reason: excluded ? reason!.trim() : null },
+      ipAddress,
+      userAgent,
+    });
+
+    res.json({ request: result.rows[0], message: excluded ? 'Job excluded from analytics' : 'Job re-included in analytics' });
+  } catch (error) {
+    logger.error('Set analytics exclusion error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

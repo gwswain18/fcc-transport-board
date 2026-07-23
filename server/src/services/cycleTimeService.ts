@@ -95,6 +95,7 @@ export const calculateRollingAverages = async (): Promise<void> => {
          FROM transport_requests
          WHERE ${phase.endField} IS NOT NULL
          AND ${phase.startField} IS NOT NULL
+         AND exclude_from_analytics IS NOT TRUE
          ORDER BY ${phase.endField} DESC
          LIMIT $1
        )
@@ -128,6 +129,7 @@ export const calculateRollingAverages = async (): Promise<void> => {
            FROM transport_requests
            WHERE ${phase.endField} IS NOT NULL
            AND ${phase.startField} IS NOT NULL
+           AND exclude_from_analytics IS NOT TRUE
            AND origin_floor = $2
            ORDER BY ${phase.endField} DESC
            LIMIT $1

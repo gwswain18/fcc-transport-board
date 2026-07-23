@@ -17,7 +17,7 @@ export const getSummary = async (
   try {
     const { start_date, end_date, shift_start, shift_end, floor, transporter_id } = req.query;
 
-    let whereClause = "WHERE status IN ('complete', 'cancelled', 'transferred_to_pct')";
+    let whereClause = "WHERE status IN ('complete', 'cancelled', 'transferred_to_pct') AND exclude_from_analytics IS NOT TRUE";
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -114,7 +114,7 @@ export const getByTransporter = async (
   try {
     const { start_date, end_date, shift_start, shift_end, floor } = req.query;
 
-    let whereClause = "WHERE tr.status = 'complete' AND tr.assigned_to IS NOT NULL";
+    let whereClause = "WHERE tr.status = 'complete' AND tr.assigned_to IS NOT NULL AND tr.exclude_from_analytics IS NOT TRUE";
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -304,7 +304,7 @@ export const getJobsByHour = async (
   try {
     const { start_date, end_date, floor, transporter_id } = req.query;
 
-    let whereClause = "WHERE status = 'complete'";
+    let whereClause = "WHERE status = 'complete' AND exclude_from_analytics IS NOT TRUE";
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -355,7 +355,7 @@ export const getJobsByFloor = async (
   try {
     const { start_date, end_date, floor, transporter_id } = req.query;
 
-    let whereClause = "WHERE status = 'complete'";
+    let whereClause = "WHERE status = 'complete' AND exclude_from_analytics IS NOT TRUE";
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -448,6 +448,8 @@ export const exportData = async (
         tr.with_patient_at,
         tr.completed_at,
         tr.cancelled_at,
+        tr.exclude_from_analytics,
+        tr.exclusion_reason,
         creator.first_name || ' ' || creator.last_name as created_by_name,
         assignee.first_name || ' ' || assignee.last_name as assigned_to_name
        FROM transport_requests tr
@@ -463,6 +465,7 @@ export const exportData = async (
       'ID', 'Floor', 'Room', 'Destination', 'Priority',
       'Notes', 'Status', 'Created At', 'Assigned At', 'Accepted At',
       'En Route At', 'With Patient At', 'Completed At', 'Cancelled At',
+      'Excluded From Analytics', 'Exclusion Reason',
       'Created By', 'Assigned To'
     ];
 
@@ -481,6 +484,8 @@ export const exportData = async (
       row.with_patient_at || '',
       row.completed_at || '',
       row.cancelled_at || '',
+      row.exclude_from_analytics ? 'yes' : 'no',
+      row.exclusion_reason || '',
       row.created_by_name || '',
       row.assigned_to_name || '',
     ]);
@@ -599,7 +604,7 @@ export const getTimeMetrics = async (
     // the residual shift_duration - job - break - other - offline; shifts,
     // breaks, and offline periods are not floor-scoped, so filtering only the
     // job component by floor would make the residual meaningless.
-    let whereClause = "WHERE tr.status = 'complete' AND tr.assigned_to IS NOT NULL";
+    let whereClause = "WHERE tr.status = 'complete' AND tr.assigned_to IS NOT NULL AND tr.exclude_from_analytics IS NOT TRUE";
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -970,7 +975,7 @@ export const getJobsByDay = async (
   try {
     const { start_date, end_date, floor, transporter_id } = req.query;
 
-    let whereClause = "WHERE status = 'complete'";
+    let whereClause = "WHERE status = 'complete' AND exclude_from_analytics IS NOT TRUE";
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -1038,7 +1043,10 @@ export const getDelayReport = async (
   try {
     const { start_date, end_date } = req.query;
 
-    let whereClause = 'WHERE 1=1';
+    let whereClause = `WHERE NOT EXISTS (
+      SELECT 1 FROM transport_requests trx
+      WHERE trx.id = rd.request_id AND trx.exclude_from_analytics IS TRUE
+    )`;
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -1200,7 +1208,7 @@ export const getFloorAnalysis = async (
   try {
     const { start_date, end_date } = req.query;
 
-    let whereClause = 'WHERE 1=1';
+    let whereClause = 'WHERE exclude_from_analytics IS NOT TRUE';
     const params: unknown[] = [];
     let paramIndex = 1;
 
@@ -1321,10 +1329,13 @@ export const getCompletedJobs = async (
         tr.notes, tr.status, tr.delay_reason, tr.assignment_method,
         tr.created_at, tr.assigned_at, tr.accepted_at, tr.en_route_at,
         tr.with_patient_at, tr.completed_at, tr.cancelled_at, tr.pct_assigned_at,
+        tr.exclude_from_analytics, tr.exclusion_reason, tr.excluded_at,
+        excluder.first_name as excluder_first_name, excluder.last_name as excluder_last_name,
         creator.id as creator_id, creator.first_name as creator_first_name, creator.last_name as creator_last_name,
         assignee.id as assignee_id, assignee.first_name as assignee_first_name, assignee.last_name as assignee_last_name,
         assigner.first_name as assigner_first_name, assigner.last_name as assigner_last_name
        FROM transport_requests tr
+       LEFT JOIN users excluder ON tr.excluded_by = excluder.id
        LEFT JOIN users creator ON tr.created_by = creator.id
        LEFT JOIN users assignee ON tr.assigned_to = assignee.id
        LEFT JOIN users assigner ON tr.assigned_by = assigner.id
@@ -1431,6 +1442,10 @@ export const getCompletedJobs = async (
       completed_at: row.completed_at,
       cancelled_at: row.cancelled_at,
       pct_assigned_at: row.pct_assigned_at,
+      exclude_from_analytics: row.exclude_from_analytics === true,
+      exclusion_reason: row.exclusion_reason,
+      excluded_at: row.excluded_at,
+      excluded_by_name: row.excluder_first_name ? `${row.excluder_first_name} ${row.excluder_last_name}` : null,
       creator: row.creator_id ? { first_name: row.creator_first_name, last_name: row.creator_last_name } : null,
       assignee: row.assignee_id ? { first_name: row.assignee_first_name, last_name: row.assignee_last_name } : null,
       assigner: row.assigner_first_name ? { first_name: row.assigner_first_name, last_name: row.assigner_last_name } : null,

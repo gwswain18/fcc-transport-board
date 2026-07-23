@@ -27,6 +27,10 @@ interface CompletedJob {
   reassignments: Array<{ from_name: string; to_name: string; timestamp: string; reason?: string }>;
   delays: Array<{ reason: string; custom_note?: string; phase?: string; created_at: string }>;
   cancelled_by: { first_name: string; last_name: string } | null;
+  exclude_from_analytics: boolean;
+  exclusion_reason: string | null;
+  excluded_at: string | null;
+  excluded_by_name: string | null;
 }
 
 interface Pagination {
@@ -262,7 +266,7 @@ function TimelineSteps({ job }: { job: CompletedJob }) {
   );
 }
 
-function JobCard({ job, expanded, onToggle }: { job: CompletedJob; expanded: boolean; onToggle: () => void }) {
+function JobCard({ job, expanded, onToggle, onToggleExclusion }: { job: CompletedJob; expanded: boolean; onToggle: () => void; onToggleExclusion: (job: CompletedJob) => void }) {
   const statusBadge = STATUS_BADGES[job.status] || { label: job.status, className: 'bg-gray-100 text-gray-600' };
   const priorityBadge = PRIORITY_BADGES[job.priority] || { label: job.priority, className: 'bg-gray-100 text-gray-600' };
 
@@ -292,6 +296,11 @@ function JobCard({ job, expanded, onToggle }: { job: CompletedJob; expanded: boo
           <span className={`px-2 py-0.5 text-xs rounded-full ${priorityBadge.className}`}>
             {priorityBadge.label}
           </span>
+          {job.exclude_from_analytics && (
+            <span className="px-2 py-0.5 text-xs rounded-full bg-gray-200 text-gray-600" title={job.exclusion_reason || 'Excluded from analytics'}>
+              Excluded
+            </span>
+          )}
         </div>
 
         {/* Destination */}
@@ -346,6 +355,21 @@ function JobCard({ job, expanded, onToggle }: { job: CompletedJob; expanded: boo
                     <span className="font-medium">Notes:</span> {job.notes}
                   </div>
                 )}
+                {job.exclude_from_analytics && (
+                  <div className="mt-2 p-2 bg-gray-100 rounded text-xs text-gray-600">
+                    <span className="font-medium">Excluded from analytics</span>
+                    {job.exclusion_reason && <> — {job.exclusion_reason}</>}
+                    {job.excluded_by_name && (
+                      <div className="text-gray-400 mt-0.5">by {job.excluded_by_name}{job.excluded_at ? ` (${formatDateTime(job.excluded_at)})` : ''}</div>
+                    )}
+                  </div>
+                )}
+                <button
+                  onClick={() => onToggleExclusion(job)}
+                  className={`mt-2 text-xs font-medium ${job.exclude_from_analytics ? 'text-green-600 hover:text-green-700' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  {job.exclude_from_analytics ? 'Re-include in analytics' : 'Exclude from analytics…'}
+                </button>
               </div>
             </div>
 
@@ -422,6 +446,44 @@ export default function JobActivityLog() {
 
   const toggleExpand = (id: number) => {
     setExpandedId((prev) => (prev === id ? null : id));
+  };
+
+  const [exclusionJob, setExclusionJob] = useState<CompletedJob | null>(null);
+  const [exclusionReason, setExclusionReason] = useState('');
+  const [exclusionError, setExclusionError] = useState('');
+  const [exclusionSaving, setExclusionSaving] = useState(false);
+
+  const onToggleExclusion = async (job: CompletedJob) => {
+    if (job.exclude_from_analytics) {
+      // Re-include immediately (no reason needed)
+      const response = await api.setAnalyticsExclusion(job.id, { excluded: false });
+      if (!response.error) await loadData(pagination.page);
+    } else {
+      setExclusionJob(job);
+      setExclusionReason('');
+      setExclusionError('');
+    }
+  };
+
+  const saveExclusion = async () => {
+    if (!exclusionJob) return;
+    if (!exclusionReason.trim()) {
+      setExclusionError('A reason is required');
+      return;
+    }
+    setExclusionSaving(true);
+    setExclusionError('');
+    const response = await api.setAnalyticsExclusion(exclusionJob.id, {
+      excluded: true,
+      reason: exclusionReason.trim(),
+    });
+    setExclusionSaving(false);
+    if (response.error) {
+      setExclusionError(response.error);
+    } else {
+      setExclusionJob(null);
+      await loadData(pagination.page);
+    }
   };
 
   return (
@@ -501,6 +563,7 @@ export default function JobActivityLog() {
                   job={job}
                   expanded={expandedId === job.id}
                   onToggle={() => toggleExpand(job.id)}
+                  onToggleExclusion={onToggleExclusion}
                 />
               ))}
             </div>
@@ -532,6 +595,54 @@ export default function JobActivityLog() {
           </>
         )}
       </div>
+
+      {/* Exclude-from-analytics modal (reason required, audit-logged) */}
+      {exclusionJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+              Exclude Job #{exclusionJob.id} from Analytics
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              The job record is not changed - it is only removed from averages and
+              report calculations, with an Excluded badge. This is reversible and
+              audit-logged.
+            </p>
+
+            {exclusionError && (
+              <div className="mb-4 p-3 rounded bg-red-100 text-red-700 text-sm">{exclusionError}</div>
+            )}
+
+            <label className="label">Reason</label>
+            <textarea
+              value={exclusionReason}
+              onChange={(e) => setExclusionReason(e.target.value)}
+              placeholder="e.g., incident during transport - abnormal duration"
+              className="input min-h-[80px]"
+            />
+            <p className="text-xs text-amber-600 mt-1">
+              Do not enter patient names, MRNs, dates of birth, or identifiers.
+            </p>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setExclusionJob(null)}
+                disabled={exclusionSaving}
+                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveExclusion}
+                disabled={exclusionSaving}
+                className="btn-primary px-4 py-2"
+              >
+                {exclusionSaving ? 'Saving...' : 'Exclude Job'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

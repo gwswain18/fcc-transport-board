@@ -402,6 +402,13 @@ export const api = {
   forceLogoutAll: () =>
     request<{ message: string }>('/dispatchers/force-logout-all', { method: 'POST' }),
 
+  // Manager toggle: exclude/re-include a job in analytics (audit-logged)
+  setAnalyticsExclusion: (requestId: number, data: { excluded: boolean; reason?: string }) =>
+    request<{ request: unknown; message: string }>(`/requests/${requestId}/analytics-exclusion`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   // Manager correction of a shift's recorded times (audit-logged server-side)
   updateShiftTimes: (shiftId: number, data: { shift_start?: string; shift_end?: string }) =>
     request<{ shift: unknown; message: string }>(`/shifts/${shiftId}/times`, {
@@ -614,6 +621,10 @@ export const api = {
         completed_at: string | null;
         cancelled_at: string | null;
         pct_assigned_at: string | null;
+        exclude_from_analytics: boolean;
+        exclusion_reason: string | null;
+        excluded_at: string | null;
+        excluded_by_name: string | null;
         creator: { first_name: string; last_name: string } | null;
         assignee: { first_name: string; last_name: string } | null;
         assigner: { first_name: string; last_name: string } | null;
