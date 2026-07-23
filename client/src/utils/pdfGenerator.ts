@@ -182,14 +182,14 @@ export async function generatePdf(
 
     if (imgHeight <= availableOnPage) {
       // Fits on current page
-      const imgData = canvas.toDataURL('image/png');
-      pdf.addImage(imgData, 'PNG', margin, currentY, imgWidth, imgHeight);
+      const imgData = canvas.toDataURL('image/jpeg', 0.85);
+      pdf.addImage(imgData, 'JPEG', margin, currentY, imgWidth, imgHeight);
       currentY += imgHeight + 6;
     } else if (imgHeight <= usableHeight - margin) {
       // Doesn't fit here but fits on a fresh page
       addNewPage();
-      const imgData = canvas.toDataURL('image/png');
-      pdf.addImage(imgData, 'PNG', margin, currentY, imgWidth, imgHeight);
+      const imgData = canvas.toDataURL('image/jpeg', 0.85);
+      pdf.addImage(imgData, 'JPEG', margin, currentY, imgWidth, imgHeight);
       currentY += imgHeight + 6;
     } else {
       // Section is taller than one page — split across pages
@@ -218,8 +218,8 @@ export async function generatePdf(
             0, srcY, canvas.width, chunkPx,
             0, 0, canvas.width, chunkPx
           );
-          const chunkData = chunkCanvas.toDataURL('image/png');
-          pdf.addImage(chunkData, 'PNG', margin, currentY, imgWidth, chunkMm);
+          const chunkData = chunkCanvas.toDataURL('image/jpeg', 0.85);
+          pdf.addImage(chunkData, 'JPEG', margin, currentY, imgWidth, chunkMm);
         }
 
         currentY += chunkMm + 2;

@@ -49,6 +49,12 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
             ) : (
               <MetricsGrid config={config} data={data} />
             )}
+            {(data.summary?.excluded_count ?? 0) > 0 && (
+              <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>
+                Note: {data.summary!.excluded_count} job(s) in this period are excluded from
+                these calculations (flagged by a manager as incident / mis-recorded).
+              </p>
+            )}
           </div>
         )}
 
@@ -80,7 +86,7 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
                   return `${hour - 12}:00 PM`;
                 }}
               />
-              <Bar dataKey="count" fill="#002952" name="Jobs" />
+              <Bar isAnimationActive={false} dataKey="count" fill="#002952" name="Jobs" />
             </BarChart>
           </div>
         )}
@@ -96,7 +102,7 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
               <XAxis dataKey="date" />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="count" fill="#002952" name="Jobs" />
+              <Bar isAnimationActive={false} dataKey="count" fill="#002952" name="Jobs" />
             </BarChart>
           </div>
         )}
@@ -118,8 +124,68 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
               <XAxis type="number" allowDecimals={false} />
               <YAxis dataKey="reason" type="category" width={180} tick={{ fontSize: 12 }} />
               <Tooltip />
-              <Bar dataKey="count" fill="#002952" name="Occurrences" />
+              <Bar isAnimationActive={false} dataKey="count" fill="#002952" name="Occurrences" />
             </BarChart>
+            {data.delayData.byTransporter.length > 0 && (
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginTop: '12px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                    <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>Transporter</th>
+                    <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>Reason</th>
+                    <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.delayData.byTransporter.flatMap((t) =>
+                    t.reasons.map((r) => (
+                      <tr key={`${t.user_id}-${r.reason}`} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <td style={{ padding: '8px', color: '#1f2937' }}>{t.first_name ? `${t.first_name} ${t.last_name}` : 'System'}</td>
+                        <td style={{ padding: '8px', color: '#4b5563' }}>{r.reason}</td>
+                        <td style={{ padding: '8px', textAlign: 'right', color: '#4b5563' }}>{r.count}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+
+        {/* Reassignments Section */}
+        {charts.reassignments && data.reassignments && data.reassignments.length > 0 && (
+          <div data-pdf-section="Reassignments" style={{ padding: '16px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px', color: '#1f2937' }}>
+              Reassignments
+            </h3>
+            <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
+              {data.reassignments.filter((r) => r.type === 'timed_out').length} timed out (auto) /{' '}
+              {data.reassignments.filter((r) => r.type === 'manual').length} manual
+            </p>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
+                  <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>When</th>
+                  <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>Job</th>
+                  <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>From</th>
+                  <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>To</th>
+                  <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.reassignments.slice(0, 30).map((r) => (
+                  <tr key={r.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '8px', color: '#4b5563' }}>{new Date(r.timestamp).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                    <td style={{ padding: '8px', color: '#1f2937' }}>{r.origin_floor}-{r.room_number}</td>
+                    <td style={{ padding: '8px', color: '#4b5563' }}>{r.from_name || '-'}</td>
+                    <td style={{ padding: '8px', color: '#4b5563' }}>{r.to_name || 'Returned to queue'}</td>
+                    <td style={{ padding: '8px', color: r.type === 'timed_out' ? '#d97706' : '#4b5563' }}>{r.type === 'timed_out' ? 'Timed out' : 'Manual'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {data.reassignments.length > 30 && (
+              <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '6px' }}>Showing first 30 of {data.reassignments.length}</p>
+            )}
           </div>
         )}
 
@@ -148,9 +214,9 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="Completed" stackId="a" fill="#002952" name="Completed" />
-                <Bar dataKey="PCT" stackId="a" fill="#a36d00" name="PCT Transfers" />
-                <Bar dataKey="Cancelled" stackId="a" fill="#EF4444" name="Cancelled" />
+                <Bar isAnimationActive={false} dataKey="Completed" stackId="a" fill="#002952" name="Completed" />
+                <Bar isAnimationActive={false} dataKey="PCT" stackId="a" fill="#a36d00" name="PCT Transfers" />
+                <Bar isAnimationActive={false} dataKey="Cancelled" stackId="a" fill="#EF4444" name="Cancelled" />
               </BarChart>
             </div>
 
@@ -174,9 +240,9 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
                 <YAxis dataKey="floor" type="category" />
                 <Tooltip formatter={(value: number) => formatMinutes(value)} />
                 <Legend />
-                <Bar dataKey="Response" fill="#002952" name="Response Time" />
-                <Bar dataKey="Pickup" fill="#8598c1" name="Pickup Time" />
-                <Bar dataKey="Transport" fill="#a36d00" name="Transport Time" />
+                <Bar isAnimationActive={false} dataKey="Response" fill="#002952" name="Response Time" />
+                <Bar isAnimationActive={false} dataKey="Pickup" fill="#8598c1" name="Pickup Time" />
+                <Bar isAnimationActive={false} dataKey="Transport" fill="#a36d00" name="Transport Time" />
               </BarChart>
             </div>
           </>
@@ -193,13 +259,15 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
                 <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
                   <th style={{ textAlign: 'left', padding: '8px', color: '#4b5563' }}>Name</th>
                   <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Jobs</th>
+                  <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Missed</th>
+                  <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>On-Floor</th>
                   <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Avg Pickup</th>
                   <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Avg Transport</th>
                   <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Job Time</th>
                   <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Break</th>
                   <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Other</th>
                   <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Offline</th>
-                  <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Down</th>
+                  <th style={{ textAlign: 'right', padding: '8px', color: '#4b5563' }}>Wait</th>
                 </tr>
               </thead>
               <tbody>
@@ -212,6 +280,14 @@ const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', color: '#4b5563' }}>
                         {t.jobs_completed}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right', color: '#4b5563' }}>
+                        {t.missed_jobs ?? 0}
+                      </td>
+                      <td style={{ padding: '8px', textAlign: 'right', color: '#4b5563' }}>
+                        {(t.floor_tracked_jobs ?? 0) > 0
+                          ? `${t.on_floor_jobs ?? 0}/${t.floor_tracked_jobs} (${Math.round(((t.on_floor_jobs ?? 0) / t.floor_tracked_jobs!) * 100)}%)`
+                          : '-'}
                       </td>
                       <td style={{ padding: '8px', textAlign: 'right', color: '#4b5563' }}>
                         {formatMinutes(t.avg_pickup_time_minutes)}
@@ -309,7 +385,7 @@ function buildComparisonRows(config: ReportConfig, data: ReportData): Comparison
     if (metrics.totalOtherTime) addRow('Total Other Time', indTotals.total_other_time_seconds, globTotals.total_other_time_seconds / globCount, fmtSec, true);
     if (metrics.offlineTime) addRow('Offline Time', indTotals.total_offline_time_seconds, globTotals.total_offline_time_seconds / globCount, fmtSec, true);
     if (metrics.avgOfflineTime) addRow('Avg Offline Time', indTotals.total_offline_time_seconds / indCount, globTotals.total_offline_time_seconds / globCount, fmtSec, true);
-    if (metrics.downTime) addRow('Down Time', indTotals.total_down_time_seconds, globTotals.total_down_time_seconds / globCount, fmtSec, true);
+    if (metrics.downTime) addRow('Wait Time', indTotals.total_down_time_seconds, globTotals.total_down_time_seconds / globCount, fmtSec, true);
   }
 
   return rows;
@@ -366,7 +442,7 @@ function MetricsGrid({ config, data }: { config: ReportConfig; data: ReportData 
     if (metrics.totalOtherTime) items.push({ label: 'Total Other Time', value: formatSecondsAsHoursMinutes(tm.totals.total_other_time_seconds), color: '#ea580c' });
     if (metrics.offlineTime) items.push({ label: 'Offline Time', value: formatSecondsAsHoursMinutes(tm.totals.total_offline_time_seconds), color: '#6b7280' });
     if (metrics.avgOfflineTime) items.push({ label: 'Avg Offline Time', value: formatSecondsAsHoursMinutes(tm.totals.total_offline_time_seconds / count), color: '#9ca3af' });
-    if (metrics.downTime) items.push({ label: 'Down Time', value: formatSecondsAsHoursMinutes(tm.totals.total_down_time_seconds), color: '#0d9488' });
+    if (metrics.downTime) items.push({ label: 'Wait Time', value: formatSecondsAsHoursMinutes(tm.totals.total_down_time_seconds), color: '#0d9488' });
   }
 
   return (

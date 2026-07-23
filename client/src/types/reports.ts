@@ -37,6 +37,7 @@ export interface ChartSelection {
   delayReasons: boolean;
   floorAnalysis: boolean;
   transporterTable: boolean;
+  reassignments: boolean;
 }
 
 export interface TimeMetrics {
@@ -81,6 +82,17 @@ export interface DelayData {
   }>;
 }
 
+export interface ReassignmentEntry {
+  id: number;
+  request_id: number;
+  timestamp: string;
+  type: 'timed_out' | 'manual';
+  origin_floor: string;
+  room_number: string;
+  from_name: string | null;
+  to_name: string | null;
+}
+
 export interface ReportData {
   summary: ReportSummary | null;
   individualSummary: ReportSummary | null;
@@ -91,4 +103,5 @@ export interface ReportData {
   jobsByDay: Array<{ date: string; count: number }>;
   floorAnalysis: FloorAnalysisData[];
   delayData: DelayData | null;
+  reassignments: ReassignmentEntry[] | null;
 }

@@ -29,7 +29,7 @@ const ALL_METRICS: { key: keyof MetricSelection; label: string }[] = [
   { key: 'totalOtherTime', label: 'Total Other Time' },
   { key: 'offlineTime', label: 'Offline Time' },
   { key: 'avgOfflineTime', label: 'Avg Offline Time' },
-  { key: 'downTime', label: 'Down Time' },
+  { key: 'downTime', label: 'Wait Time' },
 ];
 
 const ALL_CHARTS: { key: keyof ChartSelection; label: string }[] = [
@@ -38,6 +38,7 @@ const ALL_CHARTS: { key: keyof ChartSelection; label: string }[] = [
   { key: 'delayReasons', label: 'Delay Reasons' },
   { key: 'floorAnalysis', label: 'Floor Analysis' },
   { key: 'transporterTable', label: 'Transporter Performance Table' },
+  { key: 'reassignments', label: 'Reassignments' },
 ];
 
 function allTrue(obj: MetricSelection | ChartSelection): boolean {
@@ -56,6 +57,7 @@ function setAllMetrics(val: boolean): MetricSelection {
 function setAllCharts(val: boolean): ChartSelection {
   return {
     jobsByHour: val, jobsByDay: val, delayReasons: val, floorAnalysis: val, transporterTable: val,
+    reassignments: val,
   };
 }
 
@@ -97,7 +99,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
   const [reportType, setReportType] = useState<ReportType>('global');
   const [startDate, setStartDate] = useState(dateRange.start_date);
   const [endDate, setEndDate] = useState(dateRange.end_date);
-  const [selectedFloors, setSelectedFloors] = useState<string[]>([...FLOORS]);
+  const [selectedFloor, setSelectedFloor] = useState<string>('');
   const [transporterId, setTransporterId] = useState('');
 
   const [metrics, setMetrics] = useState<MetricSelection>({
@@ -124,6 +126,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
     delayReasons: true,
     floorAnalysis: true,
     transporterTable: true,
+    reassignments: true,
   });
 
   const [generating, setGenerating] = useState(false);
@@ -131,12 +134,6 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [activeConfig, setActiveConfig] = useState<ReportConfig | null>(null);
   const [error, setError] = useState('');
-
-  const toggleFloor = (floor: string) => {
-    setSelectedFloors((prev) =>
-      prev.includes(floor) ? prev.filter((f) => f !== floor) : [...prev, floor]
-    );
-  };
 
   const toggleMetric = (key: keyof MetricSelection) => {
     setMetrics((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -154,7 +151,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
       reportType,
       startDate,
       endDate,
-      floors: selectedFloors,
+      floors: selectedFloor ? [selectedFloor] : [],
       transporterId: reportType === 'individual' && transporterId ? parseInt(transporterId) : undefined,
       transporterName: selectedTransporter
         ? `${selectedTransporter.first_name} ${selectedTransporter.last_name}`
@@ -162,7 +159,7 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
       metrics,
       charts,
     };
-  }, [reportType, startDate, endDate, selectedFloors, transporterId, metrics, charts, transporterStats]);
+  }, [reportType, startDate, endDate, selectedFloor, transporterId, metrics, charts, transporterStats]);
 
   const handleGenerate = async () => {
     setError('');
@@ -301,20 +298,17 @@ export default function ReportBuilder({ dateRange, transporterStats }: ReportBui
           )}
         </div>
         <div className="mt-4">
-          <label className="label">Floors</label>
-          <div className="flex gap-3">
+          <label className="label">Floor</label>
+          <select
+            value={selectedFloor}
+            onChange={(e) => setSelectedFloor(e.target.value)}
+            className="input max-w-xs"
+          >
+            <option value="">All Floors</option>
             {FLOORS.map((floor) => (
-              <label key={floor} className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedFloors.includes(floor)}
-                  onChange={() => toggleFloor(floor)}
-                  className="rounded accent-primary focus:ring-primary"
-                />
-                <span className="text-sm text-gray-700">{floor}</span>
-              </label>
+              <option key={floor} value={floor}>{floor}</option>
             ))}
-          </div>
+          </select>
         </div>
       </div>
 

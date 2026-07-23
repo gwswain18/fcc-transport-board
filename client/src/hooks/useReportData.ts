@@ -37,6 +37,7 @@ export function useReportData() {
       jobsByDay: [],
       floorAnalysis: [],
       delayData: null,
+      reassignments: null,
     };
 
     try {
@@ -50,6 +51,7 @@ export function useReportData() {
       const needsJobsByDay = config.charts.jobsByDay;
       const needsFloorAnalysis = config.charts.floorAnalysis;
       const needsDelayData = config.charts.delayReasons;
+      const needsReassignments = config.charts.reassignments;
 
       const promises: Promise<void>[] = [];
       const errors: string[] = [];
@@ -146,6 +148,26 @@ export function useReportData() {
         promises.push(
           tracked('Delay Report', api.getDelayReport(params)).then((res) => {
             if (res.data) result.delayData = res.data;
+          })
+        );
+      }
+
+      // Reassignments
+      if (needsReassignments) {
+        promises.push(
+          tracked('Reassignments', api.getReassignments({ start_date: params.start_date, end_date: params.end_date })).then((res) => {
+            if (res.data?.reassignments) {
+              result.reassignments = res.data.reassignments.map((r) => ({
+                id: r.id,
+                request_id: r.request_id,
+                timestamp: r.timestamp,
+                type: r.type,
+                origin_floor: r.origin_floor,
+                room_number: r.room_number,
+                from_name: r.from ? `${r.from.first_name} ${r.from.last_name}` : null,
+                to_name: r.to ? `${r.to.first_name} ${r.to.last_name}` : null,
+              }));
+            }
           })
         );
       }

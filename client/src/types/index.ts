@@ -137,6 +137,8 @@ export interface ReportSummary {
   avg_transport_time_minutes: number;
   avg_cycle_time_minutes: number;
   timeout_rate: number;
+  // Jobs a manager flagged as excluded from analytics within the same filters
+  excluded_count?: number;
 }
 
 export interface TransporterStats {

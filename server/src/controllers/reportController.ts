@@ -69,6 +69,15 @@ export const getSummary = async (
       params
     );
 
+    // Count manager-excluded jobs in the same period/filters so reports can
+    // disclose how many were left out of the calculations
+    const excludedResult = await query(
+      `SELECT COUNT(*) as excluded FROM transport_requests
+       ${whereClause.replace('exclude_from_analytics IS NOT TRUE', 'exclude_from_analytics IS TRUE')}`,
+      params
+    );
+    const excludedCount = parseInt(excludedResult.rows[0].excluded) || 0;
+
     // Calculate timeout rate (jobs that took > 5 min to accept, only for completed)
     const completeWhereClause = whereClause.replace(
       "status IN ('complete', 'cancelled', 'transferred_to_pct')",
@@ -99,6 +108,7 @@ export const getSummary = async (
         avg_transport_time_minutes: parseFloat(summary.avg_transport_time) || 0,
         avg_cycle_time_minutes: parseFloat(summary.avg_cycle_time) || 0,
         timeout_rate: timeoutRate,
+        excluded_count: excludedCount,
       },
     });
   } catch (error) {
