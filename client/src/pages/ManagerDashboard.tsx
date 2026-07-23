@@ -421,7 +421,7 @@ export default function ManagerDashboard() {
                   color="bg-gray-400"
                 />
                 <MetricCard
-                  title="Down Time"
+                  title="Wait Time"
                   value={formatSecondsAsHoursMinutes(timeMetrics.totals.total_down_time_seconds)}
                   color="bg-teal-500"
                 />
@@ -529,8 +529,8 @@ export default function ManagerDashboard() {
                       <th className="text-right py-3 px-4 font-medium text-gray-600">
                         Offline Time
                       </th>
-                      <th className="text-right py-3 px-4 font-medium text-gray-600" title="Unexplained shift time: shift duration minus job, break, other, and offline time">
-                        Down Time
+                      <th className="text-right py-3 px-4 font-medium text-gray-600" title="Time waiting for the next job: shift duration minus job, break, and other time. Offline time is informational and not subtracted.">
+                        Wait Time
                       </th>
                     </tr>
                   </thead>

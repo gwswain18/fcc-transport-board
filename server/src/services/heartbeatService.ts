@@ -121,6 +121,11 @@ const checkHeartbeats = async () => {
   }
 
   // Find users with stale heartbeats who are not already offline (JOIN user data to avoid N+1)
+  // A stale heartbeat mid-job (phone screen asleep while transporting) must
+  // NOT flip the status to offline: it would clobber the job status on the
+  // dispatcher board, stick until the job completes (reconnect only restores
+  // idle transporters), and record a bogus offline period that overlaps job
+  // time. Only idle statuses go offline here.
   const result = await query(
     `SELECT uh.user_id, uh.last_heartbeat, ts.status,
             u.first_name, u.last_name
@@ -128,7 +133,7 @@ const checkHeartbeats = async () => {
      JOIN transporter_status ts ON uh.user_id = ts.user_id
      JOIN users u ON uh.user_id = u.id
      WHERE uh.last_heartbeat < $1
-     AND ts.status NOT IN ('offline')
+     AND ts.status NOT IN ('offline', 'assigned', 'accepted', 'en_route', 'with_patient')
      AND u.role = 'transporter'`,
     [cutoffTime]
   );

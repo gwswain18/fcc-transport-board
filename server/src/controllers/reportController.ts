@@ -893,13 +893,17 @@ export const getTimeMetrics = async (
       entry.offline_time_seconds = parseFloat(row.offline_time_seconds) || 0;
     }
 
-    // Down time is a RESIDUAL, not a measurement: shift_duration - job -
-    // break - other - offline, floored at 0. Known limitation: a break/other
-    // period taken mid-job overlaps job_time and is subtracted twice, slightly
-    // understating down time; measuring that would require interval merging.
+    // "Down time" = WAIT TIME: on shift but not on a job, on break, or on
+    // another status — i.e. time waiting for the next job. It is a residual
+    // (shift_duration - job - break - other), floored at 0. Offline time is
+    // reported alongside as connectivity information but deliberately NOT
+    // subtracted: a phone asleep between jobs is still waiting time, and
+    // offline stretches can overlap job time. Known limitation: a break/other
+    // period taken mid-job would be subtracted twice; measuring that would
+    // require interval merging.
     const transporters = Array.from(userMap.values()).map(t => ({
       ...t,
-      down_time_seconds: Math.max(0, t.shift_duration_seconds - t.job_time_seconds - t.break_time_seconds - t.other_time_seconds - t.offline_time_seconds),
+      down_time_seconds: Math.max(0, t.shift_duration_seconds - t.job_time_seconds - t.break_time_seconds - t.other_time_seconds),
     }));
 
     // Calculate totals
